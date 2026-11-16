@@ -351,16 +351,16 @@ static void drawBallMesh(int id, float x, float y, float r)
             float x3 = sxp[a+1][c],   y3 = syp[a+1][c];
             if ((x1-x0)*(y2-y0) - (y1-y0)*(x2-x0) > 0)
                 gsKit_prim_triangle_goraud_texture(g, &ballTex,
-                    x0, y0, 1, uo + mUV[a][c][0],     vo + mUV[a][c][1],
-                    x1, y1, 1, uo + mUV[a][c+1][0],   vo + mUV[a][c+1][1],
-                    x2, y2, 1, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
-                    colr[a][c], colr[a][c+1], colr[a+1][c+1]);
+                    x0, y0, uo + mUV[a][c][0],     vo + mUV[a][c][1],
+                    x1, y1, uo + mUV[a][c+1][0],   vo + mUV[a][c+1][1],
+                    x2, y2, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
+                    1, colr[a][c], colr[a][c+1], colr[a+1][c+1]);
             if ((x2-x0)*(y3-y0) - (y2-y0)*(x3-x0) > 0)
                 gsKit_prim_triangle_goraud_texture(g, &ballTex,
-                    x0, y0, 1, uo + mUV[a][c][0],     vo + mUV[a][c][1],
-                    x2, y2, 1, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
-                    x3, y3, 1, uo + mUV[a+1][c][0],   vo + mUV[a+1][c][1],
-                    colr[a][c], colr[a+1][c+1], colr[a+1][c]);
+                    x0, y0, uo + mUV[a][c][0],     vo + mUV[a][c][1],
+                    x2, y2, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
+                    x3, y3, uo + mUV[a+1][c][0],   vo + mUV[a+1][c][1],
+                    1, colr[a][c], colr[a+1][c+1], colr[a+1][c]);
         }
 
     /* brilho da luz (fixo na tela) */
