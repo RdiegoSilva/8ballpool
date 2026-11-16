@@ -1,7 +1,7 @@
 /* 8 BALL POOL para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT) e 2 jogadores (dois controles).
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
- *                     segurar X = carregar forca, soltar = tacada
+ *                     segurar X = encher a barra de forca (esquerda), soltar = tacada
  *                     O = cancelar tacada
  * Bola na mao:        direcional move a bola branca, X confirma
  */
@@ -25,7 +25,7 @@
 #define TCY   230.0f
 #define MAXV  900.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE };
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
 
@@ -45,6 +45,15 @@ static int winner, botTimer, botPlanned;
 static float botAng, botPow;
 static char msg[64];
 static int msgTimer;
+
+/* animacoes: tacada, barra de forca e bolas caindo na cacapa */
+#define STRIKEN 6             /* frames da tacada (taco indo ate a bola) */
+#define FOLLOWN 10            /* frames do taco depois da tacada */
+#define FALLN   16            /* frames da bola caindo na cacapa */
+static float barLevel, strikePwr, strikeD0, hitX, hitY;
+static int   strikeK, follow;
+static int   fallT[16], fallP[16];
+static float fallX[16], fallY[16];
 
 static const float PX[6] = { TX0, 320, TX1, TX0, 320, TX1 };
 static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
@@ -131,15 +140,24 @@ static void drawNumber(int n, float cx, float cy, float r)
 
 static void drawShadow(int i)
 {
-    if (b[i].in) discN(b[i].x + 2.5f, b[i].y + 2.5f, R, COL(14,85,48), 10);
+    if (!b[i].in) return;
+    discN(b[i].x + 3.6f, b[i].y + 4.2f, R * 1.10f, GS_SETREG_RGBAQ(0, 18, 8, 0x14, 0x00), 12);
+    discN(b[i].x + 2.4f, b[i].y + 3.0f, R * 0.96f, GS_SETREG_RGBAQ(0, 14, 6, 0x24, 0x00), 12);
 }
 
-static u64 shade(const u8 *c, float f, int add)
+static u64 shadeA(const u8 *c, float f, int add, int a)
 {
     int r = (int)(c[0]*f) + add, gg = (int)(c[1]*f) + add, bb = (int)(c[2]*f) + add;
-    if (r > 255) r = 255; if (gg > 255) gg = 255; if (bb > 255) bb = 255;
-    return COL(r, gg, bb);
+    if (r > 255) r = 255;
+    if (gg > 255) gg = 255;
+    if (bb > 255) bb = 255;
+    if (r < 0) r = 0;
+    if (gg < 0) gg = 0;
+    if (bb < 0) bb = 0;
+    return GS_SETREG_RGBAQ(r, gg, bb, a, 0x00);
 }
+
+static u64 shade(const u8 *c, float f, int add) { return shadeA(c, f, add, 0x80); }
 
 static void drawBallVec(int i, float x, float y, float r)
 {
@@ -370,8 +388,20 @@ static void drawBallMesh(int id, float x, float y, float r)
 
 static void drawBallAt(int i, float x, float y, float r)
 {
-    if (!useTex) { drawBallVec(i, x, y, r); return; }
+    if (!useTex || r < R - 1.0f) { drawBallVec(i, x, y, r); return; }
     drawBallMesh(i, x, y, r);
+}
+
+/* bola caindo na cacapa: desliza ate o centro, encolhe e escurece */
+static void drawFall(int i)
+{
+    float t = (float)fallT[i] / FALLN;            /* 1 -> 0 */
+    float e = 1.0f - t * t;
+    float x = fallX[i] + (PX[fallP[i]] - fallX[i]) * e;
+    float y = fallY[i] + (PY[fallP[i]] - fallY[i]) * e;
+    float r = R * (0.42f + 0.58f * t);
+    if (useTex) drawBallMesh(i, x, y, r); else drawBallVec(i, x, y, r);
+    discN(x, y, r * 1.02f, GS_SETREG_RGBAQ(0, 0, 0, (int)(0x78 * (1.0f - t)), 0x00), 10);
 }
 
 /* ---------- logica ---------- */
@@ -391,6 +421,7 @@ static void rack(void)
 {
     static const int order[15] = {1,9,2,10,8,3,11,4,12,5,13,6,14,7,15};
     int i, r, c, k = 0;
+    memset(fallT, 0, sizeof(fallT));
     for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 1; resetOrient(i); }
     b[0].x = TX0 + 125; b[0].y = TCY;
     for (r = 0; r < 5; r++)
@@ -414,9 +445,23 @@ static void shoot(float p)
     firstHit = -1;
     gAtStart = grp[cur];
     startOwnLeft = gAtStart >= 0 ? countGroup(gAtStart) : 99;
+    hitX = b[0].x; hitY = b[0].y;
     b[0].vx = cosf(ang) * p * MAXV;
     b[0].vy = sinf(ang) * p * MAXV;
-    breakShot = 0; pwr = 0; charging = 0; state = S_ROLL;
+    breakShot = 0; pwr = 0; charging = 0; follow = FOLLOWN; state = S_ROLL;
+}
+
+/* o taco vai para tras com a forca e e disparado para a bola */
+static void startStrike(float p)
+{
+    strikePwr = p; strikeD0 = R + 4 + pwr * 70; strikeK = 0;
+    charging = 0; state = S_STRIKE;
+}
+
+static float cushionE(float v)
+{
+    float e = 0.88f - 0.00018f * fabsf(v);      /* mais rapido = perde mais energia */
+    return e < 0.62f ? 0.62f : e;
 }
 
 static int stepPhysics(float dt)
@@ -428,14 +473,15 @@ static int stepPhysics(float dt)
         for (p = 0; p < 6; p++) {
             float dx = b[i].x - PX[p], dy = b[i].y - PY[p];
             if (dx*dx + dy*dy < PR[p]*PR[p]) {
+                fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; pocketed[i] = 1; break;
             }
         }
         if (!b[i].in) continue;
-        if (b[i].x < TX0+R) { b[i].x = TX0+R; b[i].vx = -b[i].vx * 0.9f; }
-        if (b[i].x > TX1-R) { b[i].x = TX1-R; b[i].vx = -b[i].vx * 0.9f; }
-        if (b[i].y < TY0+R) { b[i].y = TY0+R; b[i].vy = -b[i].vy * 0.9f; }
-        if (b[i].y > TY1-R) { b[i].y = TY1-R; b[i].vy = -b[i].vy * 0.9f; }
+        if (b[i].x < TX0+R) { b[i].x = TX0+R; if (b[i].vx < 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        if (b[i].x > TX1-R) { b[i].x = TX1-R; if (b[i].vx > 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        if (b[i].y < TY0+R) { b[i].y = TY0+R; if (b[i].vy < 0) { b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        if (b[i].y > TY1-R) { b[i].y = TY1-R; if (b[i].vy > 0) { b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
     }
     for (i = 0; i < 16; i++) {
         if (!b[i].in) continue;
@@ -449,6 +495,7 @@ static int stepPhysics(float dt)
             b[i].x -= nx*ov; b[i].y -= ny*ov; b[j].x += nx*ov; b[j].y += ny*ov;
             rv = (b[i].vx - b[j].vx) * nx + (b[i].vy - b[j].vy) * ny;
             if (rv > 0) {
+                rv *= 0.98f;                      /* choque quase elastico */
                 b[i].vx -= rv*nx; b[i].vy -= rv*ny;
                 b[j].vx += rv*nx; b[j].vy += rv*ny;
                 if (i == 0 && firstHit < 0) firstHit = j;
@@ -460,7 +507,8 @@ static int stepPhysics(float dt)
         if (!b[i].in) continue;
         sp = sqrtf(b[i].vx*b[i].vx + b[i].vy*b[i].vy);
         if (sp < 6.0f) { b[i].vx = b[i].vy = 0; continue; }
-        s2 = sp * (1.0f - 0.9f * dt) - 20.0f * dt;
+        s2 = sp * (1.0f - 0.6f * dt) - 24.0f * dt;
+        if (sp < 40.0f) s2 -= 30.0f * dt;     /* freio suave no final */
         if (s2 < 0) s2 = 0;
         b[i].vx *= s2 / sp; b[i].vy *= s2 / sp;
         if (s2 > 0) moving = 1;
@@ -509,7 +557,7 @@ static void resolve(void)
 
     botTimer = 0; botPlanned = 0;
     if (foul) {
-        if (!b[0].in) { b[0].in = 1; b[0].x = TX0 + 125; b[0].y = TCY; }
+        if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = TX0 + 125; b[0].y = TCY; }
         b[0].vx = b[0].vy = 0;
         cur = 1 - cur;
         state = S_PLACE;
@@ -606,14 +654,89 @@ static u32 readpad(int port)
 }
 
 /* ---------- desenho do jogo ---------- */
+static void cushH(float xa, float xb, float yo, float yi)
+{
+    quad(xa - 7, yo, xb + 7, yo, xb, yi, xa, yi, COL(12,84,46));
+    line(xa, yi, xb, yi, COL(48,160,98));
+    line(xa - 7, yo, xb + 7, yo, COL(8,56,30));
+}
+
+static void cushV(float ya, float yb, float xo, float xi)
+{
+    quad(xo, ya - 7, xo, yb + 7, xi, yb, xi, ya, COL(12,84,46));
+    line(xi, ya, xi, yb, COL(48,160,98));
+    line(xo, ya - 7, xo, yb + 7, COL(8,56,30));
+}
+
+static void diamond(float cx, float cy)
+{
+    quad(cx, cy - 3, cx + 3, cy, cx, cy + 3, cx - 3, cy, COL(236,226,190));
+}
+
 static void drawTable(void)
 {
-    int p;
-    rect(TX0-26, TY0-26, TX1+26, TY1+26, COL(95,55,25));
-    rect(TX0-10, TY0-10, TX1+10, TY1+10, COL(20,90,50));
-    rect(TX0, TY0, TX1, TY1, COL(25,125,70));
-    for (p = 0; p < 6; p++) disc(PX[p], PY[p], PR[p] + 1, COL(5,5,5));
-    line(TX0+125, TY0, TX0+125, TY1, COL(40,150,90));
+    int p, k;
+    float x, y;
+
+    /* sombra da mesa no chao */
+    rect(TX0 - 22, TY0 - 20, TX1 + 40, TY1 + 42, GS_SETREG_RGBAQ(0, 0, 0, 0x30, 0x00));
+
+    /* moldura de madeira em camadas (bisel) */
+    rect(TX0 - 30, TY0 - 30, TX1 + 30, TY1 + 30, COL(44,24,9));
+    rect(TX0 - 28, TY0 - 28, TX1 + 28, TY1 + 28, COL(98,56,25));
+    rect(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, COL(124,74,33));
+    line(TX0 - 28, TY0 - 28, TX1 + 28, TY0 - 28, COL(158,102,50));
+    line(TX0 - 28, TY0 - 28, TX0 - 28, TY1 + 28, COL(158,102,50));
+    line(TX0 - 28, TY1 + 28, TX1 + 28, TY1 + 28, COL(60,33,13));
+    line(TX1 + 28, TY0 - 28, TX1 + 28, TY1 + 28, COL(60,33,13));
+
+    /* veios da madeira */
+    for (k = 0; k < 4; k++) {
+        u64 gc = (k & 1) ? COL(112,65,28) : COL(136,84,38);
+        line(TX0 - 24, TY0 - 23 + k*3.4f, TX1 + 24, TY0 - 23 + k*3.4f, gc);
+        line(TX0 - 24, TY1 + 13 + k*3.4f, TX1 + 24, TY1 + 13 + k*3.4f, gc);
+        line(TX0 - 23 + k*3.4f, TY0 - 24, TX0 - 23 + k*3.4f, TY1 + 24, gc);
+        line(TX1 + 13 + k*3.4f, TY0 - 24, TX1 + 13 + k*3.4f, TY1 + 24, gc);
+    }
+
+    /* sulco entre a madeira e a borracha */
+    rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, COL(52,29,12));
+
+    /* feltro com leve brilho no centro (luz de cima) */
+    rect(TX0, TY0, TX1, TY1, COL(24,114,68));
+    for (k = 1; k < 8; k++)
+        rect(TX0 + k*22, TY0 + k*14, TX1 - k*22, TY1 - k*14,
+             COL(24 + k*2, 114 + k*3, 68 + k*2));
+
+    /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
+    cushH(TX0 + 22, 320 - 19, TY0 - 11, TY0);
+    cushH(320 + 19, TX1 - 22, TY0 - 11, TY0);
+    cushH(TX0 + 22, 320 - 19, TY1 + 11, TY1);
+    cushH(320 + 19, TX1 - 22, TY1 + 11, TY1);
+    cushV(TY0 + 22, TY1 - 22, TX0 - 11, TX0);
+    cushV(TY0 + 22, TY1 - 22, TX1 + 11, TX1);
+
+    /* diamantes de mira na madeira */
+    for (k = 1; k <= 3; k++) {
+        x = TX0 + (320 - TX0) * k / 4.0f;
+        diamond(x, TY0 - 18.5f);  diamond(x, TY1 + 18.5f);
+        x = 320 + (TX1 - 320) * k / 4.0f;
+        diamond(x, TY0 - 18.5f);  diamond(x, TY1 + 18.5f);
+        y = TY0 + (TY1 - TY0) * k / 4.0f;
+        diamond(TX0 - 18.5f, y);  diamond(TX1 + 18.5f, y);
+    }
+
+    /* cacapas: aro de couro, borda dourada e buraco */
+    for (p = 0; p < 6; p++) {
+        discN(PX[p], PY[p], PR[p] + 5, COL(52,31,14), 20);
+        ring(PX[p], PY[p], PR[p] + 5, COL(176,132,58));
+        discN(PX[p], PY[p], PR[p] + 1, COL(3,3,5), 20);
+    }
+
+    /* linha da cabeceira e marcas do feltro */
+    line(TX0 + 125, TY0, TX0 + 125, TY1, COL(52,152,96));
+    disc(TX0 + 125, TCY, 2.2f, COL(16,88,52));
+    disc(TX0 + 375, TCY, 2.2f, COL(16,88,52));
 }
 
 static void thick(float x1, float y1, float x2, float y2, u64 c)
@@ -680,15 +803,105 @@ static void drawGuide(void)
     }
 }
 
-static void drawCue(void)
+/* taco realista: afunila da ponta (azul) ate o cabo, com virola,
+   emenda, faixa, incrustacao, borracha, sombra e brilho */
+static float cueDx, cueDy, cueD0, cueBx, cueBy;
+static int cueAl;
+
+static float cueW(float u)
 {
-    float dx = cosf(ang), dy = sinf(ang), nx = -dy, ny = dx;
-    float d0 = R + 4 + pwr * 70, d1 = d0 + 170;
-    float x1 = b[0].x - dx*d0, y1 = b[0].y - dy*d0;
-    float x2 = b[0].x - dx*d1, y2 = b[0].y - dy*d1;
+    if (u < 13.0f)  return 2.2f + 0.3f * u / 13.0f;
+    if (u < 166.0f) return 2.6f + 1.4f * (u - 13.0f) / 153.0f;
+    return 4.2f + 2.0f * (u - 166.0f) / 124.0f;
+}
+
+/* ponto do taco: u = distancia ao longo do taco, s = lado */
+static void cuePt(float u, float s, float *ox, float *oy)
+{
+    float d = cueD0 + u;
+    *ox = cueBx - cueDx * d - cueDy * s;
+    *oy = cueBy - cueDy * d + cueDx * s;
+}
+
+static void cueSeg(float u1, float u2, const u8 *c)
+{
+    float w1 = cueW(u1), w2 = cueW(u2);
+    float ax, ay, bx, by, cx, cy, dx, dy, ex, ey, fx, fy;
+    cuePt(u1, -w1, &ax, &ay); cuePt(u2, -w2, &bx, &by);
+    cuePt(u2, 0, &cx, &cy);   cuePt(u1, 0, &dx, &dy);
+    cuePt(u2, w2, &ex, &ey);  cuePt(u1, w1, &fx, &fy);
+    quad(ax, ay, bx, by, cx, cy, dx, dy, shadeA(c, 1.2f, 12, cueAl));   /* lado claro */
+    quad(dx, dy, cx, cy, ex, ey, fx, fy, shadeA(c, 0.66f, 0, cueAl));   /* lado escuro */
+}
+
+static void drawCue(float px, float py, float d0, int al)
+{
+    static const u8 TIP[3]   = { 58, 104, 172 };
+    static const u8 FER[3]   = { 238, 238, 228 };
+    static const u8 WOOD[3]  = { 228, 192, 130 };
+    static const u8 JOINT[3] = { 188, 188, 196 };
+    static const u8 BUTT[3]  = { 94, 48, 22 };
+    static const u8 WRAP[3]  = { 30, 24, 24 };
+    static const u8 INLAY[3] = { 208, 168, 72 };
+    static const u8 RUB[3]   = { 22, 22, 22 };
+    float ax, ay, bx, by, cx, cy, ex, ey;
+
+    cueDx = cosf(ang); cueDy = sinf(ang);
+    cueBx = px; cueBy = py; cueD0 = d0; cueAl = al;
+
+    /* sombra no feltro */
+    cuePt(0, -2.2f, &ax, &ay);   cuePt(290, -6.2f, &bx, &by);
+    cuePt(290, 6.2f, &cx, &cy);  cuePt(0, 2.2f, &ex, &ey);
+    quad(ax + 4, ay + 5, bx + 6, by + 7, cx + 6, cy + 7, ex + 4, ey + 5,
+         GS_SETREG_RGBAQ(0, 12, 5, (al * 30) / 128, 0x00));
+
+    cueSeg(0.0f,   3.5f,   TIP);
+    cueSeg(3.5f,   13.0f,  FER);
+    cueSeg(13.0f,  166.0f, WOOD);
+    cueSeg(166.0f, 172.0f, JOINT);
+    cueSeg(172.0f, 200.0f, BUTT);
+    cueSeg(200.0f, 214.0f, WRAP);
+    cueSeg(214.0f, 232.0f, BUTT);
+    cueSeg(232.0f, 237.0f, INLAY);
+    cueSeg(237.0f, 284.0f, BUTT);
+    cueSeg(284.0f, 290.0f, RUB);
+
+    /* brilho ao longo do taco */
+    cuePt(14.0f, -1.2f, &ax, &ay);  cuePt(160.0f, -2.3f, &bx, &by);
+    line(ax, ay, bx, by, shadeA(WOOD, 1.3f, 40, al));
+    cuePt(174.0f, -2.4f, &ax, &ay); cuePt(284.0f, -3.9f, &bx, &by);
+    line(ax, ay, bx, by, shadeA(BUTT, 1.7f, 30, al));
+}
+
+/* barra de forca vertical no lado esquerdo: enche de baixo para cima
+   enquanto segura X e desce suavemente depois da tacada */
+static void drawPowerBar(void)
+{
+    const float bx = 14.0f, by0 = 98.0f, by1 = 366.0f, bw = 18.0f;
+    const int   nseg = 24;
+    float sh = (by1 - by0) / nseg, fillTop = by1 - barLevel * (by1 - by0);
+    char buf[16];
     int k;
-    for (k = -1; k <= 1; k++)
-        line(x1 + nx*k, y1 + ny*k, x2 + nx*k, y2 + ny*k, COL(215,170,100));
+
+    rect(bx - 4, by0 - 4, bx + bw + 4, by1 + 4, COL(170,170,176));
+    rect(bx - 3, by0 - 3, bx + bw + 3, by1 + 3, COL(24,24,28));
+    for (k = 0; k < nseg; k++) {
+        float t = (k + 0.5f) / nseg;
+        int r = (int)(255 * (t * 2 > 1 ? 1 : t * 2));
+        int g = (int)(255 * ((1 - t) * 2 > 1 ? 1 : (1 - t) * 2));
+        float sb = by1 - k * sh, st = sb - sh;
+        rect(bx, st + 1, bx + bw, sb - 0.5f, COL(r / 6, g / 6, 8));            /* apagado */
+        if (fillTop < sb) {
+            if (st < fillTop) st = fillTop;
+            rect(bx, st + 1 > sb - 0.5f ? st : st + 1, bx + bw, sb - 0.5f, COL(r, g, 40));  /* aceso */
+        }
+    }
+    for (k = 1; k < 4; k++)
+        line(bx + bw + 4, by1 - k * (by1 - by0) / 4, bx + bw + 8, by1 - k * (by1 - by0) / 4,
+             COL(190,190,190));
+    text(4, 72, 0.42f, COL(230,230,230), "FORCA");
+    sprintf(buf, "%d%%", (int)(barLevel * 100 + 0.5f));
+    text(8, by1 + 10, 0.42f, COL(255,230,60), buf);
 }
 
 static void drawHUD(void)
@@ -712,12 +925,9 @@ static void drawHUD(void)
         }
     }
     if (msgTimer > 0) { msgTimer--; text(150, 80, 0.55f, COL(255,255,255), msg); }
-    if (state == S_AIM && !isBot()) {
-        rect(220, 390, 420, 402, COL(60,60,60));
-        rect(220, 390, 220 + 200*pwr, 402,
-             COL((int)(255*pwr), (int)(255*(1-pwr)), 40));
-        text(250, 404, 0.45f, COL(200,200,200), "X: FORCA   O: CANCELAR");
-    }
+    drawPowerBar();
+    if (state == S_AIM && !isBot())
+        text(250, 396, 0.45f, COL(200,200,200), "X: FORCA   O: CANCELAR");
 }
 
 static void draw(void)
@@ -743,9 +953,16 @@ static void draw(void)
             else disc(b[0].x, b[0].y, R, COL(230,60,60));
         } else drawBallAt(0, b[0].x, b[0].y, R);
     }
+    for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
     if (state == S_AIM) {
         if (!isBot()) drawGuide();
-        drawCue();
+        drawCue(b[0].x, b[0].y, R + 4 + pwr * 70, 0x80);
+    } else if (state == S_STRIKE) {
+        float t = (float)strikeK / STRIKEN, tip = R + 1.0f;
+        drawCue(b[0].x, b[0].y, tip + (strikeD0 - tip) * (1.0f - t * t), 0x80);
+    } else if (state == S_ROLL && follow > 0) {
+        float f = (float)(FOLLOWN - follow) / FOLLOWN;
+        drawCue(hitX, hitY, R + 1.0f - 16.0f * f, (int)(0x80 * (1.0f - f)));
     }
     drawHUD();
     if (state == S_OVER) {
@@ -811,7 +1028,7 @@ int main(void)
                 if (in & PAD_L1)    ang -= 0.005f;
                 if (in & PAD_R1)    ang += 0.005f;
                 if (in & PAD_CROSS) { pwr += 0.015f; if (pwr > 1) pwr = 1; charging = 1; }
-                else if (charging) { charging = 0; if (pwr > 0.05f) shoot(pwr); else pwr = 0; }
+                else if (charging) { charging = 0; if (pwr > 0.05f) startStrike(pwr); else pwr = 0; }
                 if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
             } else {
                 botTimer++;
@@ -823,11 +1040,16 @@ int main(void)
                         ang = botAng;
                         if (botTimer > 80) {
                             pwr += 0.02f;
-                            if (pwr >= botPow) shoot(botPow);
+                            if (pwr >= botPow) startStrike(botPow);
                         }
                     }
                 }
             }
+            break;
+
+        case S_STRIKE:
+            strikeK++;
+            if (strikeK >= STRIKEN) shoot(strikePwr);
             break;
 
         case S_ROLL:
@@ -835,10 +1057,12 @@ int main(void)
             for (i = 0; i < 16; i++)
                 if (b[i].in && (b[i].vx != 0 || b[i].vy != 0)) spinBall(i, 1.0f / 60.0f);
             {
-                int mv = 0;
-                for (i = 0; i < 16; i++)
+                int mv = 0, fl = 0;
+                for (i = 0; i < 16; i++) {
                     if (b[i].in && (b[i].vx != 0 || b[i].vy != 0)) mv = 1;
-                if (!mv) resolve();
+                    if (fallT[i] > 0) fl = 1;
+                }
+                if (!mv && !fl) resolve();
             }
             break;
 
@@ -869,6 +1093,16 @@ int main(void)
         case S_OVER:
             if (pressed & PAD_START) state = S_MENU;
             break;
+        }
+
+        /* animacoes por frame: barra de forca, bolas na cacapa, taco */
+        {
+            float target = (state == S_STRIKE) ? strikePwr : pwr;
+            if (state == S_MENU || state == S_OVER) target = 0;
+            if (barLevel < target) barLevel = target;
+            else { barLevel -= 0.04f; if (barLevel < target) barLevel = target; }
+            for (i = 0; i < 16; i++) if (fallT[i] > 0) fallT[i]--;
+            if (follow > 0) follow--;
         }
 
         gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x80, 0x00));
