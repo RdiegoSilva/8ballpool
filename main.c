@@ -31,7 +31,7 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
@@ -70,10 +70,11 @@ static float fallX[16], fallY[16];
 static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da barra */
 static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
 
-static const float PX[6] = { TX0, TCX, TX1, TX0, TCX, TX1 };
-static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
-static const float PR[6] = { 14.6f, 12.0f, 14.6f, 14.6f, 12.0f, 14.6f };   /* raio das cacapas */
-#define POCK_PULL 450.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
+#define PO 4.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
+static const float PX[6] = { TX0 - PO, TCX, TX1 + PO, TX0 - PO, TCX, TX1 + PO };
+static const float PY[6] = { TY0 - PO, TY0 - PO, TY0 - PO, TY1 + PO, TY1 + PO, TY1 + PO };
+static const float PR[6] = { 12.6f, 10.0f, 12.6f, 12.6f, 10.0f, 12.6f };   /* raio das cacapas (menores = mais dificil) */
+#define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 static const u8 BC[15][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
@@ -1930,7 +1931,7 @@ static void drawNameScreen(void)
 
 static void drawMenuScreen(void)
 {
-    static const char *ITEM[3] = { "MODO HISTORIA", "JOGAR", "CREDITOS" };
+    static const char *ITEM[4] = { "MODO HISTORIA", "JOGAR", "PLAYER DE MUSICAS", "CREDITOS" };
     char buf[48];
     int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
@@ -1970,22 +1971,22 @@ static void drawMenuScreen(void)
     rect(180 + fmodf(menuT * 3.0f, 240.0f), 103, 220 + fmodf(menuT * 3.0f, 240.0f), 107, COL(240,240,200));
 
     /* opcoes */
-    panel(100, 126, 540, 294);
-    for (i = 0; i < 3; i++) {
-        float y = 144.0f + i * 50.0f, bob = 4.0f * sinf(menuT * 0.2f);
+    panel(100, 122, 540, 300);
+    for (i = 0; i < 4; i++) {
+        float y = 138.0f + i * 40.0f, bob = 4.0f * sinf(menuT * 0.2f);
         int sel = (i == menuSel);
         u64 tc = i == 0 ? (sel ? COL(170,175,190) : COL(105,112,128))
                         : (sel ? COL(255,240,150) : COL(170,180,190));
         if (sel) {
-            rect(108, y - 9, 532, y + 26,
+            rect(108, y - 7, 532, y + 28,
                  GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
             tri(114 + bob, y, 114 + bob, y + 16, 127 + bob, y + 8, COL(255,230,60));
         }
         text(142, y, 0.65f, tc, ITEM[i]);
         if (i == 0) text(520 - tw(0.36f, "EM BREVE"), y + 4, 0.36f, COL(150,130,70), "EM BREVE");
     }
-    if (menuNote > 0) { menuNote--; textC(308, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
-    else textC(308, 0.36f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
+    if (menuNote > 0) { menuNote--; textC(310, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
+    else textC(310, 0.36f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
 
     text(14, 424, 0.34f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
     sprintf(buf, "VERSAO %s", GAME_VERSION);
@@ -1999,16 +2000,13 @@ static int plSel;                                /* cursor da lista de musicas *
 
 static void pauseOpen(void) { paused = 1; pauseSel = 0; pauseView = 0; plSel = musicCur() > 0 ? musicCur() : 0; }
 
-static void pauseInput(u32 pr)
+/* entrada do player de musicas; devolve 1 quando o jogador quer sair dele */
+static int playerInput(u32 pr)
 {
-    int d = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0), tog = d || (pr & PAD_CROSS);
-    if (pauseView == 1) {
-        if (pr & (PAD_CROSS | PAD_CIRCLE | PAD_START)) pauseView = 0;
-        return;
-    }
-    if (pauseView == 2) {                            /* player de musicas */
+    int d = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0);
+    {
         int n = musicCount();
-        if (pr & (PAD_CIRCLE | PAD_START)) { pauseView = 0; return; }
+        if (pr & (PAD_CIRCLE | PAD_START)) return 1;
         if (n > 0) {
             if (pr & PAD_UP)   plSel = (plSel + n - 1) % n;
             if (pr & PAD_DOWN) plSel = (plSel + 1) % n;
@@ -2019,6 +2017,19 @@ static void pauseInput(u32 pr)
         }
         if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); }
         if (pr & PAD_TRIANGLE) { musicScan(); plSel = 0; }
+    }
+    return 0;
+}
+
+static void pauseInput(u32 pr)
+{
+    int d = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0), tog = d || (pr & PAD_CROSS);
+    if (pauseView == 1) {
+        if (pr & (PAD_CROSS | PAD_CIRCLE | PAD_START)) pauseView = 0;
+        return;
+    }
+    if (pauseView == 2) {                            /* player de musicas */
+        if (playerInput(pr)) pauseView = 0;
         return;
     }
     if (pr & PAD_UP)   pauseSel = (pauseSel + NPI - 1) % NPI;
@@ -2140,6 +2151,7 @@ static void draw(void)
     int i;
     char buf[64];
     if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
+    if (state == S_PLAYER) { drawBackdrop(); pauseView = 2; drawPause(); return; }
     drawTable();
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
     else for (i = 1; i < 16; i++) drawShadow(i);
@@ -2229,8 +2241,8 @@ int main(int argc, char *argv[])
     for (;;) {
         musicUpdate();
         p0 = readpad(0);
-        p1 = (mode == 1 || state == S_MENU || state == S_SETUP || state == S_NAME) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME) in = p0 | p1;
+        p1 = (mode == 1 || state == S_MENU || state == S_SETUP || state == S_NAME || state == S_PLAYER) ? readpad(1) : 0;
+        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME || state == S_PLAYER) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         if (paused) in = p0 | p1;
@@ -2239,20 +2251,25 @@ int main(int argc, char *argv[])
         pressed = in & ~prev;
         prev = in;
         menuT++;
-        if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) menuUpdate();
+        if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME || state == S_PLAYER) menuUpdate();
 
         if (paused) pauseInput(pressed);
         else if ((pressed & PAD_START) && (state == S_AIM || state == S_ROLL || state == S_PLACE ||
                                            state == S_TAKE || state == S_STRIKE)) pauseOpen();
         else switch (state) {
         case S_MENU:
-            if (pressed & PAD_UP)   menuSel = (menuSel + 2) % 3;
-            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 3;
+            if (pressed & PAD_UP)   menuSel = (menuSel + 3) % 4;
+            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 4;
             if (pressed & (PAD_CROSS | PAD_START)) {
                 if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
                 else if (menuSel == 1) { state = S_SETUP; setSel = 0; }
+                else if (menuSel == 2) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
                 else state = S_CREDITS;
             }
+            break;
+
+        case S_PLAYER:
+            if (playerInput(pressed)) { pauseView = 0; state = S_MENU; }
             break;
 
         case S_SETUP:
