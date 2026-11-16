@@ -1,8 +1,9 @@
 /* 8 BALL POOL para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT) e 2 jogadores (dois controles).
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
- *                     segurar X = encher a barra de forca (esquerda), soltar = tacada
- *                     O = cancelar tacada
+ *                     X = a barra de forca (esquerda) sobe e desce sozinha,
+ *                         X de novo = tacada | O = cancelar a tacada
+ *                     L2/R2 = efeito na bola branca | SELECT = trocar de taco
  * Bola na mao:        direcional move a bola branca, X confirma
  */
 #include <tamtypes.h>
@@ -17,15 +18,18 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define R     9.0f
+#define R     8.0f
 #define TX0   70.0f
-#define TX1   570.0f
-#define TY0   105.0f
-#define TY1   355.0f
-#define TCY   230.0f
+#define TX1   598.0f
+#define TY0   100.0f
+#define TY1   364.0f
+#define TCX   ((TX0 + TX1) * 0.5f)
+#define TCY   ((TY0 + TY1) * 0.5f)
+#define HEADX (TX0 + (TX1 - TX0) * 0.25f)
+#define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  900.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES };
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
 
@@ -54,14 +58,31 @@ static float barLevel, strikePwr, strikeD0, hitX, hitY;
 static int   strikeK, follow;
 static int   fallT[16], fallP[16];
 static float fallX[16], fallY[16];
+static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da barra */
+static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
 
-static const float PX[6] = { TX0, 320, TX1, TX0, 320, TX1 };
+static const float PX[6] = { TX0, TCX, TX1, TX0, TCX, TX1 };
 static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
-static const float PR[6] = { 18, 16, 18, 18, 16, 18 };
+static const float PR[6] = { 14.5f, 13.0f, 14.5f, 14.5f, 13.0f, 14.5f };
 
 static const u8 BC[9][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
     {240,120,20},  {20,140,60},  {130,20,30}, {15,15,15}
+};
+
+/* tacos: estatisticas de 0 a 100 + cores para o desenho */
+typedef struct {
+    const char *name;
+    int force, effect, aim, ctl;          /* forca, efeito, linha de mira, controle da barra */
+    u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
+} CueDef;
+#define NCUES 5
+static const CueDef CUES[NCUES] = {
+    { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
+    { "POTENCIA",  100,  20,  45,  35, {190, 60, 50}, {222,170,110}, {150, 26, 26}, {210,210,215}, { 25, 20, 20} },
+    { "EFEITO",     50, 100,  50,  55, { 70,150,230}, {226,196,140}, { 28, 64,160}, {130,210,255}, { 20, 26, 50} },
+    { "MIRA LONGA", 50,  30, 100,  65, { 60,170,100}, {238,218,166}, { 20,112, 62}, {236,230,120}, { 20, 40, 28} },
+    { "PRECISAO",   45,  40,  70, 100, {200,200,210}, {176,178,186}, { 44, 44, 50}, {205,205,215}, { 20, 20, 24} },
 };
 
 static unsigned int rs = 2463534242u;
@@ -388,7 +409,7 @@ static void drawBallMesh(int id, float x, float y, float r)
 
 static void drawBallAt(int i, float x, float y, float r)
 {
-    if (!useTex || r < R - 1.0f) { drawBallVec(i, x, y, r); return; }
+    if (!useTex || r < R - 0.5f) { drawBallVec(i, x, y, r); return; }
     drawBallMesh(i, x, y, r);
 }
 
@@ -416,6 +437,12 @@ static int countGroup(int gr)
 
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
+static int curCue(void) { return isBot() ? 0 : cueSel[cur]; }
+static float cuePowMul(int c)     { return 0.70f + 0.0055f * CUES[c].force; }
+static float cueSpinK(int c)      { return 0.10f + 0.008f * CUES[c].effect; }
+static float cueGuideMax(int c)   { return 60.0f + 5.4f * CUES[c].aim; }
+static float cueGuideScale(int c) { return 0.6f + 0.01f * CUES[c].aim; }
+static float cueBarSpeed(int c)   { return 0.026f - 0.00016f * CUES[c].ctl; }
 
 static void rack(void)
 {
@@ -423,11 +450,11 @@ static void rack(void)
     int i, r, c, k = 0;
     memset(fallT, 0, sizeof(fallT));
     for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 1; resetOrient(i); }
-    b[0].x = TX0 + 125; b[0].y = TCY;
+    b[0].x = HEADX; b[0].y = TCY;
     for (r = 0; r < 5; r++)
         for (c = 0; c <= r; c++) {
             int id = order[k++];
-            b[id].x = TX0 + 375 + r * (R * 1.76f);
+            b[id].x = FOOTX + r * (R * 1.76f);
             b[id].y = TCY + (c - r * 0.5f) * (2 * R + 0.4f);
         }
 }
@@ -436,6 +463,7 @@ static void newGame(int m)
 {
     mode = m; rack(); grp[0] = grp[1] = -1; cur = 0; ang = 0; pwr = 0;
     charging = 0; breakShot = 1; botTimer = 0; botPlanned = 0; state = S_AIM;
+    spinSel = spinCur = 0; barDir = 1.0f;
     setmsg("JOGADOR 1 - QUEBRA");
 }
 
@@ -445,10 +473,17 @@ static void shoot(float p)
     firstHit = -1;
     gAtStart = grp[cur];
     startOwnLeft = gAtStart >= 0 ? countGroup(gAtStart) : 99;
-    hitX = b[0].x; hitY = b[0].y;
-    b[0].vx = cosf(ang) * p * MAXV;
-    b[0].vy = sinf(ang) * p * MAXV;
+    hitX = b[0].x; hitY = b[0].y; hitCue = curCue();
+    b[0].vx = cosf(ang) * p * MAXV * cuePowMul(hitCue);
+    b[0].vy = sinf(ang) * p * MAXV * cuePowMul(hitCue);
+    spinCur = spinSel; spinK = cueSpinK(hitCue); spinSel = 0;
     breakShot = 0; pwr = 0; charging = 0; follow = FOLLOWN; state = S_ROLL;
+}
+
+/* menu de tacos (SELECT) */
+static void openCueMenu(void)
+{
+    cueMenuSel = cueSel[cur]; cueRet = state; charging = 0; state = S_CUES;
 }
 
 /* o taco vai para tras com a forca e e disparado para a bola */
@@ -469,6 +504,12 @@ static int stepPhysics(float dt)
     int i, j, p, moving = 0;
     for (i = 0; i < 16; i++) {
         if (!b[i].in) continue;
+        if (i == 0 && spinCur != 0.0f) {          /* efeito: a trajetoria curva */
+            float a = spinCur * spinK * dt, c = cosf(a), sn = sinf(a);
+            float ovx = b[0].vx, ovy = b[0].vy;
+            b[0].vx = ovx * c - ovy * sn; b[0].vy = ovx * sn + ovy * c;
+            spinCur *= 1.0f - 1.1f * dt;
+        }
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
             float dx = b[i].x - PX[p], dy = b[i].y - PY[p];
@@ -557,7 +598,7 @@ static void resolve(void)
 
     botTimer = 0; botPlanned = 0;
     if (foul) {
-        if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = TX0 + 125; b[0].y = TCY; }
+        if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = HEADX; b[0].y = TCY; }
         b[0].vx = b[0].vy = 0;
         cur = 1 - cur;
         state = S_PLACE;
@@ -635,7 +676,7 @@ static void botPlan(void)
             dx = b[t].x - cx; dy = b[t].y - cy; d = dx*dx + dy*dy;
             if (d < bd) { bd = d; botAng = atan2f(dy, dx); }
         }
-        if (bd > 1e8f) botAng = atan2f(TCY - cy, TX0 + 375 - cx);
+        if (bd > 1e8f) botAng = atan2f(TCY - cy, FOOTX - cx);
         botPow = 0.65f;
     }
     if (breakShot) botPow = 1.0f;
@@ -709,18 +750,18 @@ static void drawTable(void)
              COL(24 + k*2, 114 + k*3, 68 + k*2));
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
-    cushH(TX0 + 22, 320 - 19, TY0 - 11, TY0);
-    cushH(320 + 19, TX1 - 22, TY0 - 11, TY0);
-    cushH(TX0 + 22, 320 - 19, TY1 + 11, TY1);
-    cushH(320 + 19, TX1 - 22, TY1 + 11, TY1);
-    cushV(TY0 + 22, TY1 - 22, TX0 - 11, TX0);
-    cushV(TY0 + 22, TY1 - 22, TX1 + 11, TX1);
+    cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY0 - 11, TY0);
+    cushH(TCX + PR[1] + 4, TX1 - PR[0] - 4, TY0 - 11, TY0);
+    cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY1 + 11, TY1);
+    cushH(TCX + PR[1] + 4, TX1 - PR[0] - 4, TY1 + 11, TY1);
+    cushV(TY0 + PR[0] + 4, TY1 - PR[0] - 4, TX0 - 11, TX0);
+    cushV(TY0 + PR[0] + 4, TY1 - PR[0] - 4, TX1 + 11, TX1);
 
     /* diamantes de mira na madeira */
     for (k = 1; k <= 3; k++) {
-        x = TX0 + (320 - TX0) * k / 4.0f;
+        x = TX0 + (TCX - TX0) * k / 4.0f;
         diamond(x, TY0 - 18.5f);  diamond(x, TY1 + 18.5f);
-        x = 320 + (TX1 - 320) * k / 4.0f;
+        x = TCX + (TX1 - TCX) * k / 4.0f;
         diamond(x, TY0 - 18.5f);  diamond(x, TY1 + 18.5f);
         y = TY0 + (TY1 - TY0) * k / 4.0f;
         diamond(TX0 - 18.5f, y);  diamond(TX1 + 18.5f, y);
@@ -728,15 +769,15 @@ static void drawTable(void)
 
     /* cacapas: aro de couro, borda dourada e buraco */
     for (p = 0; p < 6; p++) {
-        discN(PX[p], PY[p], PR[p] + 5, COL(52,31,14), 20);
-        ring(PX[p], PY[p], PR[p] + 5, COL(176,132,58));
-        discN(PX[p], PY[p], PR[p] + 1, COL(3,3,5), 20);
+        discN(PX[p], PY[p], PR[p] + 4, COL(52,31,14), 20);
+        ring(PX[p], PY[p], PR[p] + 4, COL(176,132,58));
+        discN(PX[p], PY[p], PR[p] + 0.5f, COL(3,3,5), 20);
     }
 
     /* linha da cabeceira e marcas do feltro */
-    line(TX0 + 125, TY0, TX0 + 125, TY1, COL(52,152,96));
-    disc(TX0 + 125, TCY, 2.2f, COL(16,88,52));
-    disc(TX0 + 375, TCY, 2.2f, COL(16,88,52));
+    line(HEADX, TY0, HEADX, TY1, COL(52,152,96));
+    disc(HEADX, TCY, 2.2f, COL(16,88,52));
+    disc(FOOTX, TCY, 2.2f, COL(16,88,52));
 }
 
 static void thick(float x1, float y1, float x2, float y2, u64 c)
@@ -749,12 +790,14 @@ static void thick(float x1, float y1, float x2, float y2, u64 c)
 }
 
 /* mira estilo 8 Ball Pool: linha ate a bola fantasma, linha da bola alvo
-   e desvio da bola branca; nas tabelas mostra o rebote */
+   e desvio da bola branca; nas tabelas mostra o rebote.
+   O tamanho da linha depende da "mira" do taco equipado. */
 static void drawGuide(void)
 {
     u64 W = COL(250,250,250), D = COL(190,190,190);
     float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
     float tmin = 1e9f, t, gx, gy;
+    float lim = cueGuideMax(curCue()), gs = cueGuideScale(curCue());
     int i, hit = -1, wall = 0;
 
     for (i = 1; i < 16; i++) {
@@ -774,6 +817,11 @@ static void drawGuide(void)
     if (dy < -0.0001f) { t = (TY0+R-cy)/dy; if (t < tmin) { tmin = t; hit = -1; wall = 2; } }
     if (tmin < 0) tmin = 0;
 
+    if (tmin > lim) {                         /* alvo alem do alcance da linha do taco */
+        thick(cx + dx*R, cy + dy*R, cx + dx*lim, cy + dy*lim, W);
+        return;
+    }
+
     gx = cx + dx*tmin; gy = cy + dy*tmin;
     thick(cx + dx*R, cy + dy*R, gx - dx*R, gy - dy*R, W);
     ring(gx, gy, R, W);
@@ -786,20 +834,20 @@ static void drawGuide(void)
         nx /= nl; ny /= nl;
         dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
         /* caminho da bola alvo */
-        L = 35.0f + 110.0f * dot;
+        L = (35.0f + 110.0f * dot) * gs;
         thick(b[hit].x + nx*R, b[hit].y + ny*R,
               b[hit].x + nx*(R + L), b[hit].y + ny*(R + L), W);
         /* desvio da bola branca */
         tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
         if (tl > 0.05f) {
             tx /= tl; ty /= tl;
-            L = 18.0f + 60.0f * tl;
+            L = (18.0f + 60.0f * tl) * gs;
             thick(gx + tx*R, gy + ty*R, gx + tx*(R + L), gy + ty*(R + L), D);
         }
     } else if (wall) {
         float rx = dx, ry = dy;
         if (wall == 1) rx = -rx; else ry = -ry;
-        thick(gx + rx*R, gy + ry*R, gx + rx*(R + 70), gy + ry*(R + 70), D);
+        thick(gx + rx*R, gy + ry*R, gx + rx*(R + 70*gs), gy + ry*(R + 70*gs), D);
     }
 }
 
@@ -834,19 +882,15 @@ static void cueSeg(float u1, float u2, const u8 *c)
     quad(dx, dy, cx, cy, ex, ey, fx, fy, shadeA(c, 0.66f, 0, cueAl));   /* lado escuro */
 }
 
-static void drawCue(float px, float py, float d0, int al)
+static void drawCue(float px, float py, float d0, int al, float a, int ci)
 {
-    static const u8 TIP[3]   = { 58, 104, 172 };
     static const u8 FER[3]   = { 238, 238, 228 };
-    static const u8 WOOD[3]  = { 228, 192, 130 };
     static const u8 JOINT[3] = { 188, 188, 196 };
-    static const u8 BUTT[3]  = { 94, 48, 22 };
-    static const u8 WRAP[3]  = { 30, 24, 24 };
-    static const u8 INLAY[3] = { 208, 168, 72 };
     static const u8 RUB[3]   = { 22, 22, 22 };
+    const CueDef *cd = &CUES[ci];
     float ax, ay, bx, by, cx, cy, ex, ey;
 
-    cueDx = cosf(ang); cueDy = sinf(ang);
+    cueDx = cosf(a); cueDy = sinf(a);
     cueBx = px; cueBy = py; cueD0 = d0; cueAl = al;
 
     /* sombra no feltro */
@@ -855,29 +899,29 @@ static void drawCue(float px, float py, float d0, int al)
     quad(ax + 4, ay + 5, bx + 6, by + 7, cx + 6, cy + 7, ex + 4, ey + 5,
          GS_SETREG_RGBAQ(0, 12, 5, (al * 30) / 128, 0x00));
 
-    cueSeg(0.0f,   3.5f,   TIP);
+    cueSeg(0.0f,   3.5f,   cd->tip);
     cueSeg(3.5f,   13.0f,  FER);
-    cueSeg(13.0f,  166.0f, WOOD);
+    cueSeg(13.0f,  166.0f, cd->wood);
     cueSeg(166.0f, 172.0f, JOINT);
-    cueSeg(172.0f, 200.0f, BUTT);
-    cueSeg(200.0f, 214.0f, WRAP);
-    cueSeg(214.0f, 232.0f, BUTT);
-    cueSeg(232.0f, 237.0f, INLAY);
-    cueSeg(237.0f, 284.0f, BUTT);
+    cueSeg(172.0f, 200.0f, cd->butt);
+    cueSeg(200.0f, 214.0f, cd->wrap);
+    cueSeg(214.0f, 232.0f, cd->butt);
+    cueSeg(232.0f, 237.0f, cd->inlay);
+    cueSeg(237.0f, 284.0f, cd->butt);
     cueSeg(284.0f, 290.0f, RUB);
 
     /* brilho ao longo do taco */
     cuePt(14.0f, -1.2f, &ax, &ay);  cuePt(160.0f, -2.3f, &bx, &by);
-    line(ax, ay, bx, by, shadeA(WOOD, 1.3f, 40, al));
+    line(ax, ay, bx, by, shadeA(cd->wood, 1.3f, 40, al));
     cuePt(174.0f, -2.4f, &ax, &ay); cuePt(284.0f, -3.9f, &bx, &by);
-    line(ax, ay, bx, by, shadeA(BUTT, 1.7f, 30, al));
+    line(ax, ay, bx, by, shadeA(cd->butt, 1.7f, 30, al));
 }
 
-/* barra de forca vertical no lado esquerdo: enche de baixo para cima
-   enquanto segura X e desce suavemente depois da tacada */
+/* barra de forca vertical no lado esquerdo: ao apertar X ela sobe e desce
+   sozinha; X de novo dispara, O cancela. Depois da tacada ela volta a zero. */
 static void drawPowerBar(void)
 {
-    const float bx = 14.0f, by0 = 98.0f, by1 = 366.0f, bw = 18.0f;
+    const float bx = 14.0f, by0 = TY0, by1 = TY1, bw = 14.0f;
     const int   nseg = 24;
     float sh = (by1 - by0) / nseg, fillTop = by1 - barLevel * (by1 - by0);
     char buf[16];
@@ -904,6 +948,18 @@ static void drawPowerBar(void)
     text(8, by1 + 10, 0.42f, COL(255,230,60), buf);
 }
 
+/* indicador de efeito (L2/R2): o ponto vermelho mostra o lado do efeito */
+static void drawSpinIndicator(void)
+{
+    const float cx = 22.0f, cy = 402.0f, r = 10.0f;
+    discN(cx, cy, r + 1.5f, COL(60,60,66), 16);
+    discN(cx, cy, r, COL(236,236,230), 16);
+    line(cx, cy - r, cx, cy + r, COL(190,190,184));
+    line(cx - r, cy, cx + r, cy, COL(190,190,184));
+    discN(cx + spinSel * (r - 3.5f), cy, 2.8f, COL(215,40,40), 8);
+    text(2, 416, 0.34f, COL(220,220,220), "EFEITO");
+}
+
 static void drawHUD(void)
 {
     char buf[64];
@@ -926,8 +982,59 @@ static void drawHUD(void)
     }
     if (msgTimer > 0) { msgTimer--; text(150, 80, 0.55f, COL(255,255,255), msg); }
     drawPowerBar();
-    if (state == S_AIM && !isBot())
-        text(250, 396, 0.45f, COL(200,200,200), "X: FORCA   O: CANCELAR");
+    drawSpinIndicator();
+    if (state == S_AIM && !isBot()) {
+        if (charging) text(210, 396, 0.45f, COL(255,230,60), "X: DISPARAR   O: CANCELAR");
+        else text(150, 396, 0.4f, COL(200,200,200), "X: FORCA   L2/R2: EFEITO   SELECT: TACOS");
+    }
+}
+
+static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
+{ gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
+
+/* menu de tacos: foto do taco, nome e estatisticas */
+static void drawCueMenu(void)
+{
+    static const char *SN[4] = { "FORCA", "EFEITO", "MIRA", "CONTROLE" };
+    static const u8 SC[4][3] = { {235,95,55}, {90,155,255}, {95,215,115}, {240,210,70} };
+    const CueDef *cd = &CUES[cueMenuSel];
+    int val[4], k;
+    char buf[48];
+
+    val[0] = cd->force; val[1] = cd->effect; val[2] = cd->aim; val[3] = cd->ctl;
+
+    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x50, 0x00));
+    rect(108, 84, 532, 386, COL(84,88,104));
+    rect(110, 86, 530, 384, COL(18,20,30));
+    rect(110, 86, 530, 116, COL(34,42,70));
+    sprintf(buf, "TACOS - JOGADOR %d", cur + 1);
+    text(128, 90, 0.6f, COL(255,230,60), buf);
+
+    /* foto do taco (palco de feltro) */
+    rect(126, 126, 514, 180, COL(70,50,28));
+    rect(128, 128, 512, 178, COL(24,104,64));
+    drawCue(175.0f, 153.0f, 0.0f, 0x80, 3.14159265f, cueMenuSel);
+    tri(122, 143, 122, 163, 112, 153, COL(255,230,60));
+    tri(518, 143, 518, 163, 528, 153, COL(255,230,60));
+
+    text(130, 186, 0.7f, COL(255,255,255), cd->name);
+    if (cueSel[cur] == cueMenuSel) text(380, 192, 0.5f, COL(110,230,130), "EM USO");
+    else text(380, 192, 0.5f, COL(255,230,60), "X: EQUIPAR");
+
+    for (k = 0; k < 4; k++) {
+        float y = 224.0f + k * 30.0f;
+        text(130, y, 0.5f, COL(210,210,220), SN[k]);
+        rect(270, y + 2, 510, y + 17, COL(40,42,52));
+        rect(270, y + 2, 270 + 2.4f * val[k], y + 17, COL(SC[k][0], SC[k][1], SC[k][2]));
+    }
+
+    for (k = 0; k < NCUES; k++) {
+        float x = 320.0f + (k - 2) * 30.0f;
+        disc(x, 348, k == cueMenuSel ? 6.0f : 4.0f,
+             k == cueMenuSel ? COL(255,230,60) : COL(100,100,110));
+        if (k == cueSel[cur]) ring(x, 348, 9.0f, COL(110,230,130));
+    }
+    text(170, 362, 0.4f, COL(170,170,180), "ESQ/DIR: ESCOLHER   X: EQUIPAR   O/SELECT: VOLTAR");
 }
 
 static void draw(void)
@@ -956,15 +1063,16 @@ static void draw(void)
     for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
     if (state == S_AIM) {
         if (!isBot()) drawGuide();
-        drawCue(b[0].x, b[0].y, R + 4 + pwr * 70, 0x80);
+        drawCue(b[0].x, b[0].y, R + 4 + pwr * 70, 0x80, ang, curCue());
     } else if (state == S_STRIKE) {
         float t = (float)strikeK / STRIKEN, tip = R + 1.0f;
-        drawCue(b[0].x, b[0].y, tip + (strikeD0 - tip) * (1.0f - t * t), 0x80);
+        drawCue(b[0].x, b[0].y, tip + (strikeD0 - tip) * (1.0f - t * t), 0x80, ang, curCue());
     } else if (state == S_ROLL && follow > 0) {
         float f = (float)(FOLLOWN - follow) / FOLLOWN;
-        drawCue(hitX, hitY, R + 1.0f - 16.0f * f, (int)(0x80 * (1.0f - f)));
+        drawCue(hitX, hitY, R + 1.0f - 16.0f * f, (int)(0x80 * (1.0f - f)), ang, hitCue);
     }
     drawHUD();
+    if (state == S_CUES) drawCueMenu();
     if (state == S_OVER) {
         rect(120, 150, 520, 290, COL(0,0,0));
         sprintf(buf, "%s VENCEU!", (winner == 1 && mode == 0) ? "BOT" :
@@ -1027,9 +1135,21 @@ int main(void)
                 if (in & PAD_RIGHT) ang += 0.025f;
                 if (in & PAD_L1)    ang -= 0.005f;
                 if (in & PAD_R1)    ang += 0.005f;
-                if (in & PAD_CROSS) { pwr += 0.015f; if (pwr > 1) pwr = 1; charging = 1; }
-                else if (charging) { charging = 0; if (pwr > 0.05f) startStrike(pwr); else pwr = 0; }
-                if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
+                if (in & PAD_L2) { spinSel -= 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; }
+                if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
+                if (!charging) {
+                    if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
+                    else if (pressed & PAD_SELECT) openCueMenu();
+                } else {
+                    pwr += barDir * cueBarSpeed(cueSel[cur]);        /* sobe e desce sozinha */
+                    if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
+                    if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
+                    if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
+                    else if (pressed & PAD_CROSS) {
+                        charging = 0;
+                        if (pwr > 0.05f) startStrike(pwr); else pwr = 0;
+                    }
+                }
             } else {
                 botTimer++;
                 if (botTimer == 40) { botPlan(); botPlanned = 1; }
@@ -1045,6 +1165,18 @@ int main(void)
                     }
                 }
             }
+            break;
+
+        case S_CUES:
+            if (pressed & (PAD_LEFT | PAD_UP))    cueMenuSel = (cueMenuSel + NCUES - 1) % NCUES;
+            if (pressed & (PAD_RIGHT | PAD_DOWN)) cueMenuSel = (cueMenuSel + 1) % NCUES;
+            if (pressed & PAD_CROSS) {
+                char tb[48];
+                cueSel[cur] = cueMenuSel;
+                sprintf(tb, "TACO: %s", CUES[cueMenuSel].name);
+                setmsg(tb);
+                state = cueRet;
+            } else if (pressed & (PAD_CIRCLE | PAD_SELECT)) state = cueRet;
             break;
 
         case S_STRIKE:
@@ -1077,10 +1209,11 @@ int main(void)
                 if (b[0].y < TY0+R) b[0].y = TY0+R;
                 if (b[0].y > TY1-R) b[0].y = TY1-R;
                 if ((pressed & PAD_CROSS) && validPlace(b[0].x, b[0].y)) { state = S_AIM; pwr = 0; }
+                else if (pressed & PAD_SELECT) openCueMenu();
             } else {
                 if (++botTimer > 40) {
                     int tries;
-                    b[0].x = TX0 + 125; b[0].y = TCY;
+                    b[0].x = HEADX; b[0].y = TCY;
                     for (tries = 0; tries < 500 && !validPlace(b[0].x, b[0].y); tries++) {
                         b[0].x = TX0 + R + (rnd() % (int)(TX1 - TX0 - 2*R));
                         b[0].y = TY0 + R + (rnd() % (int)(TY1 - TY0 - 2*R));
