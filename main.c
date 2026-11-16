@@ -871,7 +871,8 @@ int main(void)
             break;
         }
 
-        gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x00, 0x00));
+        gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x80, 0x00));
+        gsKit_prim_sprite(g, 0, 0, (float)g->Width, (float)g->Height, 1, COL(16, 16, 24));
         draw();
         gsKit_queue_exec(g);
         gsKit_sync_flip(g);
