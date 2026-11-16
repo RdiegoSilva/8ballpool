@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.3.0
+- Versão: 1.4.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -18,8 +18,18 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA: Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados) ou **Neon** (animada: luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando)
-  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima ou Dourada (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
+  - MESA (15 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+    - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
+    - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
+    - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
+    - **Matrix**: chuva de código verde, moldura neon verde
+    - **Vegas**: lâmpadas piscando em volta da mesa, feltro vermelho com detalhes dourados
+    - **Arco-íris**: faixas de cor que mudam no feltro e moldura em cores correndo
+    - **Rosa** e **Turquesa**: mesas coloridas (sem animação)
+    - As animações param se a opção **Efeitos** estiver desligada
+  - COR DAS BOLAS (só na Bola 8): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro ou Arco-íris (mostra as 8 cores do tema; vale para lisas e listradas)
+  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **20 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque ou Bege (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
+  - MEU TACO: abre o **criador de taco** (veja abaixo)
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
 
 ## Modos de jogo
@@ -43,7 +53,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - O: cancelar a tacada
 - L2/R2: efeito na bola branca (esquerda/direita), indicador no canto inferior esquerdo
 - START: pausa o jogo (veja abaixo)
-- SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta)
+- SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta; nos tacos **MEU TACO 1/2**, TRIÂNGULO abre o criador)
 - Bola na mão: direcional move a bola branca, X confirma
 
 ## Tacos
@@ -55,12 +65,29 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 | Mira Longa | 50    | 30     | 100  | 65       |
 | Precisão   | 45    | 40     | 70   | 100      |
 | Sniper     | 40    | 10     | 100  | 100      |
+| Dragão     | 80    | 40     | 40   | 35       |
+| Gelo       | 45    | 60     | 65   | 70       |
+| Ouro       | 60    | 40     | 55   | 55       |
+| Neon       | 55    | 55     | 55   | 55       |
+| Samurai    | 75    | 30     | 50   | 45       |
+| Oceano     | 50    | 70     | 45   | 55       |
+| Meu Taco 1 / 2 | você escolhe (até 220 pontos no total) | | | |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
+- Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
 - Mira: tamanho da linha de mira (no máximo cerca de 60% da mesa, e ela some aos poucos no fim)
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
+
+## Criar meu taco
+Tela **MEU TACO** (em JOGAR → Configurar partida) ou, durante o jogo, SELECT → escolha **MEU TACO 1** ou **2** → TRIÂNGULO.
+- Dois tacos do jogador (L1/R1 troca entre eles)
+- **Pontos**: reparta até **220 pontos** entre FORÇA, EFEITO, MIRA e CONTROLE (cada um de 10 a 90, de 5 em 5). Quer mais força? Tire de outro atributo
+- **Cores**: PONTA, VARETA, CABO, DETALHE e FITA, cada uma com 17 cores
+- **Animação**: nenhuma, brilho, arco-íris ou faíscas
+- TRIÂNGULO sorteia cores e animação | **SALVAR E USAR** equipa o taco (no jogo, para quem abriu o menu; na configuração, para o Jogador 1, ou para o Jogador 2 se estiver editando o Meu Taco 2 contra outro jogador) | O volta
+- Obs.: os tacos criados ainda não ficam salvos ao desligar o jogo
 
 ## Pausa (START)
 Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas, Reiniciar partida e Menu principal.
