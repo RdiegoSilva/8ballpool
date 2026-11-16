@@ -3,14 +3,14 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.4.0
+- Versão: 1.5.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida** (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
-  - ADVERSÁRIO: BOT ou JOGADOR 2. Com JOGADOR 2, ao iniciar abre a tela para **digitar o nome** (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 2")
+  - ADVERSÁRIO: BOT ou JOGADOR 2. Ao iniciar abre a tela para **digitar o nome do JOGADOR 1** e, se o adversário for o JOGADOR 2, depois o nome dele (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 1" / "JOGADOR 2"; os nomes ficam guardados até desligar)
   - TEMPO POR JOGADA (só contra o JOGADOR 2): SEM TEMPO, 15, 20, 25 ou 30 segundos. O contador e a barra aparecem no painel de quem joga; passou o tempo, **perde a vez**
   - DIFICULDADE (só contra o BOT): FÁCIL, MÉDIO, DIFÍCIL ou PROFISSIONAL
     - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
@@ -27,9 +27,8 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Arco-íris**: faixas de cor que mudam no feltro e moldura em cores correndo
     - **Rosa** e **Turquesa**: mesas coloridas (sem animação)
     - As animações param se a opção **Efeitos** estiver desligada
-  - COR DAS BOLAS (só na Bola 8): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro ou Arco-íris (mostra as 8 cores do tema; vale para lisas e listradas)
-  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **20 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque ou Bege (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
-  - MEU TACO: abre o **criador de taco** (veja abaixo)
+  - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
+  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
 
 ## Modos de jogo
@@ -51,9 +50,10 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Esquerda/Direita: girar a mira | L1/R1: ajuste fino
 - X: a barra de força (lado esquerdo) sobe e desce sozinha; X de novo dispara a tacada
 - O: cancelar a tacada
+- QUADRADO: passar giz no taco (veja abaixo)
 - L2/R2: efeito na bola branca (esquerda/direita), indicador no canto inferior esquerdo
 - START: pausa o jogo (veja abaixo)
-- SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta; nos tacos **MEU TACO 1/2**, TRIÂNGULO abre o criador)
+- SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta)
 - Bola na mão: direcional move a bola branca, X confirma
 
 ## Tacos
@@ -71,7 +71,6 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 | Neon       | 55    | 55     | 55   | 55       |
 | Samurai    | 75    | 30     | 50   | 45       |
 | Oceano     | 50    | 70     | 45   | 55       |
-| Meu Taco 1 / 2 | você escolhe (até 220 pontos no total) | | | |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
 - Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
@@ -80,14 +79,13 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Mira: tamanho da linha de mira (no máximo cerca de 60% da mesa, e ela some aos poucos no fim)
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
 
-## Criar meu taco
-Tela **MEU TACO** (em JOGAR → Configurar partida) ou, durante o jogo, SELECT → escolha **MEU TACO 1** ou **2** → TRIÂNGULO.
-- Dois tacos do jogador (L1/R1 troca entre eles)
-- **Pontos**: reparta até **220 pontos** entre FORÇA, EFEITO, MIRA e CONTROLE (cada um de 10 a 90, de 5 em 5). Quer mais força? Tire de outro atributo
-- **Cores**: PONTA, VARETA, CABO, DETALHE e FITA, cada uma com 17 cores
-- **Animação**: nenhuma, brilho, arco-íris ou faíscas
-- TRIÂNGULO sorteia cores e animação | **SALVAR E USAR** equipa o taco (no jogo, para quem abriu o menu; na configuração, para o Jogador 1, ou para o Jogador 2 se estiver editando o Meu Taco 2 contra outro jogador) | O volta
-- Obs.: os tacos criados ainda não ficam salvos ao desligar o jogo
+## Giz no taco
+O taco começa com a ponta cheia de giz (ponta azul no taco e barrinha **GIZ** no canto inferior direito da tela).
+- Cada tacada gasta giz (mais ainda quando você usa muito efeito). Quanto menos giz, mais a tacada **sai torta**: a mira desvia um pouco e o efeito fica mais fraco
+- Com pouquíssimo giz e muito efeito lateral o taco **escorrega**: desvio dobrado e tacada mais fraca
+- Aperte **QUADRADO** na hora da mira para passar giz (animação rápida); o giz volta a 100% e a tacada fica certeira de novo
+- Cada jogador tem o seu giz. O BOT não gasta giz
+- Quando o giz está abaixo da metade a barra de dicas mostra a tecla do giz
 
 ## Pausa (START)
 Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas, Reiniciar partida e Menu principal.
