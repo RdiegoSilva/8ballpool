@@ -30,7 +30,7 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
@@ -51,6 +51,8 @@ static int winner, botTimer, botPlanned;
 static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhidos */
 static int colSel[2] = { 0, 1 };                 /* cores das bolas no modo brasileiro */
 static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
+static int takeList[16], takeN, takeSel;         /* bolas que podem ser tiradas apos uma falta (brasileira) */
+static char overNote[48];                         /* motivo do fim de jogo */
 static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
 static char msg[64];
@@ -657,29 +659,119 @@ static void endTurn(int foul, int ownPocket)
     }
 }
 
-/* regras do brasileiro: cada um joga nas suas 4 bolas; vence quem encacapa todas as suas.
-   Falta: branca na cacapa, nao tocar bola ou tocar primeiro na bola do adversario. */
+static void endGame(int w)
+{
+    winner = w;
+    (mode == 0 ? winsBot : winsVs)[w]++;
+    state = S_OVER;
+}
+
+/* falta na brasileira: o adversario escolhe qualquer bola da mesa e a tira */
+static void takeInit(void)
+{
+    int i;
+    takeN = 0; takeSel = 0;
+    for (i = 1; i < 16; i++) if (b[i].in) takeList[takeN++] = i;
+    for (i = 0; i < takeN; i++)
+        if (ballGroup(takeList[i]) == grp[cur]) { takeSel = i; break; }   /* comeca numa bola propria */
+}
+
+static void takeMove(int dx, int dy)
+{
+    int i, best = -1, wrap = -1;
+    float bs = 1e9f, ws = 1e9f, cx, cy;
+    if (takeN < 2) return;
+    cx = b[takeList[takeSel]].x; cy = b[takeList[takeSel]].y;
+    for (i = 0; i < takeN; i++) {
+        float ex, ey, along, perp, sc;
+        if (i == takeSel) continue;
+        ex = b[takeList[i]].x - cx; ey = b[takeList[i]].y - cy;
+        along = ex * dx + ey * dy; perp = fabsf(ex * dy - ey * dx);
+        sc = along + 2.0f * perp;
+        if (along > 2.0f) { if (sc < bs) { bs = sc; best = i; } }
+        else if (along < -2.0f) { if (sc < ws) { ws = sc; wrap = i; } }  /* volta pelo outro lado */
+    }
+    if (best >= 0) takeSel = best; else if (wrap >= 0) takeSel = wrap;
+}
+
+static void takeConfirm(void)
+{
+    char buf[40];
+    int mine, theirs;
+    b[takeList[takeSel]].in = 0;                    /* a bola sai da mesa */
+    mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
+    if (mine == 0 || theirs == 0) {
+        overNote[0] = 0;
+        endGame(theirs == 0 ? 1 - cur : cur);
+        return;
+    }
+    state = S_AIM; botTimer = 0; botPlanned = 0; pwr = 0;
+    sprintf(buf, "VEZ DE %s", pname(cur));
+    setmsg(buf);
+}
+
+static void botTakePick(void)                       /* o bot tira a propria bola mais dificil */
+{
+    int i, p, best = -1, n = 0;
+    float bd = -1.0f;
+    for (i = 0; i < takeN; i++) if (ballGroup(takeList[i]) == grp[cur]) n++;
+    if (n == 0) return;
+    if (botLevel == 0) {                            /* facil: escolhe qualquer uma */
+        int k = (int)(rnd() % n);
+        for (i = 0; i < takeN; i++)
+            if (ballGroup(takeList[i]) == grp[cur] && k-- == 0) { takeSel = i; return; }
+    }
+    for (i = 0; i < takeN; i++) {
+        float md = 1e9f;
+        int id = takeList[i];
+        if (ballGroup(id) != grp[cur]) continue;
+        for (p = 0; p < 6; p++) {
+            float dx = b[id].x - PX[p], dy = b[id].y - PY[p], d = sqrtf(dx*dx + dy*dy);
+            if (d < md) md = d;
+        }
+        if (md > bd) { bd = md; best = i; }
+    }
+    if (best >= 0) takeSel = best;
+}
+
+/* regras da sinuca brasileira (4 bolas para cada jogador):
+   - vence quem encacapar as 4 bolas da sua cor primeiro; encacapou a sua sem falta, joga de novo
+   - nao acertar a sua bola primeiro (acertar a do adversario ou nenhuma): o adversario tira
+     qualquer uma bola da mesa e joga
+   - suicidio (branca na cacapa): derrota na hora */
 static void resolveBR(void)
 {
     int i, foul, own = 0, mine, theirs;
-    foul = pocketed[0] || firstHit < 0;
-    if (!foul && ballGroup(firstHit) != grp[cur]) foul = 1;
+    char buf[64];
+    overNote[0] = 0;
+    if (pocketed[0]) {
+        strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
+        endGame(1 - cur);
+        return;
+    }
+    foul = firstHit < 0 || ballGroup(firstHit) != grp[cur];
     for (i = 1; i < 16; i++)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
-    if (mine == 0 || theirs == 0) {
-        winner = (theirs == 0 || pocketed[0]) ? 1 - cur : cur;
-        (mode == 0 ? winsBot : winsVs)[winner]++;
-        state = S_OVER;
+    if (mine == 0 || theirs == 0) { endGame(theirs == 0 ? 1 - cur : cur); return; }
+    if (foul) {
+        cur = 1 - cur;
+        botTimer = 0; botPlanned = 0;
+        b[0].vx = b[0].vy = 0;
+        takeInit();
+        state = S_TAKE;
+        sprintf(buf, "FALTA! %s TIRA UMA BOLA", pname(cur));
+        setmsg(buf);
         return;
     }
-    endTurn(foul, own);
+    endTurn(0, own);
 }
 
 static void resolve(void)
 {
     int i, foul, ownPocket = 0;
 
+    overNote[0] = 0;
     if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
@@ -1255,6 +1347,11 @@ static void drawHUD(void)
     } else if (state == S_PLACE && !isBot()) {
         x += keycap(x, 421, "SETAS", "MOVER", COL(255,230,60), COL(235,235,240)) + 14;
         keycap(x, 421, "X", "CONFIRMAR", COL(255,230,60), COL(235,235,240));
+    } else if (state == S_TAKE && !isBot()) {
+        x += keycap(x, 421, "SETAS", "ESCOLHER BOLA", COL(255,230,60), COL(235,235,240)) + 14;
+        keycap(x, 421, "X", "TIRAR DA MESA", COL(255,230,60), COL(235,235,240));
+    } else if (state == S_TAKE) {
+        text(x, 425, 0.4f, COL(170,176,190), "BOT ESCOLHENDO UMA BOLA...");
     } else if (state == S_AIM || state == S_PLACE) {
         text(x, 425, 0.4f, COL(170,176,190), "VEZ DO BOT...");
     } else if (state == S_ROLL || state == S_STRIKE) {
@@ -1487,7 +1584,7 @@ static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "MODO", "MESA",
                                     "COR JOGADOR 1", "COR JOGADOR 2", "INICIAR PARTIDA" };
-    static const char *GMN[NGM] = { "BOLA 8", "BRASILEIRO" };
+    static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[3][3] = { {90,230,110}, {245,215,70}, {240,80,70} };
     int v[NSR], n = setRows(v), i;
     float y2 = 90.0f + n * 36.0f + 6.0f;
@@ -1539,11 +1636,11 @@ static void drawSetupScreen(void)
     }
 
     if (v[setSel] == SR_MODE)
-        hint = gmode == GM_BR ? "BRASILEIRO: 4 BOLAS PARA CADA JOGADOR - ENCACAPE AS SUAS PRIMEIRO"
+        hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA BOLA. BRANCA NA CACAPA: PERDE"
                               : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
     else
         hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
-    textC(y2 + 10, 0.32f, COL(170,180,195), hint);
+    textC(y2 + 10, 0.3f, COL(170,180,195), hint);
 }
 
 static void drawNameScreen(void)
@@ -1676,6 +1773,13 @@ static void draw(void)
         float f = (float)(FOLLOWN - follow) / FOLLOWN;
         drawCue(hitX, hitY, R + 1.0f - 16.0f * f, (int)(0x80 * (1.0f - f)), ang, hitCue);
     }
+    if (state == S_TAKE && takeN > 0) {
+        float bob = 3.0f * sinf(menuT * 0.2f);
+        float bx = b[takeList[takeSel]].x, by = b[takeList[takeSel]].y;
+        ringN(bx, by, R + 3.5f, 1.8f, 24, CA(255, 230, 60, 0x7c));
+        ringN(bx, by, R + 6.5f + bob * 0.4f, 1.2f, 24, CA(255, 230, 60, 0x40));
+        tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,230,60));
+    }
     drawHUD();
     if (state == S_CUES) drawCueMenu();
     if (state == S_OVER) {
@@ -1685,6 +1789,7 @@ static void draw(void)
         hbox(120, 150, 520, 290, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
         sprintf(buf, "%s VENCEU!", pname(winner));
         text(320 - tw(0.7f, buf) * 0.5f, 170, 0.7f, COL(255,230,60), buf);
+        if (overNote[0]) text(320 - tw(0.32f, overNote) * 0.5f, 190, 0.32f, COL(255,150,130), overNote);
         rect(160, 204, 480, 206, CA(255, 215, 60, 0x50));
         sprintf(buf, "%s %d X %d %s", pname(0), w[0], w[1], pname(1));
         text(320 - tw(0.5f, buf) * 0.5f, 218, 0.5f, COL(255,255,255), buf);
@@ -1850,6 +1955,21 @@ int main(void)
                     }
                     state = S_AIM; botTimer = 0; botPlanned = 0; pwr = 0;
                 }
+            }
+            break;
+
+        case S_TAKE:
+            msgTimer = 60;
+            if (!isBot()) {
+                if (pressed & PAD_LEFT)  takeMove(-1, 0);
+                if (pressed & PAD_RIGHT) takeMove(1, 0);
+                if (pressed & PAD_UP)    takeMove(0, -1);
+                if (pressed & PAD_DOWN)  takeMove(0, 1);
+                if (pressed & PAD_CROSS) takeConfirm();
+            } else {
+                botTimer++;
+                if (botTimer == BOT_DELAY[botLevel]) botTakePick();
+                if (botTimer > BOT_DELAY[botLevel] + 40) takeConfirm();
             }
             break;
 
