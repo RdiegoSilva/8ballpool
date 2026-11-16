@@ -1,4 +1,4 @@
-# 8ballpool (PS2)
+# 8 Ball Reis (PS2)
 
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
@@ -6,7 +6,8 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Versão: 1.3.0
 
 ## Menu inicial (animado)
-- MODO HISTÓRIA (em breve), JOGAR e CRÉDITOS
+- MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
+- **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida** (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
   - ADVERSÁRIO: BOT ou JOGADOR 2. Com JOGADOR 2, ao iniciar abre a tela para **digitar o nome** (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 2")
@@ -19,7 +20,6 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - MESA: Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados) ou **Neon** (animada: luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima ou Dourada (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
-- CRÉDITOS: mostra o criador e a versão do jogo
 
 ## Modos de jogo
 - **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)

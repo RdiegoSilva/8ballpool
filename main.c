@@ -1,4 +1,4 @@
-/* 8 BALL POOL para PS2 - PS2SDK + gsKit + libpad
+/* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
  * Criador: Diego Reis | Versao 1.0.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
@@ -31,7 +31,7 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
@@ -1929,9 +1929,76 @@ static void drawNameScreen(void)
     textC(y0 + 4 * (ch + gap) + 32, 0.34f, COL(150,160,175), "SELECT: VOLTAR");
 }
 
+/* ---------- OPCOES (som, musica, volume, efeitos, dicas, creditos) ---------- */
+enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_CRED, NOP };
+static int optSel;
+
+static void optInput(u32 pr)
+{
+    int d = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0), tog = d || (pr & PAD_CROSS);
+    if (pr & PAD_UP)   optSel = (optSel + NOP - 1) % NOP;
+    if (pr & PAD_DOWN) optSel = (optSel + 1) % NOP;
+    if (pr & (PAD_CIRCLE | PAD_START)) { state = S_MENU; return; }
+    switch (optSel) {
+    case OP_SND:  if (tog) sndOn = !sndOn; break;
+    case OP_MUS:  if (tog) { musOn = !musOn; musicSetEnabled(musOn); } break;
+    case OP_VOL:  if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
+    case OP_FX:   if (tog) fxOn = !fxOn; break;
+    case OP_TIPS: if (tog) tipsOn = !tipsOn; break;
+    case OP_CRED: if (pr & PAD_CROSS) state = S_CREDITS; break;
+    }
+}
+
+/* linha de selecao animada (faixa dourada + seta) */
+static void selBar(float x1, float x2, float y, float h)
+{
+    float bob = 4.0f * sinf(menuT * 0.2f);
+    rect(x1, y - 6, x2, y + h, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+    rect(x1, y - 6, x1 + 3, y + h, COL(255,230,60));
+    tri(x1 + 10 + bob, y + 1, x1 + 10 + bob, y + 15, x1 + 23 + bob, y + 8, COL(255,230,60));
+}
+
+static void drawOptionsScreen(void)
+{
+    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CREDITOS" };
+    char buf[32];
+    int i;
+    u64 pc = COL(255, 205 + (int)(40 * sinf(menuT * 0.05f)), 60);
+    panel(100, 100, 540, 372);
+    textC(112, 0.8f, pc, "OPCOES");
+    rect(180, 150, 460, 152, COL(60,110,90));
+    rect(180 + fmodf(menuT * 2.5f, 240.0f), 149, 220 + fmodf(menuT * 2.5f, 240.0f), 153, COL(240,240,200));
+    for (i = 0; i < NOP; i++) {
+        float y = 168.0f + i * 31.0f;
+        int sel = (i == optSel);
+        u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
+        if (i == OP_CRED) rect(124, y - 9, 516, y - 8, COL(60,90,80));      /* separa os creditos */
+        if (sel) selBar(108, 532, y, 22);
+        text(150, y, 0.5f, tc, LB[i]);
+        switch (i) {
+        case OP_SND:  strcpy(buf, sndOn ? "< LIGADO >" : "< DESLIGADO >"); break;
+        case OP_MUS:  strcpy(buf, musOn ? "< LIGADA >" : "< DESLIGADA >"); break;
+        case OP_VOL:  sprintf(buf, "< %d%% >", volLvl * 10); break;
+        case OP_FX:   strcpy(buf, fxOn ? "< LIGADOS >" : "< DESLIGADOS >"); break;
+        case OP_TIPS: strcpy(buf, tipsOn ? "< LIGADAS >" : "< DESLIGADAS >"); break;
+        default:      strcpy(buf, ">"); break;
+        }
+        text(520 - tw(0.5f, buf), y, 0.5f, i == OP_CRED ? COL(255,230,60) : COL(255,255,255), buf);
+    }
+    if (optSel == OP_SND)
+        textC(390, 0.3f, COL(255,190,120), "SONS DOS EFEITOS EM BREVE: A OPCAO JA FICA SALVA");
+    else if (optSel == OP_MUS || optSel == OP_VOL)
+        textC(390, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
+    textC(412, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR");
+}
+
 static void drawMenuScreen(void)
 {
-    static const char *ITEM[4] = { "MODO HISTORIA", "JOGAR", "PLAYER DE MUSICAS", "CREDITOS" };
+    static const char *ITEM[4] = { "MODO HISTORIA", "JOGAR", "PLAYER DE MUSICAS", "OPCOES" };
+    static const char *DESC[4] = { "A HISTORIA DO JOGO CHEGA EM BREVE",
+                                   "BOLA 8 OU SINUCA BRASILEIRA, CONTRA O BOT OU UM AMIGO",
+                                   "OUCA AS MUSICAS DO SEU PEN DRIVE",
+                                   "SOM, MUSICA, VOLUME, EFEITOS E CREDITOS" };
     char buf[48];
     int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
@@ -1940,25 +2007,28 @@ static void drawMenuScreen(void)
 
     if (state == S_SETUP) { drawSetupScreen(); return; }
     if (state == S_NAME)  { drawNameScreen();  return; }
+    if (state == S_OPTS)  { drawOptionsScreen(); return; }
 
     if (state == S_CREDITS) {
         u64 pc = COL(255, 200 + (int)(40 * s1), 50 + (int)(30 * s2));
-        panel(150, 120, 490, 352);
-        textC(130, 0.8f, pc, "CREDITOS");
-        textC(190, 0.5f, COL(160,170,190), "CRIADOR");
-        textC(212, 1.0f, pc, GAME_AUTHOR);
-        rect(230, 262, 410, 264, COL(60,110,90));
-        rect(230 + fmodf(menuT * 2.5f, 150.0f), 261, 270 + fmodf(menuT * 2.5f, 150.0f), 265, COL(240,240,200));
-        textC(276, 0.5f, COL(160,170,190), "VERSAO");
-        textC(298, 0.9f, COL(255,255,255), GAME_VERSION);
-        textC(368, 0.45f, COL(190,200,215), "O OU X: VOLTAR");
+        panel(150, 100, 490, 372);
+        textC(114, 0.8f, pc, "CREDITOS");
+        rect(200, 150, 440, 152, COL(60,110,90));
+        textC(168, 0.42f, COL(190,200,225), "8 BALL REIS - PS2 EDITION");
+        textC(214, 0.5f, COL(160,170,190), "CRIADOR");
+        textC(236, 1.0f, pc, GAME_AUTHOR);
+        rect(230, 286, 410, 288, COL(60,110,90));
+        rect(230 + fmodf(menuT * 2.5f, 150.0f), 285, 270 + fmodf(menuT * 2.5f, 150.0f), 289, COL(240,240,200));
+        textC(302, 0.5f, COL(160,170,190), "VERSAO");
+        textC(324, 0.9f, COL(255,255,255), GAME_VERSION);
+        textC(386, 0.4f, COL(190,200,215), "O OU X: VOLTAR");
         return;
     }
 
     /* titulo com brilho e leve movimento */
     {
         float ty = 34.0f + 3.0f * sinf(menuT * 0.06f), sc = 1.2f;
-        const char *tt = "8 BALL POOL";
+        const char *tt = "8 BALL REIS";
         float x0 = 320.0f - tw(sc, tt) * 0.5f;
         u64 glow = GS_SETREG_RGBAQ(140, 70, 10, 0x40, 0x00);
         u64 tc = COL(255, 200 + (int)(45 * s1), 40 + (int)(30 * s2));
@@ -1973,21 +2043,20 @@ static void drawMenuScreen(void)
     /* opcoes */
     panel(100, 122, 540, 300);
     for (i = 0; i < 4; i++) {
-        float y = 138.0f + i * 40.0f, bob = 4.0f * sinf(menuT * 0.2f);
+        float y = 138.0f + i * 40.0f;
         int sel = (i == menuSel);
         u64 tc = i == 0 ? (sel ? COL(170,175,190) : COL(105,112,128))
                         : (sel ? COL(255,240,150) : COL(170,180,190));
-        if (sel) {
-            rect(108, y - 7, 532, y + 28,
-                 GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-            tri(114 + bob, y, 114 + bob, y + 16, 127 + bob, y + 8, COL(255,230,60));
-        }
-        text(142, y, 0.65f, tc, ITEM[i]);
+        if (i > 0) rect(124, y - 11, 516, y - 10, COL(40,70,62));          /* divisorias */
+        if (sel) selBar(108, 532, y - 1, 26);
+        text(150, y, 0.65f, tc, ITEM[i]);
         if (i == 0) text(520 - tw(0.36f, "EM BREVE"), y + 4, 0.36f, COL(150,130,70), "EM BREVE");
     }
-    if (menuNote > 0) { menuNote--; textC(310, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
-    else textC(310, 0.36f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
+    if (menuNote > 0) { menuNote--; textC(318, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
+    else textC(318, 0.34f, COL(150,220,255), DESC[menuSel]);
+    textC(344, 0.34f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
 
+    rect(14, 416, 626, 417, COL(40,70,62));
     text(14, 424, 0.34f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
     sprintf(buf, "VERSAO %s", GAME_VERSION);
     text(626.0f - tw(0.34f, buf), 424, 0.34f, COL(150,160,175), buf);
@@ -2093,26 +2162,29 @@ static void drawPause(void)
         return;
     }
     if (pauseView == 1) {
-        static const char *L[] = {
-            "ESQ/DIR: GIRAR A MIRA        L1/R1: AJUSTE FINO",
-            "X: BARRA DE FORCA, X DE NOVO DISPARA     O: CANCELAR",
-            "L2/R2: EFEITO NA BOLA BRANCA     SELECT: TROCAR DE TACO",
-            "BOLA NA MAO: SETAS MOVEM A BRANCA, X CONFIRMA",
-            "START: PAUSAR O JOGO"
+        static const char *K[] = { "ESQ/DIR", "L1/R1", "X", "O", "L2/R2", "SELECT", "BOLA NA MAO", "START" };
+        static const char *V[] = {
+            "GIRAR A MIRA", "AJUSTE FINO DA MIRA", "BARRA DE FORCA; X DE NOVO DISPARA", "CANCELAR A TACADA",
+            "EFEITO NA BOLA BRANCA", "TROCAR DE TACO", "SETAS MOVEM A BRANCA, X CONFIRMA", "PAUSAR O JOGO"
         };
         static const char *T[] = {
-            "A BARRA SOBE E DESCE: APERTE X NO MOMENTO DE MAIS FORCA SO QUANDO PRECISAR",
-            "TACO SNIPER: LASER MOSTRA A TACADA INTEIRA COM REBOTES, MAS BATE FRACO",
-            "BRASILEIRA: ERROU A SUA BOLA? O ADVERSARIO TIRA UMA DAS PROPRIAS BOLAS",
+            "BARRA DE FORCA: APERTE X QUANDO ELA ESTIVER NO ALTO",
+            "TACO SNIPER: LASER MOSTRA A TACADA INTEIRA, MAS BATE FRACO",
+            "BRASILEIRA: SE VOCE ERRAR, O ADVERSARIO TIRA UMA BOLA DELE",
             "BRANCA NA CACAPA NA BRASILEIRA = DERROTA NA HORA"
         };
         hbox(40, 20, 600, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
         textC(30, 0.7f, COL(255,215,70), "CONTROLES");
         rect(160, 62, 480, 64, CA(255,215,60,0x50));
-        for (i = 0; i < 5; i++) text(60, 78.0f + i * 26.0f, 0.4f, COL(225,230,240), L[i]);
-        textC(222, 0.55f, COL(255,215,70), "DICAS");
-        rect(220, 250, 420, 251, CA(255,215,60,0x50));
-        for (i = 0; i < 4; i++) text(60, 262.0f + i * 26.0f, 0.36f, COL(190,200,215), T[i]);
+        for (i = 0; i < 8; i++) {
+            float y = 76.0f + i * 22.0f;
+            if (i & 1) rect(52, y - 4, 588, y + 17, CA(255,255,255,0x0c));
+            text(64, y, 0.38f, COL(255,230,110), K[i]);
+            text(200, y, 0.38f, COL(225,230,240), V[i]);
+        }
+        textC(262, 0.55f, COL(255,215,70), "DICAS");
+        rect(220, 290, 420, 291, CA(255,215,60,0x50));
+        for (i = 0; i < 4; i++) text(64, 304.0f + i * 22.0f, 0.34f, COL(190,200,215), T[i]);
         textC(398, 0.34f, COL(150,160,175), "X / O / START: VOLTAR");
         return;
     }
@@ -2150,7 +2222,7 @@ static void draw(void)
 {
     int i;
     char buf[64];
-    if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
+    if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
     if (state == S_PLAYER) { drawBackdrop(); pauseView = 2; drawPause(); return; }
     drawTable();
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
@@ -2241,8 +2313,8 @@ int main(int argc, char *argv[])
     for (;;) {
         musicUpdate();
         p0 = readpad(0);
-        p1 = (mode == 1 || state == S_MENU || state == S_SETUP || state == S_NAME || state == S_PLAYER) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME || state == S_PLAYER) in = p0 | p1;
+        p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) ? readpad(1) : 0;
+        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         if (paused) in = p0 | p1;
@@ -2251,7 +2323,7 @@ int main(int argc, char *argv[])
         pressed = in & ~prev;
         prev = in;
         menuT++;
-        if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME || state == S_PLAYER) menuUpdate();
+        if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) menuUpdate();
 
         if (paused) pauseInput(pressed);
         else if ((pressed & PAD_START) && (state == S_AIM || state == S_ROLL || state == S_PLACE ||
@@ -2264,8 +2336,12 @@ int main(int argc, char *argv[])
                 if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
                 else if (menuSel == 1) { state = S_SETUP; setSel = 0; }
                 else if (menuSel == 2) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
-                else state = S_CREDITS;
+                else { state = S_OPTS; optSel = 0; }
             }
+            break;
+
+        case S_OPTS:
+            optInput(pressed);
             break;
 
         case S_PLAYER:
@@ -2281,7 +2357,7 @@ int main(int argc, char *argv[])
             break;
 
         case S_CREDITS:
-            if (pressed & (PAD_CROSS | PAD_CIRCLE | PAD_START)) state = S_MENU;
+            if (pressed & (PAD_CROSS | PAD_CIRCLE | PAD_START)) state = S_OPTS;
             break;
 
         case S_AIM:
