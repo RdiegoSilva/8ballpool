@@ -169,15 +169,26 @@ static void drawBallVec(int i, float x, float y, float r)
     discN(x - r*0.38f, y - r*0.40f, r*0.2f, COL(255,255,255), 6);       /* brilho */
 }
 
-/* ---------- texturas das bolas (geradas ao iniciar) ---------- */
+/* ---------- bolas 3D com textura (giram ao rolar) ---------- */
 #ifndef USE_TEXTURE_BALLS
 #define USE_TEXTURE_BALLS 1   /* mude para 0 para voltar as bolas vetoriais */
 #endif
 
-#define ATLAS_W 128
-static u32 atlas[ATLAS_W * ATLAS_W] __attribute__((aligned(64)));
+#define SKW 128               /* largura da "pele" de cada bola */
+#define SKH 64                /* altura da "pele" de cada bola */
+#define ATLAS_W 512           /* 4 colunas x 4 linhas de peles */
+#define ATLAS_H 256
+#define SS 2                  /* supersampling da textura */
+#define NLON 12               /* malha da esfera */
+#define NLAT 6
+
+static u32 atlas[ATLAS_W * ATLAS_H] __attribute__((aligned(64)));
 static GSTEXTURE ballTex;
 static int useTex = 0;
+static float ballM[16][9];
+static float cLon[SKW * SS], sLon[SKW * SS], cLat[SKH * SS], sLat[SKH * SS];
+static float mP[NLAT + 1][NLON + 1][3];
+static float mUV[NLAT + 1][NLON + 1][2];
 
 static int digitInk(int n, float gu, float gv)
 {
@@ -196,80 +207,171 @@ static int digitInk(int n, float gu, float gv)
     return DIG[n % 10][iy*3 + (ix - 4)] == '1';
 }
 
-static void renderBall(int id, int ox, int oy)
+/* pele da bola (equirretangular): cor, listra e 4 numeros ao redor */
+static void renderSkin(int id, int ox, int oy)
 {
-    const int S = 3;
-    const float LX = -0.42f, LY = -0.52f, LZ = 0.74f;
-    float hx = LX, hy = LY, hz = LZ + 1.0f, hl = sqrtf(hx*hx + hy*hy + hz*hz);
-    int px, py, sx, sy;
-    hx /= hl; hy /= hl; hz /= hl;
-
-    for (py = 0; py < 32; py++)
-    for (px = 0; px < 32; px++) {
-        float ar = 0, ag = 0, ab = 0;
-        int cov = 0;
-        for (sy = 0; sy < S; sy++)
-        for (sx = 0; sx < S; sx++) {
-            float u = (((px + (sx + 0.5f) / S) / 32.0f) * 2.0f - 1.0f) * (16.0f / 15.0f);
-            float v = (((py + (sy + 0.5f) / S) / 32.0f) * 2.0f - 1.0f) * (16.0f / 15.0f);
-            float d2 = u*u + v*v, nz, cr, cg, cb, dif, lum, sp, s2, s4, s8, s16, s32;
-            if (d2 > 1.0f) continue;
-            nz = sqrtf(1.0f - d2);
-
-            cr = 245; cg = 245; cb = 238;
+    int px, py, sx, sy, k;
+    for (py = 0; py < SKH; py++)
+    for (px = 0; px < SKW; px++) {
+        float ar = 0, ag = 0, ab = 0, n = (float)(SS * SS);
+        for (sy = 0; sy < SS; sy++)
+        for (sx = 0; sx < SS; sx++) {
+            int ii = px * SS + sx, jj = py * SS + sy;
+            float x = cLat[jj] * cLon[ii], y = sLat[jj], z = cLat[jj] * sLon[ii];
+            float cr = 245, cg = 245, cb = 238;
             if (id > 0) {
                 int col = id > 8 ? id - 8 : id;
                 cr = BC[col][0]; cg = BC[col][1]; cb = BC[col][2];
-                if (id > 8 && fabsf(v) > 0.55f) { cr = 245; cg = 245; cb = 238; }
-                if (d2 < 0.2116f) {
-                    cr = cg = cb = 248;
-                    if (digitInk(id, u / 0.46f, v / 0.46f)) cr = cg = cb = 20;
+                if (id > 8 && fabsf(y) > 0.55f) { cr = 245; cg = 245; cb = 238; }
+                {
+                    float d[4]  = { z, x, -z, -x };
+                    float gu[4] = { x, -z, -x, z };
+                    float gv = -y;
+                    for (k = 0; k < 4; k++)
+                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < 0.2116f) {
+                            cr = cg = cb = 248;
+                            if (digitInk(id, gu[k] / 0.46f, gv / 0.46f)) cr = cg = cb = 20;
+                            break;
+                        }
                 }
             }
-            dif = u*LX + v*LY + nz*LZ;
-            if (dif < 0) dif = 0;
-            lum = 0.38f + 0.68f * dif;
-            sp = u*hx + v*hy + nz*hz;
-            if (sp < 0) sp = 0;
-            s2 = sp*sp; s4 = s2*s2; s8 = s4*s4; s16 = s8*s8; s32 = s16*s16;
-            sp = s32 * s16 * s2 * 0.9f;
-            cr = cr*lum + sp*255.0f; cg = cg*lum + sp*255.0f; cb = cb*lum + sp*255.0f;
-            if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
-            ar += cr; ag += cg; ab += cb; cov++;
+            ar += cr; ag += cg; ab += cb;
         }
-        if (cov > 0) {
-            u32 a = (u32)(cov * 128 / (S * S));
-            atlas[(oy + py) * ATLAS_W + ox + px] =
-                (u32)(ar / cov) | ((u32)(ag / cov) << 8) | ((u32)(ab / cov) << 16) | (a << 24);
-        } else atlas[(oy + py) * ATLAS_W + ox + px] = 0;
+        atlas[(oy + py) * ATLAS_W + ox + px] =
+            (u32)(ar / n) | ((u32)(ag / n) << 8) | ((u32)(ab / n) << 16) | (128u << 24);
     }
 }
 
 static void initBallTex(void)
 {
-    int i;
-    for (i = 0; i < 16; i++) renderBall(i, (i % 4) * 32, (i / 4) * 32);
+    int i, a, c;
+    for (i = 0; i < SKW * SS; i++) {
+        float l = (i + 0.5f) / (SKW * SS) * 6.2831853f;
+        cLon[i] = cosf(l); sLon[i] = sinf(l);
+    }
+    for (i = 0; i < SKH * SS; i++) {
+        float p = ((i + 0.5f) / (SKH * SS) - 0.5f) * 3.1415927f;
+        cLat[i] = cosf(p); sLat[i] = sinf(p);
+    }
+    for (i = 0; i < 16; i++) renderSkin(i, (i % 4) * SKW, (i / 4) * SKH);
+
+    for (a = 0; a <= NLAT; a++)
+        for (c = 0; c <= NLON; c++) {
+            float p = -1.5707963f + 3.1415927f * a / NLAT;
+            float l = 6.2831853f * c / NLON;
+            float u = (float)SKW * c / NLON, v = (float)SKH * a / NLAT;
+            mP[a][c][0] = cosf(p) * cosf(l);
+            mP[a][c][1] = sinf(p);
+            mP[a][c][2] = cosf(p) * sinf(l);
+            if (u < 0.5f) u = 0.5f; if (u > SKW - 0.5f) u = SKW - 0.5f;
+            if (v < 0.5f) v = 0.5f; if (v > SKH - 0.5f) v = SKH - 0.5f;
+            mUV[a][c][0] = u; mUV[a][c][1] = v;
+        }
+
     memset(&ballTex, 0, sizeof(ballTex));
-    ballTex.Width = ATLAS_W; ballTex.Height = ATLAS_W;
+    ballTex.Width = ATLAS_W; ballTex.Height = ATLAS_H;
     ballTex.PSM = GS_PSM_CT32;
     ballTex.Mem = (void *)atlas;
     ballTex.Filter = GS_FILTER_LINEAR;
-    ballTex.Vram = gsKit_vram_alloc(g, gsKit_texture_size(ATLAS_W, ATLAS_W, GS_PSM_CT32),
+    ballTex.Vram = gsKit_vram_alloc(g, gsKit_texture_size(ATLAS_W, ATLAS_H, GS_PSM_CT32),
                                     GSKIT_ALLOC_USERBUFFER);
     if (ballTex.Vram == GSKIT_ALLOC_ERROR) return;
     gsKit_texture_upload(g, &ballTex);
     useTex = 1;
 }
 
+/* orientacao inicial da bola (giro aleatorio ao redor do eixo Z) */
+static void resetOrient(int i)
+{
+    float a = (i == 0) ? 0.0f : (rnd() % 628) / 100.0f;
+    float c = cosf(a), s = sinf(a);
+    float *M = ballM[i];
+    M[0] = c;  M[1] = -s; M[2] = 0;
+    M[3] = s;  M[4] = c;  M[5] = 0;
+    M[6] = 0;  M[7] = 0;  M[8] = 1;
+}
+
+/* rolamento sem deslizar: eixo perpendicular a velocidade */
+static void spinBall(int i, float dt)
+{
+    float wx = b[i].vy / R, wy = b[i].vx / R;
+    float w = sqrtf(wx*wx + wy*wy), th, ax, ay, c, s, t;
+    float Rm[9], N[9], *M = ballM[i];
+    int r, k, j;
+    if (w < 0.0001f) return;
+    th = w * dt; ax = wx / w; ay = wy / w;
+    c = cosf(th); s = sinf(th); t = 1.0f - c;
+    Rm[0] = t*ax*ax + c; Rm[1] = t*ax*ay;     Rm[2] = s*ay;
+    Rm[3] = t*ax*ay;     Rm[4] = t*ay*ay + c; Rm[5] = -s*ax;
+    Rm[6] = -s*ay;       Rm[7] = s*ax;        Rm[8] = c;
+    for (r = 0; r < 3; r++)
+        for (k = 0; k < 3; k++) {
+            float sum = 0;
+            for (j = 0; j < 3; j++) sum += Rm[r*3 + j] * M[j*3 + k];
+            N[r*3 + k] = sum;
+        }
+    for (r = 0; r < 3; r++) {            /* mantem a matriz ortonormal */
+        float l = sqrtf(N[r*3]*N[r*3] + N[r*3+1]*N[r*3+1] + N[r*3+2]*N[r*3+2]);
+        if (l < 0.0001f) l = 1;
+        M[r*3] = N[r*3] / l; M[r*3+1] = N[r*3+1] / l; M[r*3+2] = N[r*3+2] / l;
+    }
+}
+
+static void drawBallMesh(int id, float x, float y, float r)
+{
+    const float *M = ballM[id];
+    float sxp[NLAT + 1][NLON + 1], syp[NLAT + 1][NLON + 1];
+    u64 colr[NLAT + 1][NLON + 1];
+    float uo = (float)((id % 4) * SKW), vo = (float)((id / 4) * SKH);
+    int a, c;
+
+    discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 12);  /* borda suave */
+
+    for (a = 0; a <= NLAT; a++)
+        for (c = 0; c <= NLON; c++) {
+            const float *p = mP[a][c];
+            float vx = M[0]*p[0] + M[1]*p[1] + M[2]*p[2];
+            float vy = M[3]*p[0] + M[4]*p[1] + M[5]*p[2];
+            float vz = M[6]*p[0] + M[7]*p[1] + M[8]*p[2];
+            float dif = vx * -0.42f + vy * 0.52f + vz * 0.74f;
+            int cv;
+            if (dif < 0) dif = 0;
+            cv = (int)((0.38f + 0.68f * dif) * 150.0f);
+            if (cv > 255) cv = 255;
+            sxp[a][c] = x + OX + vx * r;
+            syp[a][c] = y + OY - vy * r;
+            colr[a][c] = GS_SETREG_RGBAQ(cv, cv, cv, 0x80, 0x00);
+        }
+
+    for (a = 0; a < NLAT; a++)
+        for (c = 0; c < NLON; c++) {
+            float x0 = sxp[a][c],     y0 = syp[a][c];
+            float x1 = sxp[a][c+1],   y1 = syp[a][c+1];
+            float x2 = sxp[a+1][c+1], y2 = syp[a+1][c+1];
+            float x3 = sxp[a+1][c],   y3 = syp[a+1][c];
+            if ((x1-x0)*(y2-y0) - (y1-y0)*(x2-x0) > 0)
+                gsKit_prim_triangle_goraud_texture(g, &ballTex,
+                    x0, y0, 1, uo + mUV[a][c][0],     vo + mUV[a][c][1],
+                    x1, y1, 1, uo + mUV[a][c+1][0],   vo + mUV[a][c+1][1],
+                    x2, y2, 1, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
+                    colr[a][c], colr[a][c+1], colr[a+1][c+1]);
+            if ((x2-x0)*(y3-y0) - (y2-y0)*(x3-x0) > 0)
+                gsKit_prim_triangle_goraud_texture(g, &ballTex,
+                    x0, y0, 1, uo + mUV[a][c][0],     vo + mUV[a][c][1],
+                    x2, y2, 1, uo + mUV[a+1][c+1][0], vo + mUV[a+1][c+1][1],
+                    x3, y3, 1, uo + mUV[a+1][c][0],   vo + mUV[a+1][c][1],
+                    colr[a][c], colr[a+1][c+1], colr[a+1][c]);
+        }
+
+    /* brilho da luz (fixo na tela) */
+    discN(x - r*0.30f, y - r*0.32f, r*0.42f, GS_SETREG_RGBAQ(255, 255, 255, 0x1c, 0x00), 8);
+    discN(x - r*0.38f, y - r*0.40f, r*0.20f, GS_SETREG_RGBAQ(255, 255, 255, 0x78, 0x00), 6);
+}
+
 static void drawBallAt(int i, float x, float y, float r)
 {
-    float h = r * 16.0f / 15.0f;
-    int col = i % 4, row = i / 4;
     if (!useTex) { drawBallVec(i, x, y, r); return; }
-    gsKit_prim_sprite_texture(g, &ballTex,
-        x - h + OX, y - h + OY, col * 32.0f, row * 32.0f,
-        x + h + OX, y + h + OY, (col + 1) * 32.0f, (row + 1) * 32.0f,
-        1, COL(0x80, 0x80, 0x80));
+    drawBallMesh(i, x, y, r);
 }
 
 /* ---------- logica ---------- */
@@ -289,7 +391,7 @@ static void rack(void)
 {
     static const int order[15] = {1,9,2,10,8,3,11,4,12,5,13,6,14,7,15};
     int i, r, c, k = 0;
-    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 1; }
+    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 1; resetOrient(i); }
     b[0].x = TX0 + 125; b[0].y = TCY;
     for (r = 0; r < 5; r++)
         for (c = 0; c <= r; c++) {
@@ -514,11 +616,24 @@ static void drawTable(void)
     line(TX0+125, TY0, TX0+125, TY1, COL(40,150,90));
 }
 
+static void thick(float x1, float y1, float x2, float y2, u64 c)
+{
+    float dx = x2 - x1, dy = y2 - y1, l = sqrtf(dx*dx + dy*dy), nx, ny;
+    if (l < 0.01f) return;
+    nx = -dy / l * 0.6f; ny = dx / l * 0.6f;
+    line(x1 + nx, y1 + ny, x2 + nx, y2 + ny, c);
+    line(x1 - nx, y1 - ny, x2 - nx, y2 - ny, c);
+}
+
+/* mira estilo 8 Ball Pool: linha ate a bola fantasma, linha da bola alvo
+   e desvio da bola branca; nas tabelas mostra o rebote */
 static void drawGuide(void)
 {
+    u64 W = COL(250,250,250), D = COL(190,190,190);
     float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
-    float tmin = 1e9f, t;
-    int i;
+    float tmin = 1e9f, t, gx, gy;
+    int i, hit = -1, wall = 0;
+
     for (i = 1; i < 16; i++) {
         float fx, fy, proj, perp2;
         if (!b[i].in) continue;
@@ -528,15 +643,41 @@ static void drawGuide(void)
         perp2 = fx*fx + fy*fy - proj*proj;
         if (perp2 > 4*R*R) continue;
         t = proj - sqrtf(4*R*R - perp2);
-        if (t < tmin) tmin = t;
+        if (t < tmin) { tmin = t; hit = i; wall = 0; }
     }
-    if (dx > 0.0001f)  { t = (TX1-R-cx)/dx; if (t < tmin) tmin = t; }
-    if (dx < -0.0001f) { t = (TX0+R-cx)/dx; if (t < tmin) tmin = t; }
-    if (dy > 0.0001f)  { t = (TY1-R-cy)/dy; if (t < tmin) tmin = t; }
-    if (dy < -0.0001f) { t = (TY0+R-cy)/dy; if (t < tmin) tmin = t; }
+    if (dx > 0.0001f)  { t = (TX1-R-cx)/dx; if (t < tmin) { tmin = t; hit = -1; wall = 1; } }
+    if (dx < -0.0001f) { t = (TX0+R-cx)/dx; if (t < tmin) { tmin = t; hit = -1; wall = 1; } }
+    if (dy > 0.0001f)  { t = (TY1-R-cy)/dy; if (t < tmin) { tmin = t; hit = -1; wall = 2; } }
+    if (dy < -0.0001f) { t = (TY0+R-cy)/dy; if (t < tmin) { tmin = t; hit = -1; wall = 2; } }
     if (tmin < 0) tmin = 0;
-    line(cx + dx*R, cy + dy*R, cx + dx*tmin, cy + dy*tmin, COL(240,240,240));
-    ring(cx + dx*tmin, cy + dy*tmin, R, COL(240,240,240));
+
+    gx = cx + dx*tmin; gy = cy + dy*tmin;
+    thick(cx + dx*R, cy + dy*R, gx - dx*R, gy - dy*R, W);
+    ring(gx, gy, R, W);
+    ring(gx, gy, R - 0.7f, W);
+
+    if (hit > 0) {
+        float nx = b[hit].x - gx, ny = b[hit].y - gy, nl = sqrtf(nx*nx + ny*ny);
+        float dot, tx, ty, tl, L;
+        if (nl < 0.01f) return;
+        nx /= nl; ny /= nl;
+        dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
+        /* caminho da bola alvo */
+        L = 35.0f + 110.0f * dot;
+        thick(b[hit].x + nx*R, b[hit].y + ny*R,
+              b[hit].x + nx*(R + L), b[hit].y + ny*(R + L), W);
+        /* desvio da bola branca */
+        tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
+        if (tl > 0.05f) {
+            tx /= tl; ty /= tl;
+            L = 18.0f + 60.0f * tl;
+            thick(gx + tx*R, gy + ty*R, gx + tx*(R + L), gy + ty*(R + L), D);
+        }
+    } else if (wall) {
+        float rx = dx, ry = dy;
+        if (wall == 1) rx = -rx; else ry = -ry;
+        thick(gx + rx*R, gy + ry*R, gx + rx*(R + 70), gy + ry*(R + 70), D);
+    }
 }
 
 static void drawCue(void)
@@ -691,6 +832,8 @@ int main(void)
 
         case S_ROLL:
             for (i = 0; i < 8; i++) stepPhysics((1.0f / 60.0f) / 8.0f);
+            for (i = 0; i < 16; i++)
+                if (b[i].in && (b[i].vx != 0 || b[i].vy != 0)) spinBall(i, 1.0f / 60.0f);
             {
                 int mv = 0;
                 for (i = 0; i < 16; i++)
