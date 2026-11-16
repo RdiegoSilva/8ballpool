@@ -3,25 +3,26 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.0.0
+- Versão: 1.1.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR e CRÉDITOS
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida** (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
   - ADVERSÁRIO: BOT ou JOGADOR 2. Com JOGADOR 2, ao iniciar abre a tela para **digitar o nome** (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 2")
-  - DIFICULDADE (só contra o BOT): FÁCIL, MÉDIO ou DIFÍCIL
+  - DIFICULDADE (só contra o BOT): FÁCIL, MÉDIO, DIFÍCIL ou PROFISSIONAL
     - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
     - Médio: comportamento padrão
     - Difícil: mira quase perfeita e responde rápido
+    - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA: Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho ou Royal
-  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira): Azul, Vermelha, Amarela, Verde, Roxa ou Laranja (cada jogador usa uma cor diferente; padrão: azul x vermelha)
+  - MESA: Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados) ou **Neon** (animada: luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando)
+  - COR JOGADOR 1 / 2 (só na Sinuca Brasileira): Azul, Vermelha, Amarela, Verde, Roxa ou Laranja (cada jogador usa uma cor diferente; padrão: amarela x vermelha)
 - CRÉDITOS: mostra o criador e a versão do jogo
 
 ## Modos de jogo
 - **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)
-- **Sinuca Brasileira**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, espalhadas pela mesa
+- **Sinuca Brasileira**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, agrupadas cada uma no seu lado da mesa, como numa mesa de verdade
   - Vence quem encaçapar as 4 bolas da sua cor primeiro
   - Encaçapou uma bola sua sem errar? Joga de novo
   - **Errou a sua bola** (tocou primeiro na bola do adversário ou não tocou em nenhuma): o adversário **tira qualquer uma bola da mesa** (Setas escolhem a bola, X tira) e joga em seguida. O bot tira a própria bola mais difícil

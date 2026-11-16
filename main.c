@@ -1,5 +1,5 @@
 /* 8 BALL POOL para PS2 - PS2SDK + gsKit + libpad
- * Modos: 1 jogador (vs BOT, 3 niveis) e 2 jogadores (dois controles).
+ * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
  * Criador: Diego Reis | Versao 1.0.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
@@ -49,7 +49,7 @@ static float ang, pwr;
 static int pocketed[16], firstHit, gAtStart, startOwnLeft;
 static int winner, botTimer, botPlanned;
 static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhidos */
-static int colSel[2] = { 0, 1 };                 /* cores das bolas no modo brasileiro */
+static int colSel[2] = { 2, 1 };                 /* cores das bolas no modo brasileiro */
 static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
 static int takeList[16], takeN, takeSel;         /* bolas que podem ser tiradas apos uma falta (brasileira) */
 static char overNote[48];                         /* motivo do fim de jogo */
@@ -71,7 +71,7 @@ static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador /
 
 static const float PX[6] = { TX0, TCX, TX1, TX0, TCX, TX1 };
 static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
-static const float PR[6] = { 14.5f, 13.0f, 14.5f, 14.5f, 13.0f, 14.5f };
+static const float PR[6] = { 12.2f, 10.0f, 12.2f, 12.2f, 10.0f, 12.2f };   /* raio das cacapas (menores) */
 
 static const u8 BC[9][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
@@ -105,16 +105,17 @@ static const CueDef CUES[NCUES] = {
     { "PRECISAO",   45,  40,  70, 100, {200,200,210}, {176,178,186}, { 44, 44, 50}, {205,205,215}, { 20, 20, 24} },
 };
 
-#define GAME_VERSION "1.0.0"
+#define GAME_VERSION "1.1.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
+#define NLEVELS 4
 static int botLevel = 1, menuT;
-static const char  *LVL_NAME[3]  = { "FACIL", "MEDIO", "DIFICIL" };
-static const float  BOT_ERR[3]   = { 0.075f, 0.02f, 0.004f };   /* erro de mira (rad) */
-static const float  BOT_POWV[3]  = { 0.20f, 0.06f, 0.0f };      /* erro de forca */
-static const int    BOT_MISS[3]  = { 30, 0, 0 };                 /* % de jogadas ruins */
-static const int    BOT_DELAY[3] = { 75, 40, 22 };               /* tempo para pensar */
+static const char  *LVL_NAME[NLEVELS]  = { "FACIL", "MEDIO", "DIFICIL", "PROFISSIONAL" };
+static const float  BOT_ERR[NLEVELS]   = { 0.075f, 0.02f, 0.004f, 0.0006f };  /* erro de mira (rad) */
+static const float  BOT_POWV[NLEVELS]  = { 0.20f, 0.06f, 0.0f, 0.0f };        /* erro de forca */
+static const int    BOT_MISS[NLEVELS]  = { 30, 0, 0, 0 };                      /* % de jogadas ruins */
+static const int    BOT_DELAY[NLEVELS] = { 75, 40, 22, 12 };                   /* tempo para pensar */
 
 static unsigned int rs = 2463534242u;
 static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; return rs; }
@@ -512,8 +513,9 @@ static void rack(void)
 /* modo brasileiro: branca no meio e 4 bolas de cada jogador espalhadas pela mesa */
 static void rackBR(void)
 {
-    static const float LP0[4][2] = { {0.20f,0.22f}, {0.26f,0.19f}, {0.10f,0.66f}, {0.46f,0.17f} };
-    static const float LP1[4][2] = { {0.73f,0.30f}, {0.89f,0.72f}, {0.84f,0.81f}, {0.40f,0.84f} };
+    /* disposicao igual a da mesa real: cada cor agrupada no seu lado, a branca no meio */
+    static const float LP0[4][2] = { {0.10f,0.24f}, {0.16f,0.21f}, {0.38f,0.22f}, {0.07f,0.64f} };
+    static const float LP1[4][2] = { {0.86f,0.74f}, {0.92f,0.70f}, {0.70f,0.46f}, {0.46f,0.80f} };
     int i, k;
     memset(fallT, 0, sizeof(fallT));
     for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 0; resetOrient(i); }
@@ -845,11 +847,11 @@ static void botPlan(void)
             if (cc < 0.35f) continue;
             if (!pathClear(cx, cy, gx, gy, t)) continue;
             if (!pathClear(tx, ty, PX[p], PY[p], t)) continue;
-            sc = al + dl + (1.0f - cc) * 400.0f;
+            sc = al + dl + (1.0f - cc) * (botLevel == 3 ? 900.0f : 400.0f);   /* profissional prefere tacadas retas */
             if (sc < best) {
                 best = sc; found = 1;
                 botAng = atan2f(gy - cy, gx - cx);
-                botPow = 0.35f + (al + dl) / 600.0f;
+                botPow = (botLevel == 3 ? 0.30f : 0.35f) + (al + dl) / (botLevel == 3 ? 640.0f : 600.0f);
             }
         }
     }
@@ -885,14 +887,16 @@ static u32 readpad(int port)
 }
 
 /* ---------- desenho do jogo ---------- */
-typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; } TableDef;
-#define NTABLES 5
+typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
+#define NTABLES 7
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
     { "OCEANO",   { 28, 92,170}, {118, 78, 40}, {236,226,190} },
     { "VINHO",    {130, 28, 44}, { 70, 38, 22}, {230,210,170} },
     { "ROYAL",    { 98, 52,150}, { 30, 30, 38}, {230,226,240} },
+    { "PRETA OURO", { 26, 26, 34}, { 18, 16, 14}, {212,175, 80}, 1 },
+    { "NEON",     {  8, 18, 46}, { 14, 14, 28}, {120,220,255}, 2 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -913,6 +917,115 @@ static void cushV(float ya, float yb, float xo, float xi)
 static void diamond(float cx, float cy)
 {
     quad(cx, cy - 3, cx + 3, cy, cx, cy + 3, cx - 3, cy, tcDia);
+}
+
+
+/* ---------- mesas especiais: PRETA OURO (detalhes dourados) e NEON (animada) ---------- */
+static u64 CA(int r, int gg, int bb, int a);        /* definida mais abaixo */
+static void ringN(float cx, float cy, float r, float w, int n, u64 c);   /* idem */
+
+static void hue3(float h, int *r, int *gg, int *bb)
+{
+    float x, f;
+    int i;
+    h -= floorf(h); x = h * 6.0f; i = (int)x; f = x - i;
+    switch (i % 6) {
+    case 0:  *r = 255; *gg = (int)(255 * f); *bb = 0; break;
+    case 1:  *r = (int)(255 * (1.0f - f)); *gg = 255; *bb = 0; break;
+    case 2:  *r = 0; *gg = 255; *bb = (int)(255 * f); break;
+    case 3:  *r = 0; *gg = (int)(255 * (1.0f - f)); *bb = 255; break;
+    case 4:  *r = (int)(255 * f); *gg = 0; *bb = 255; break;
+    default: *r = 255; *gg = 0; *bb = (int)(255 * (1.0f - f)); break;
+    }
+}
+
+static u64 hueCol(float h, int a)
+{
+    int r, gg, bb;
+    hue3(h, &r, &gg, &bb);
+    return GS_SETREG_RGBAQ(r, gg, bb, a, 0x00);
+}
+
+static void outlineRect(float x1, float y1, float x2, float y2, u64 c)
+{
+    line(x1, y1, x2, y1, c); line(x1, y2, x2, y2, c);
+    line(x1, y1, x1, y2, c); line(x2, y1, x2, y2, c);
+}
+
+/* stage 0: moldura (antes do feltro) | 1: feltro (antes das tabelas) | 2: por cima das cacapas */
+static void tableDeco(int stage, const TableDef *T)
+{
+    int k;
+    float t = menuT * 0.02f;
+
+    if (T->style == 1) {                                   /* PRETA OURO */
+        u64 gold = COL(212,175,80), goldD = COL(150,118,48);
+        if (stage == 0) {
+            outlineRect(TX0 - 22, TY0 - 22, TX1 + 22, TY1 + 22, goldD);
+            outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, gold);
+            for (k = 0; k < 4; k++) {                      /* ornamentos nos cantos */
+                float cx = (k & 1) ? TX1 + 22 : TX0 - 22, cy = (k & 2) ? TY1 + 22 : TY0 - 22;
+                discN(cx, cy, 5.0f, goldD, 10);
+                discN(cx, cy, 3.6f, COL(18,16,14), 10);
+                discN(cx, cy, 1.8f, gold, 8);
+            }
+            for (k = 0; k < 4; k++) {                      /* perto das cacapas do meio */
+                float cx = TCX + ((k & 1) ? 36.0f : -36.0f), cy = (k & 2) ? TY1 + 18.5f : TY0 - 18.5f;
+                discN(cx, cy, 2.6f, gold, 8);
+            }
+        } else if (stage == 1) {
+            u64 fl = CA(212,175,80,0x46), fl2 = CA(212,175,80,0x26);
+            outlineRect(TX0 + 11, TY0 + 11, TX1 - 11, TY1 - 11, fl);
+            ring(TCX, TCY, 30.0f, fl2); ring(TCX, TCY, 38.0f, fl2);
+            line(TCX - 48, TCY, TCX - 22, TCY, fl2); line(TCX + 22, TCY, TCX + 48, TCY, fl2);
+            line(TCX, TCY - 48, TCX, TCY - 22, fl2); line(TCX, TCY + 22, TCX, TCY + 48, fl2);
+            ring(HEADX, TCY, 5.0f, fl); ring(FOOTX, TCY, 5.0f, fl);
+        } else {
+            for (k = 0; k < 6; k++) ring(PX[k], PY[k], PR[k] + 5.0f, gold);
+            line(HEADX, TY0, HEADX, TY1, CA(212,175,80,0x38));
+        }
+    } else if (T->style == 2) {                            /* NEON animada */
+        if (stage == 0) {
+            const int N = 120;
+            float W = TX1 - TX0 + 52, H = TY1 - TY0 + 52, L = 2 * (W + H);
+            for (k = 0; k < N; k++) {                      /* luzes correndo em volta da mesa */
+                float s = k * L / N, px, py, pulse;
+                int a;
+                if (s < W)              { px = TX0 - 26 + s;            py = TY0 - 26; }
+                else if (s < W + H)     { px = TX1 + 26;                py = TY0 - 26 + (s - W); }
+                else if (s < 2*W + H)   { px = TX1 + 26 - (s - W - H);  py = TY1 + 26; }
+                else                    { px = TX0 - 26;                py = TY1 + 26 - (s - 2*W - H); }
+                pulse = 0.5f + 0.5f * sinf(menuT * 0.12f - k * 0.35f);
+                a = 0x30 + (int)(0x50 * pulse);
+                discN(px, py, 4.5f, hueCol(k / (float)N - menuT * 0.006f, 0x18), 8);
+                rect(px - 1.5f, py - 1.5f, px + 1.5f, py + 1.5f, hueCol(k / (float)N - menuT * 0.006f, a));
+            }
+            outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, hueCol(t * 0.3f, 0x78));
+            outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, hueCol(t * 0.3f + 0.5f, 0x40));
+        } else if (stage == 1) {
+            float rr = fmodf(menuT * 0.8f, 125.0f) + 8.0f;
+            for (k = 0; k < 3; k++) {                      /* faixas de luz subindo pelo feltro */
+                float y0 = fmodf(menuT * 0.9f + k * 88.0f, TY1 - TY0), y1 = y0 + 26.0f;
+                if (y1 > TY1 - TY0) y1 = TY1 - TY0;
+                rect(TX0, TY0 + y0, TX1, TY0 + y1, hueCol(t * 0.3f + k * 0.33f, 0x0e));
+            }
+            ringN(TCX, TCY, rr, 2.0f, 40, hueCol(t * 0.3f, 0x50 - (int)(0x40 * rr / 133.0f)));
+            for (k = 0; k < 30; k++) {                     /* estrelinhas piscando */
+                float sx = TX0 + 12 + fmodf(k * 137.5f, 504.0f), sy = TY0 + 10 + fmodf(k * 71.3f, 244.0f);
+                float tw2 = sinf(menuT * 0.07f + k * 1.9f);
+                if (tw2 < 0) tw2 = 0;
+                disc(sx, sy, 1.3f, CA(190, 230, 255, 0x10 + (int)(0x50 * tw2)));
+            }
+        } else {
+            for (k = 0; k < 6; k++) {                      /* cacapas brilhando */
+                float pulse = 0.5f + 0.5f * sinf(menuT * 0.1f + k), h = k / 6.0f + menuT * 0.006f;
+                discN(PX[k], PY[k], PR[k] + 9.0f, hueCol(h, 0x10), 14);
+                ring(PX[k], PY[k], PR[k] + 4.5f, hueCol(h, 0x80));
+                ring(PX[k], PY[k], PR[k] + 6.0f + pulse * 2.0f, hueCol(h, 0x50));
+            }
+            line(HEADX, TY0, HEADX, TY1, hueCol(t * 0.3f, 0x50));
+        }
+    }
 }
 
 static void drawTable(void)
@@ -950,11 +1063,13 @@ static void drawTable(void)
 
     /* sulco entre a madeira e a borracha */
     rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, wgr);
+    tableDeco(0, T);
 
     /* feltro com leve brilho no centro (luz de cima) */
     rect(TX0, TY0, TX1, TY1, shade(T->felt, 1.0f, 0));
     for (k = 1; k < 8; k++)
         rect(TX0 + k*22, TY0 + k*14, TX1 - k*22, TY1 - k*14, shade(T->felt, 1.0f, k * 3));
+    tableDeco(1, T);
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY0 - 11, TY0);
@@ -985,6 +1100,7 @@ static void drawTable(void)
     line(HEADX, TY0, HEADX, TY1, shade(T->felt, 1.0f, 34));
     disc(HEADX, TCY, 2.2f, shade(T->felt, 0.77f, 0));
     disc(FOOTX, TCY, 2.2f, shade(T->felt, 0.77f, 0));
+    tableDeco(2, T);
 }
 
 static void thick(float x1, float y1, float x2, float y2, u64 c)
@@ -1550,7 +1666,7 @@ static void setupInput(u32 pr)
     if (d == 0) return;
     switch (row) {
     case SR_OPP:   oppSel = 1 - oppSel; break;
-    case SR_LVL:   botLevel = (botLevel + d + 3) % 3; break;
+    case SR_LVL:   botLevel = (botLevel + d + NLEVELS) % NLEVELS; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
     case SR_TABLE: tableSel = (tableSel + d + NTABLES) % NTABLES; break;
     case SR_C0:    cycleColor(0, d); break;
@@ -1585,7 +1701,7 @@ static void drawSetupScreen(void)
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "MODO", "MESA",
                                     "COR JOGADOR 1", "COR JOGADOR 2", "INICIAR PARTIDA" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
-    static const u8 LC[3][3] = { {90,230,110}, {245,215,70}, {240,80,70} };
+    static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
     int v[NSR], n = setRows(v), i;
     float y2 = 90.0f + n * 36.0f + 6.0f;
     const char *hint;
@@ -1638,6 +1754,8 @@ static void drawSetupScreen(void)
     if (v[setSel] == SR_MODE)
         hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA BOLA. BRANCA NA CACAPA: PERDE"
                               : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
+    else if (v[setSel] == SR_LVL && botLevel == 3)
+        hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
     else
         hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
