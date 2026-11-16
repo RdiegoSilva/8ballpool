@@ -49,7 +49,7 @@ static float ang, pwr;
 static int pocketed[16], firstHit, gAtStart, startOwnLeft;
 static int winner, botTimer, botPlanned;
 static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhidos */
-static int colSel[2] = { 2, 1 };                 /* cores das bolas no modo brasileiro */
+static int colSel[2] = { 1, 2 };                 /* cores das bolas no modo brasileiro */
 static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
 static int takeList[16], takeN, takeSel;         /* bolas que podem ser tiradas apos uma falta (brasileira) */
 static char overNote[48];                         /* motivo do fim de jogo */
@@ -73,14 +73,17 @@ static const float PX[6] = { TX0, TCX, TX1, TX0, TCX, TX1 };
 static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
 static const float PR[6] = { 12.2f, 10.0f, 12.2f, 12.2f, 10.0f, 12.2f };   /* raio das cacapas (menores) */
 
-static const u8 BC[9][3] = {
+static const u8 BC[15][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
-    {240,120,20},  {20,140,60},  {130,20,30}, {15,15,15}
+    {240,120,20},  {20,140,60},  {130,20,30}, {15,15,15},
+    {255,110,185}, {0,200,225},  {125,72,30}, {150,155,165}, {165,230,40}, {215,175,70}
 };
 
 /* cores escolhaveis no modo brasileiro (indice em BC) */
-static const int   BRC[6]      = { 2, 3, 1, 6, 4, 5 };
-static const char *BRC_NAME[6] = { "AZUL", "VERMELHA", "AMARELA", "VERDE", "ROXA", "LARANJA" };
+#define NBRC 12
+static const int   BRC[NBRC]      = { 2, 3, 1, 6, 4, 5, 9, 10, 11, 12, 13, 14 };
+static const char *BRC_NAME[NBRC] = { "AZUL", "VERMELHA", "AMARELA", "VERDE", "ROXA", "LARANJA",
+                                      "ROSA", "CIANO", "MARROM", "CINZA", "LIMA", "DOURADA" };
 
 /* estilo de cada bola: cor (indice em BC), listra e numero (mudam no modo brasileiro) */
 static int skinCol[16], skinStripe[16], skinNum[16], skinKey = 0;
@@ -96,21 +99,26 @@ typedef struct {
     int force, effect, aim, ctl;          /* forca, efeito, linha de mira, controle da barra */
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
 } CueDef;
-#define NCUES 5
+#define NCUES 6
+#define CUE_SNIPER 5
 static const CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
     { "POTENCIA",  100,  20,  45,  35, {190, 60, 50}, {222,170,110}, {150, 26, 26}, {210,210,215}, { 25, 20, 20} },
     { "EFEITO",     50, 100,  50,  55, { 70,150,230}, {226,196,140}, { 28, 64,160}, {130,210,255}, { 20, 26, 50} },
     { "MIRA LONGA", 50,  30, 100,  65, { 60,170,100}, {238,218,166}, { 20,112, 62}, {236,230,120}, { 20, 40, 28} },
     { "PRECISAO",   45,  40,  70, 100, {200,200,210}, {176,178,186}, { 44, 44, 50}, {205,205,215}, { 20, 20, 24} },
+    /* SNIPER: laser vermelho que mostra a tacada inteira (ate 3 rebotes e o caminho completo da bola alvo);
+       em troca tem pouca forca e quase nenhum efeito */
+    { "SNIPER",     40,  10, 100, 100, {235, 60, 55}, { 96,104, 92}, { 38, 44, 36}, {255, 70, 60}, { 18, 22, 18} },
 };
 
-#define GAME_VERSION "1.1.0"
+#define GAME_VERSION "1.2.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
 #define NLEVELS 4
 static int botLevel = 1, menuT;
+static int sndOn = 1, musOn = 1, volLvl = 8, fxOn = 1, tipsOn = 1;   /* opcoes do menu de pausa */
 static const char  *LVL_NAME[NLEVELS]  = { "FACIL", "MEDIO", "DIFICIL", "PROFISSIONAL" };
 static const float  BOT_ERR[NLEVELS]   = { 0.075f, 0.02f, 0.004f, 0.0006f };  /* erro de mira (rad) */
 static const float  BOT_POWV[NLEVELS]  = { 0.20f, 0.06f, 0.0f, 0.0f };        /* erro de forca */
@@ -355,7 +363,7 @@ static void initBallTex(void)
 /* muda o visual das bolas (modo brasileiro: bolas lisas sem numero, na cor de cada jogador) */
 static void setSkins(int br)
 {
-    int i, k, key = br ? 1 + colSel[0] * 6 + colSel[1] : 0;
+    int i, k, key = br ? 1 + colSel[0] * NBRC + colSel[1] : 0;
     if (key == skinKey) return;
     skinKey = key;
     skinDefaults();
@@ -510,19 +518,34 @@ static void rack(void)
         }
 }
 
-/* modo brasileiro: branca no meio e 4 bolas de cada jogador espalhadas pela mesa */
+/* posicoes iniciais da sinuca brasileira (mesa real): cada cor com 2 bolas coladas no meio da sua
+   cabeceira e 1 bola em cada tabela comprida; a branca no centro. s: 0..3 jogador 1 | 4..7 jogador 2 */
+static void brPos(int s, float *x, float *y)
+{
+    float ex0 = TX0 + R + 1.5f, ex1 = TX1 - R - 1.5f, ey0 = TY0 + R + 1.5f, ey1 = TY1 - R - 1.5f;
+    float sx0 = TX0 + 0.308f * (TX1 - TX0), sx1 = TX0 + 0.692f * (TX1 - TX0), pd = R + 1.2f;
+    switch (s) {
+    case 0:  *x = ex0; *y = TCY - pd; break;
+    case 1:  *x = ex0; *y = TCY + pd; break;
+    case 2:  *x = sx0; *y = ey0;      break;
+    case 3:  *x = sx0; *y = ey1;      break;
+    case 4:  *x = ex1; *y = TCY - pd; break;
+    case 5:  *x = ex1; *y = TCY + pd; break;
+    case 6:  *x = sx1; *y = ey0;      break;
+    default: *x = sx1; *y = ey1;      break;
+    }
+}
+
+/* modo brasileiro: branca no meio e 4 bolas de cada jogador (disposicao da mesa real) */
 static void rackBR(void)
 {
-    /* disposicao igual a da mesa real: cada cor agrupada no seu lado, a branca no meio */
-    static const float LP0[4][2] = { {0.10f,0.24f}, {0.16f,0.21f}, {0.38f,0.22f}, {0.07f,0.64f} };
-    static const float LP1[4][2] = { {0.86f,0.74f}, {0.92f,0.70f}, {0.70f,0.46f}, {0.46f,0.80f} };
     int i, k;
     memset(fallT, 0, sizeof(fallT));
     for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 0; resetOrient(i); }
     b[0].in = 1; b[0].x = TCX; b[0].y = TCY;
     for (k = 0; k < 4; k++) {
-        b[1 + k].in = 1; b[1 + k].x = TX0 + LP0[k][0] * (TX1 - TX0); b[1 + k].y = TY0 + LP0[k][1] * (TY1 - TY0);
-        b[9 + k].in = 1; b[9 + k].x = TX0 + LP1[k][0] * (TX1 - TX0); b[9 + k].y = TY0 + LP1[k][1] * (TY1 - TY0);
+        b[1 + k].in = 1; brPos(k, &b[1 + k].x, &b[1 + k].y);
+        b[9 + k].in = 1; brPos(4 + k, &b[9 + k].x, &b[9 + k].y);
     }
 }
 
@@ -956,7 +979,8 @@ static void outlineRect(float x1, float y1, float x2, float y2, u64 c)
 static void tableDeco(int stage, const TableDef *T)
 {
     int k;
-    float t = menuT * 0.02f;
+    int mt = fxOn ? menuT : 0;                        /* efeitos desligados: mesa parada */
+    float t = mt * 0.02f;
 
     if (T->style == 1) {                                   /* PRETA OURO */
         u64 gold = COL(212,175,80), goldD = COL(150,118,48);
@@ -995,36 +1019,117 @@ static void tableDeco(int stage, const TableDef *T)
                 else if (s < W + H)     { px = TX1 + 26;                py = TY0 - 26 + (s - W); }
                 else if (s < 2*W + H)   { px = TX1 + 26 - (s - W - H);  py = TY1 + 26; }
                 else                    { px = TX0 - 26;                py = TY1 + 26 - (s - 2*W - H); }
-                pulse = 0.5f + 0.5f * sinf(menuT * 0.12f - k * 0.35f);
+                pulse = 0.5f + 0.5f * sinf(mt * 0.12f - k * 0.35f);
                 a = 0x30 + (int)(0x50 * pulse);
-                discN(px, py, 4.5f, hueCol(k / (float)N - menuT * 0.006f, 0x18), 8);
-                rect(px - 1.5f, py - 1.5f, px + 1.5f, py + 1.5f, hueCol(k / (float)N - menuT * 0.006f, a));
+                discN(px, py, 4.5f, hueCol(k / (float)N - mt * 0.006f, 0x18), 8);
+                rect(px - 1.5f, py - 1.5f, px + 1.5f, py + 1.5f, hueCol(k / (float)N - mt * 0.006f, a));
             }
             outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, hueCol(t * 0.3f, 0x78));
             outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, hueCol(t * 0.3f + 0.5f, 0x40));
         } else if (stage == 1) {
-            float rr = fmodf(menuT * 0.8f, 125.0f) + 8.0f;
+            float rr = fmodf(mt * 0.8f, 125.0f) + 8.0f;
             for (k = 0; k < 3; k++) {                      /* faixas de luz subindo pelo feltro */
-                float y0 = fmodf(menuT * 0.9f + k * 88.0f, TY1 - TY0), y1 = y0 + 26.0f;
+                float y0 = fmodf(mt * 0.9f + k * 88.0f, TY1 - TY0), y1 = y0 + 26.0f;
                 if (y1 > TY1 - TY0) y1 = TY1 - TY0;
                 rect(TX0, TY0 + y0, TX1, TY0 + y1, hueCol(t * 0.3f + k * 0.33f, 0x0e));
             }
             ringN(TCX, TCY, rr, 2.0f, 40, hueCol(t * 0.3f, 0x50 - (int)(0x40 * rr / 133.0f)));
             for (k = 0; k < 30; k++) {                     /* estrelinhas piscando */
                 float sx = TX0 + 12 + fmodf(k * 137.5f, 504.0f), sy = TY0 + 10 + fmodf(k * 71.3f, 244.0f);
-                float tw2 = sinf(menuT * 0.07f + k * 1.9f);
+                float tw2 = sinf(mt * 0.07f + k * 1.9f);
                 if (tw2 < 0) tw2 = 0;
                 disc(sx, sy, 1.3f, CA(190, 230, 255, 0x10 + (int)(0x50 * tw2)));
             }
         } else {
             for (k = 0; k < 6; k++) {                      /* cacapas brilhando */
-                float pulse = 0.5f + 0.5f * sinf(menuT * 0.1f + k), h = k / 6.0f + menuT * 0.006f;
+                float pulse = 0.5f + 0.5f * sinf(mt * 0.1f + k), h = k / 6.0f + mt * 0.006f;
                 discN(PX[k], PY[k], PR[k] + 9.0f, hueCol(h, 0x10), 14);
                 ring(PX[k], PY[k], PR[k] + 4.5f, hueCol(h, 0x80));
                 ring(PX[k], PY[k], PR[k] + 6.0f + pulse * 2.0f, hueCol(h, 0x50));
             }
             line(HEADX, TY0, HEADX, TY1, hueCol(t * 0.3f, 0x50));
         }
+    }
+}
+
+/* ---------- previa da mesa (tela de configurar partida) ---------- */
+static void pvBall(float x, float y, float r, const u8 *c)
+{
+    discN(x, y, r, shade(c, 0.55f, 0), 8);
+    discN(x - r * 0.1f, y - r * 0.1f, r * 0.8f, shade(c, 1.0f, 0), 8);
+    rect(x - r * 0.55f, y - r * 0.6f, x - r * 0.2f, y - r * 0.28f, COL(255,255,255));
+}
+
+static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
+{
+    float k = w / 588.0f, hw = (TX1 - TX0) * 0.5f * k, hh = (TY1 - TY0) * 0.5f * k;
+    float x0 = cx - hw, x1 = cx + hw, y0 = cy - hh, y1 = cy + hh;
+    float f = 26.0f * k, c = 11.0f * k, pk = 12.0f * k, pr = R * k;
+    float qx[6], qy[6], bx, by;
+    int i, j, mt = fxOn ? menuT : 0;
+    u64 dia = COL(T->dia[0], T->dia[1], T->dia[2]);
+
+    qx[0] = qx[3] = x0; qx[1] = qx[4] = cx; qx[2] = qx[5] = x1;
+    qy[0] = qy[1] = qy[2] = y0; qy[3] = qy[4] = qy[5] = y1;
+
+    rect(x0 - f - 2, y0 - f - 2, x1 + f + 2, y1 + f + 2, shade(T->wood, 0.36f, 0));
+    rect(x0 - f, y0 - f, x1 + f, y1 + f, shade(T->wood, 0.95f, 0));
+    rect(x0 - c - 1, y0 - c - 1, x1 + c + 1, y1 + c + 1, shade(T->wood, 0.45f, 0));
+    rect(x0 - c, y0 - c, x1 + c, y1 + c, shade(T->felt, 0.5f, 0));
+    rect(x0, y0, x1, y1, shade(T->felt, 1.0f, 0));
+    rect(x0 + hw * 0.35f, y0 + hh * 0.35f, x1 - hw * 0.35f, y1 - hh * 0.35f, shade(T->felt, 1.0f, 10));
+
+    for (j = 1; j <= 3; j++) {                         /* diamantes de mira */
+        float dxl = (cx - x0) * j / 4.0f, dxr = (x1 - cx) * j / 4.0f, dy = (y1 - y0) * j / 4.0f, o = (c + f) * 0.5f;
+        rect(x0 + dxl - 1, y0 - o - 1, x0 + dxl + 1, y0 - o + 1, dia);
+        rect(x0 + dxl - 1, y1 + o - 1, x0 + dxl + 1, y1 + o + 1, dia);
+        rect(cx + dxr - 1, y0 - o - 1, cx + dxr + 1, y0 - o + 1, dia);
+        rect(cx + dxr - 1, y1 + o - 1, cx + dxr + 1, y1 + o + 1, dia);
+        rect(x0 - o - 1, y0 + dy - 1, x0 - o + 1, y0 + dy + 1, dia);
+        rect(x1 + o - 1, y0 + dy - 1, x1 + o + 1, y0 + dy + 1, dia);
+    }
+    for (i = 0; i < 6; i++) {                          /* cacapas */
+        discN(qx[i], qy[i], pk + 1.4f, COL(52,31,14), 10);
+        discN(qx[i], qy[i], pk, COL(3,3,5), 10);
+    }
+
+    if (T->style == 1) {                               /* preta ouro */
+        u64 gl = COL(212,175,80);
+        outlineRect(x0 - f * 0.62f, y0 - f * 0.62f, x1 + f * 0.62f, y1 + f * 0.62f, gl);
+        outlineRect(x0 + 4, y0 + 4, x1 - 4, y1 - 4, CA(212,175,80,0x50));
+        for (i = 0; i < 6; i++) ring(qx[i], qy[i], pk + 2.2f, gl);
+    } else if (T->style == 2) {                        /* neon animada */
+        const int N = 40;
+        float g = f * 0.78f, W = (x1 - x0) + 2 * g, H = (y1 - y0) + 2 * g, L = 2 * (W + H);
+        for (i = 0; i < N; i++) {
+            float s2 = i * L / N, px, py;
+            if (s2 < W)             { px = x0 - g + s2;             py = y0 - g; }
+            else if (s2 < W + H)    { px = x1 + g;                  py = y0 - g + (s2 - W); }
+            else if (s2 < 2*W + H)  { px = x1 + g - (s2 - W - H);   py = y1 + g; }
+            else                    { px = x0 - g;                  py = y1 + g - (s2 - 2*W - H); }
+            rect(px - 1.2f, py - 1.2f, px + 1.2f, py + 1.2f,
+                 hueCol(i / (float)N - mt * 0.006f, 0x50 + (int)(0x2c * (1.0f + sinf(mt * 0.12f - i * 0.4f)))));
+        }
+        for (i = 0; i < 6; i++) ring(qx[i], qy[i], pk + 2.2f, hueCol(i / 6.0f + mt * 0.006f, 0x80));
+        ringN(cx, cy, fmodf(mt * 0.25f, hh), 1.0f, 24, hueCol(mt * 0.006f, 0x50));
+    }
+
+    /* bolas na posicao inicial do modo escolhido */
+    if (gmode == GM_BR) {
+        const u8 *c0 = BC[BRC[colSel[0]]], *c1 = BC[BRC[colSel[1]]];
+        for (j = 0; j < 8; j++) {
+            brPos(j, &bx, &by);
+            pvBall(x0 + (bx - TX0) * k, y0 + (by - TY0) * k, pr, j < 4 ? c0 : c1);
+        }
+        pvBall(cx, cy, pr, BC[0]);
+    } else {
+        int n = 0, r2, cc;
+        for (r2 = 0; r2 < 5; r2++)
+            for (cc = 0; cc <= r2; cc++) {
+                bx = FOOTX + r2 * (R * 1.76f); by = TCY + (cc - r2 * 0.5f) * (2 * R + 0.4f);
+                pvBall(x0 + (bx - TX0) * k, y0 + (by - TY0) * k, pr, BC[1 + (n++ % 8)]);
+            }
+        pvBall(x0 + (HEADX - TX0) * k, cy, pr, BC[0]);
     }
 }
 
@@ -1130,8 +1235,10 @@ static void beam(float x1, float y1, float x2, float y2, float w, u64 c)
 
 static void glow(float x1, float y1, float x2, float y2, int a, int r, int gg, int bb)
 {
-    beam(x1, y1, x2, y2, 6.0f, CA(r, gg, bb, a / 8));
-    beam(x1, y1, x2, y2, 3.6f, CA(r, gg, bb, a / 4));
+    if (fxOn) {
+        beam(x1, y1, x2, y2, 6.0f, CA(r, gg, bb, a / 8));
+        beam(x1, y1, x2, y2, 3.6f, CA(r, gg, bb, a / 4));
+    }
     beam(x1, y1, x2, y2, 1.8f, CA(r, gg, bb, a));
 }
 
@@ -1198,20 +1305,23 @@ static void drawGuide(void)
 {
     float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
     float gs = cueGuideScale(curCue());
-    int seg, maxSeg = CUES[curCue()].aim >= 100 ? 2 : 1;   /* so o taco MIRA LONGA mostra o rebote */
+    int sn = (curCue() == CUE_SNIPER);
+    int lg = sn ? 70 : 255;                                /* sniper: laser vermelho */
+    int seg, maxSeg = sn ? 4 : (CUES[curCue()].aim >= 100 ? 2 : 1);   /* MIRA LONGA: 1 rebote | SNIPER: 3 */
 
     for (seg = 0; seg < maxSeg; seg++) {
-        int hit, wall, al = seg == 0 ? 0x7c : 0x50;
+        int hit, wall, al = seg == 0 ? 0x7c : (sn ? 0x64 - seg * 0x14 : 0x50);
         float t = castRay(cx, cy, dx, dy, -1, &hit, &wall);
         float gx = cx + dx*t, gy = cy + dy*t;
         float sx = cx + (seg == 0 ? dx*R : 0), sy = cy + (seg == 0 ? dy*R : 0);
         float ex = gx - dx*R, ey = gy - dy*R;
 
-        if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, 255, 255, 255);
-        discN(gx, gy, R, CA(255, 255, 255, 0x12), 20);
-        ringN(gx, gy, R,        1.6f, 28, CA(255, 255, 255, al));
-        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(255, 255, 255, al / 2));
+        if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, 255, lg, lg);
+        discN(gx, gy, R, CA(255, lg, lg, 0x12), 20);
+        ringN(gx, gy, R,        1.6f, 28, CA(255, lg, lg, al));
+        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(255, lg, lg, al / 2));
 
+        if (hit > 0 && !tipsOn) return;                  /* dicas desligadas: so a linha ate a bola */
         if (hit > 0) {
             float nx = b[hit].x - gx, ny = b[hit].y - gy, nl = sqrtf(nx*nx + ny*ny);
             float dot, tx, ty, tl, L, tmax;
@@ -1222,6 +1332,7 @@ static void drawGuide(void)
 
             /* caminho da bola alvo: ate a tabela/outra bola, destacando cacapa */
             L = (22.0f + 70.0f * dot) * gs;
+            if (sn) L = 1.0e6f;                           /* sniper: caminho completo */
             tmax = castRay(b[hit].x, b[hit].y, nx, ny, hit, &h2, &w2);
             if (L >= tmax - 0.5f) {
                 L = tmax;
@@ -1241,6 +1352,7 @@ static void drawGuide(void)
             if (tl > 0.05f) {
                 tx /= tl; ty /= tl;
                 L = (12.0f + 40.0f * tl) * gs;
+                if (sn) L = 1.0e6f;
                 tmax = castRay(gx, gy, tx, ty, hit, &h2, &w2);
                 if (L > tmax) L = tmax;
                 if (L > R) glowFade(gx + tx*R, gy + ty*R, gx + tx*L, gy + ty*L, 0x60, 0x10, 190, 215, 255);
@@ -1391,6 +1503,9 @@ static void drawSpinIndicator(void)
     text(8, 424, 0.3f, COL(200,200,205), "EFEITO");
 }
 
+static float tipKey(float x, float y, const char *k, const char *l, u64 c1, u64 c2)
+{ return tipsOn ? keycap(x, y, k, l, c1, c2) : 0.0f; }
+
 /* painel de cada jogador (topo): nome, grupo e as bolas que ainda restam */
 static void drawPlayerPanel(int pl)
 {
@@ -1453,19 +1568,19 @@ static void drawHUD(void)
     x = 80.0f;
     if (state == S_AIM && !isBot()) {
         if (charging) {
-            x += keycap(x, 421, "X", "DISPARAR", COL(255,230,60), COL(235,235,240)) + 16;
-            keycap(x, 421, "O", "CANCELAR", COL(255,230,60), COL(235,235,240));
+            x += tipKey(x, 421, "X", "DISPARAR", COL(255,230,60), COL(235,235,240)) + 16;
+            tipKey(x, 421, "O", "CANCELAR", COL(255,230,60), COL(235,235,240));
         } else {
-            x += keycap(x, 421, "X", "FORCA", COL(255,230,60), COL(235,235,240)) + 14;
-            x += keycap(x, 421, "L2/R2", "EFEITO", COL(255,230,60), COL(235,235,240)) + 14;
-            keycap(x, 421, "SELECT", "TACOS", COL(255,230,60), COL(235,235,240));
+            x += tipKey(x, 421, "X", "FORCA", COL(255,230,60), COL(235,235,240)) + 14;
+            x += tipKey(x, 421, "L2/R2", "EFEITO", COL(255,230,60), COL(235,235,240)) + 14;
+            tipKey(x, 421, "SELECT", "TACOS", COL(255,230,60), COL(235,235,240));
         }
     } else if (state == S_PLACE && !isBot()) {
-        x += keycap(x, 421, "SETAS", "MOVER", COL(255,230,60), COL(235,235,240)) + 14;
-        keycap(x, 421, "X", "CONFIRMAR", COL(255,230,60), COL(235,235,240));
+        x += tipKey(x, 421, "SETAS", "MOVER", COL(255,230,60), COL(235,235,240)) + 14;
+        tipKey(x, 421, "X", "CONFIRMAR", COL(255,230,60), COL(235,235,240));
     } else if (state == S_TAKE && !isBot()) {
-        x += keycap(x, 421, "SETAS", "ESCOLHER BOLA", COL(255,230,60), COL(235,235,240)) + 14;
-        keycap(x, 421, "X", "TIRAR DA MESA", COL(255,230,60), COL(235,235,240));
+        x += tipKey(x, 421, "SETAS", "ESCOLHER BOLA", COL(255,230,60), COL(235,235,240)) + 14;
+        tipKey(x, 421, "X", "TIRAR DA MESA", COL(255,230,60), COL(235,235,240));
     } else if (state == S_TAKE) {
         text(x, 425, 0.4f, COL(170,176,190), "BOT ESCOLHENDO UMA BOLA...");
     } else if (state == S_AIM || state == S_PLACE) {
@@ -1524,7 +1639,7 @@ static void drawCueMenu(void)
     }
 
     for (k = 0; k < NCUES; k++) {
-        float x = 320.0f + (k - 2) * 30.0f;
+        float x = 320.0f + (k - (NCUES - 1) * 0.5f) * 30.0f;
         disc(x, 348, k == cueMenuSel ? 6.0f : 4.0f,
              k == cueMenuSel ? COL(255,230,60) : COL(100,100,110));
         if (k == cueSel[cur]) ring(x, 348, 9.0f, COL(110,230,130));
@@ -1629,7 +1744,7 @@ static int setRows(int *v)                 /* linhas visiveis na tela de configu
 static void cycleColor(int pl, int d)      /* cada jogador usa uma cor diferente */
 {
     int o = colSel[1 - pl];
-    do { colSel[pl] = (colSel[pl] + d + 6) % 6; } while (colSel[pl] == o);
+    do { colSel[pl] = (colSel[pl] + d + NBRC) % NBRC; } while (colSel[pl] == o);
 }
 
 static void startMatch(void)
@@ -1703,7 +1818,7 @@ static void drawSetupScreen(void)
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
     int v[NSR], n = setRows(v), i;
-    float y2 = 90.0f + n * 36.0f + 6.0f;
+    float y2 = 90.0f + n * 31.0f + 6.0f;
     const char *hint;
     char buf[40];
 
@@ -1713,7 +1828,7 @@ static void drawSetupScreen(void)
 
     for (i = 0; i < n; i++) {
         int row = v[i], sel = (i == setSel);
-        float y = 90.0f + i * 36.0f, bob = 4.0f * sinf(menuT * 0.2f), vx;
+        float y = 90.0f + i * 31.0f, bob = 4.0f * sinf(menuT * 0.2f), vx;
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
 
         if (sel) {
@@ -1759,6 +1874,7 @@ static void drawSetupScreen(void)
     else
         hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
+    drawTablePreview(320.0f, 392.0f, 176.0f, &TABLES[tableSel]);
 }
 
 static void drawNameScreen(void)
@@ -1865,6 +1981,95 @@ static void drawMenuScreen(void)
     text(626.0f - tw(0.34f, buf), 424, 0.34f, COL(150,160,175), buf);
 }
 
+/* ---------- pausa (START) ---------- */
+static int paused, pauseSel, pauseView;          /* pauseView: 0 = lista, 1 = controles e dicas */
+enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+
+static void pauseOpen(void) { paused = 1; pauseSel = 0; pauseView = 0; }
+
+static void pauseInput(u32 pr)
+{
+    int d = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0), tog = d || (pr & PAD_CROSS);
+    if (pauseView == 1) {
+        if (pr & (PAD_CROSS | PAD_CIRCLE | PAD_START)) pauseView = 0;
+        return;
+    }
+    if (pr & PAD_UP)   pauseSel = (pauseSel + NPI - 1) % NPI;
+    if (pr & PAD_DOWN) pauseSel = (pauseSel + 1) % NPI;
+    if (pr & (PAD_START | PAD_CIRCLE)) { paused = 0; return; }
+    switch (pauseSel) {
+    case PI_SND:     if (tog) sndOn = !sndOn; break;
+    case PI_MUS:     if (tog) musOn = !musOn; break;
+    case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; } break;
+    case PI_FX:      if (tog) fxOn = !fxOn; break;
+    case PI_TIPS:    if (tog) tipsOn = !tipsOn; break;
+    case PI_RESUME:  if (pr & PAD_CROSS) paused = 0; break;
+    case PI_CTRL:    if (pr & PAD_CROSS) pauseView = 1; break;
+    case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; newGame(mode); } break;
+    case PI_MENU:    if (pr & PAD_CROSS) { paused = 0; menuInit(); state = S_MENU; } break;
+    }
+}
+
+static void drawPause(void)
+{
+    static const char *LB[NPI] = { "CONTINUAR", "SOM", "MUSICA", "VOLUME", "EFEITOS", "DICAS NA TELA",
+                                   "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
+    char buf[32];
+    int i;
+    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x58, 0x00));
+
+    if (pauseView == 1) {
+        static const char *L[] = {
+            "ESQ/DIR: GIRAR A MIRA        L1/R1: AJUSTE FINO",
+            "X: BARRA DE FORCA, X DE NOVO DISPARA     O: CANCELAR",
+            "L2/R2: EFEITO NA BOLA BRANCA     SELECT: TROCAR DE TACO",
+            "BOLA NA MAO: SETAS MOVEM A BRANCA, X CONFIRMA",
+            "START: PAUSAR O JOGO"
+        };
+        static const char *T[] = {
+            "A BARRA SOBE E DESCE: APERTE X NO MOMENTO DE MAIS FORCA SO QUANDO PRECISAR",
+            "TACO SNIPER: LASER MOSTRA A TACADA INTEIRA COM REBOTES, MAS BATE FRACO",
+            "BRASILEIRA: ERROU A SUA BOLA? O ADVERSARIO TIRA UMA BOLA DA MESA",
+            "BRANCA NA CACAPA NA BRASILEIRA = DERROTA NA HORA"
+        };
+        hbox(40, 20, 600, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
+        textC(30, 0.7f, COL(255,215,70), "CONTROLES");
+        rect(160, 62, 480, 64, CA(255,215,60,0x50));
+        for (i = 0; i < 5; i++) text(60, 78.0f + i * 26.0f, 0.4f, COL(225,230,240), L[i]);
+        textC(222, 0.55f, COL(255,215,70), "DICAS");
+        rect(220, 250, 420, 251, CA(255,215,60,0x50));
+        for (i = 0; i < 4; i++) text(60, 262.0f + i * 26.0f, 0.36f, COL(190,200,215), T[i]);
+        textC(398, 0.34f, COL(150,160,175), "X / O / START: VOLTAR");
+        return;
+    }
+
+    hbox(130, 20, 510, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
+    textC(30, 0.7f, COL(255,215,70), "PAUSADO");
+    rect(180, 62, 460, 64, CA(255,215,60,0x50));
+    for (i = 0; i < NPI; i++) {
+        float y = 78.0f + i * 33.0f, bob = 4.0f * sinf(menuT * 0.2f);
+        int sel = (i == pauseSel), hasVal = 1;
+        u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
+        if (sel) {
+            rect(138, y - 6, 502, y + 23, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+            tri(144 + bob, y + 1, 144 + bob, y + 15, 155 + bob, y + 8, COL(255,230,60));
+        }
+        text(166, y, 0.5f, tc, LB[i]);
+        switch (i) {
+        case PI_SND:  strcpy(buf, sndOn ? "< LIGADO >" : "< DESLIGADO >"); break;
+        case PI_MUS:  strcpy(buf, musOn ? "< LIGADA >" : "< DESLIGADA >"); break;
+        case PI_VOL:  sprintf(buf, "< %d%% >", volLvl * 10); break;
+        case PI_FX:   strcpy(buf, fxOn ? "< LIGADOS >" : "< DESLIGADOS >"); break;
+        case PI_TIPS: strcpy(buf, tipsOn ? "< LIGADAS >" : "< DESLIGADAS >"); break;
+        default:      hasVal = 0; buf[0] = 0; break;
+        }
+        if (hasVal) text(494 - tw(0.5f, buf), y, 0.5f, COL(255,255,255), buf);
+    }
+    if (pauseSel == PI_SND || pauseSel == PI_MUS || pauseSel == PI_VOL)
+        textC(386, 0.3f, COL(255,190,120), "AUDIO EM BREVE: A OPCAO JA FICA SALVA");
+    textC(404, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   START/O: CONTINUAR");
+}
+
 static void draw(void)
 {
     int i;
@@ -1900,6 +2105,7 @@ static void draw(void)
     }
     drawHUD();
     if (state == S_CUES) drawCueMenu();
+    if (paused) drawPause();
     if (state == S_OVER) {
         int *w = mode == 0 ? winsBot : winsVs;
         const char *hint = "X: REVANCHE   START: MENU";
@@ -1954,12 +2160,18 @@ int main(void)
         if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
+        if (paused) in = p0 | p1;
+        else if (state == S_AIM || state == S_ROLL || state == S_PLACE || state == S_TAKE || state == S_STRIKE)
+            in |= p0 & PAD_START;
         pressed = in & ~prev;
         prev = in;
         menuT++;
         if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) menuUpdate();
 
-        switch (state) {
+        if (paused) pauseInput(pressed);
+        else if ((pressed & PAD_START) && (state == S_AIM || state == S_ROLL || state == S_PLACE ||
+                                           state == S_TAKE || state == S_STRIKE)) pauseOpen();
+        else switch (state) {
         case S_MENU:
             if (pressed & PAD_UP)   menuSel = (menuSel + 2) % 3;
             if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 3;
