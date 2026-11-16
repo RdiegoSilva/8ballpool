@@ -67,15 +67,24 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
 static void line(float x1, float y1, float x2, float y2, u64 c)
 { gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
 
-static void disc(float cx, float cy, float r, u64 c)
+static void discN(float cx, float cy, float r, u64 c, int n)
 {
-    int i, n = 14;
+    int i;
     for (i = 0; i < n; i++) {
         float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
         gsKit_prim_triangle(g, cx+OX, cy+OY,
                             cx+OX+cosf(a0)*r, cy+OY+sinf(a0)*r,
                             cx+OX+cosf(a1)*r, cy+OY+sinf(a1)*r, 1, c);
     }
+}
+
+static void disc(float cx, float cy, float r, u64 c) { discN(cx, cy, r, c, 14); }
+
+static void quad(float x1, float y1, float x2, float y2,
+                 float x3, float y3, float x4, float y4, u64 c)
+{
+    gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c);
+    gsKit_prim_triangle(g, x1+OX, y1+OY, x3+OX, y3+OY, x4+OX, y4+OY, 1, c);
 }
 
 static void ring(float cx, float cy, float r, u64 c)
@@ -90,17 +99,177 @@ static void ring(float cx, float cy, float r, u64 c)
 static void text(float x, float y, float s, u64 c, const char *t)
 { gsKit_fontm_print_scaled(g, fm, x+OX, y+OY, 2, s, c, (char *)t); }
 
+/* fonte 3x5 para os numeros das bolas */
+static const char *DIG[10] = {
+    "111101101101111", "010110010010111", "111001111100111", "111001111001111",
+    "101101111001001", "111100111001111", "111100111101111", "111001010010010",
+    "111101111101111", "111101111001111"
+};
+
+static void drawDigit(int d, float x0, float y0, float p)
+{
+    int k;
+    for (k = 0; k < 15; k++)
+        if (DIG[d][k] == '1') {
+            float px = x0 + (k % 3) * p, py = y0 + (k / 3) * p;
+            rect(px, py, px + p, py + p, COL(15,15,15));
+        }
+}
+
+static void drawNumber(int n, float cx, float cy, float r)
+{
+    disc(cx, cy, r * 0.56f, COL(250,250,245));
+    if (n < 10) {
+        float p = r * 0.145f;
+        drawDigit(n, cx - 1.5f*p, cy - 2.5f*p, p);
+    } else {
+        float p = r * 0.1f;
+        drawDigit(n / 10, cx - 3.5f*p, cy - 2.5f*p, p);
+        drawDigit(n % 10, cx + 0.5f*p,  cy - 2.5f*p, p);
+    }
+}
+
+static void drawShadow(int i)
+{
+    if (b[i].in) discN(b[i].x + 2.5f, b[i].y + 2.5f, R, COL(14,85,48), 10);
+}
+
+static u64 shade(const u8 *c, float f, int add)
+{
+    int r = (int)(c[0]*f) + add, gg = (int)(c[1]*f) + add, bb = (int)(c[2]*f) + add;
+    if (r > 255) r = 255; if (gg > 255) gg = 255; if (bb > 255) bb = 255;
+    return COL(r, gg, bb);
+}
+
+static void drawBallVec(int i, float x, float y, float r)
+{
+    static const u8 WHITE[3] = {250,250,250};
+    int id = (i > 8) ? i - 8 : i;
+    const u8 *c = (i == 0 || i > 8) ? WHITE : BC[i];
+    float r2 = r * 0.93f;
+
+    discN(x, y, r, shade(c, 0.55f, 0), 12);          /* borda escura */
+    discN(x, y, r2, shade(c, 1.0f, 0), 12);          /* cor base */
+
+    if (i > 8) {                                      /* listra colorida */
+        static const float DY[5] = {-0.55f, -0.28f, 0.0f, 0.28f, 0.55f};
+        int k;
+        for (k = 0; k < 4; k++) {
+            float y1 = DY[k] * r2,   y2 = DY[k+1] * r2;
+            float w1 = sqrtf(r2*r2 - y1*y1), w2 = sqrtf(r2*r2 - y2*y2);
+            quad(x - w1, y + y1, x + w1, y + y1, x + w2, y + y2, x - w2, y + y2,
+                 shade(BC[id], 1.0f, 0));
+        }
+    } else if (i > 0) {
+        discN(x - r*0.12f, y - r*0.12f, r*0.62f, shade(c, 1.2f, 25), 8); /* luz */
+    }
+
+    if (i > 0) drawNumber(i, x, y, r);
+
+    discN(x - r*0.38f, y - r*0.40f, r*0.2f, COL(255,255,255), 6);       /* brilho */
+}
+
+/* ---------- texturas das bolas (geradas ao iniciar) ---------- */
+#ifndef USE_TEXTURE_BALLS
+#define USE_TEXTURE_BALLS 1   /* mude para 0 para voltar as bolas vetoriais */
+#endif
+
+#define ATLAS_W 128
+static u32 atlas[ATLAS_W * ATLAS_W] __attribute__((aligned(64)));
+static GSTEXTURE ballTex;
+static int useTex = 0;
+
+static int digitInk(int n, float gu, float gv)
+{
+    float cs; int ix, iy;
+    if (n < 10) {
+        cs = 0.30f;
+        ix = (int)floorf((gu + 1.5f*cs) / cs); iy = (int)floorf((gv + 2.5f*cs) / cs);
+        if (ix < 0 || ix > 2 || iy < 0 || iy > 4) return 0;
+        return DIG[n][iy*3 + ix] == '1';
+    }
+    cs = 0.20f;
+    ix = (int)floorf((gu + 3.5f*cs) / cs); iy = (int)floorf((gv + 2.5f*cs) / cs);
+    if (iy < 0 || iy > 4 || ix < 0 || ix > 6) return 0;
+    if (ix < 3) return DIG[n / 10][iy*3 + ix] == '1';
+    if (ix == 3) return 0;
+    return DIG[n % 10][iy*3 + (ix - 4)] == '1';
+}
+
+static void renderBall(int id, int ox, int oy)
+{
+    const int S = 3;
+    const float LX = -0.42f, LY = -0.52f, LZ = 0.74f;
+    float hx = LX, hy = LY, hz = LZ + 1.0f, hl = sqrtf(hx*hx + hy*hy + hz*hz);
+    int px, py, sx, sy;
+    hx /= hl; hy /= hl; hz /= hl;
+
+    for (py = 0; py < 32; py++)
+    for (px = 0; px < 32; px++) {
+        float ar = 0, ag = 0, ab = 0;
+        int cov = 0;
+        for (sy = 0; sy < S; sy++)
+        for (sx = 0; sx < S; sx++) {
+            float u = (((px + (sx + 0.5f) / S) / 32.0f) * 2.0f - 1.0f) * (16.0f / 15.0f);
+            float v = (((py + (sy + 0.5f) / S) / 32.0f) * 2.0f - 1.0f) * (16.0f / 15.0f);
+            float d2 = u*u + v*v, nz, cr, cg, cb, dif, lum, sp, s2, s4, s8, s16, s32;
+            if (d2 > 1.0f) continue;
+            nz = sqrtf(1.0f - d2);
+
+            cr = 245; cg = 245; cb = 238;
+            if (id > 0) {
+                int col = id > 8 ? id - 8 : id;
+                cr = BC[col][0]; cg = BC[col][1]; cb = BC[col][2];
+                if (id > 8 && fabsf(v) > 0.55f) { cr = 245; cg = 245; cb = 238; }
+                if (d2 < 0.2116f) {
+                    cr = cg = cb = 248;
+                    if (digitInk(id, u / 0.46f, v / 0.46f)) cr = cg = cb = 20;
+                }
+            }
+            dif = u*LX + v*LY + nz*LZ;
+            if (dif < 0) dif = 0;
+            lum = 0.38f + 0.68f * dif;
+            sp = u*hx + v*hy + nz*hz;
+            if (sp < 0) sp = 0;
+            s2 = sp*sp; s4 = s2*s2; s8 = s4*s4; s16 = s8*s8; s32 = s16*s16;
+            sp = s32 * s16 * s2 * 0.9f;
+            cr = cr*lum + sp*255.0f; cg = cg*lum + sp*255.0f; cb = cb*lum + sp*255.0f;
+            if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
+            ar += cr; ag += cg; ab += cb; cov++;
+        }
+        if (cov > 0) {
+            u32 a = (u32)(cov * 128 / (S * S));
+            atlas[(oy + py) * ATLAS_W + ox + px] =
+                (u32)(ar / cov) | ((u32)(ag / cov) << 8) | ((u32)(ab / cov) << 16) | (a << 24);
+        } else atlas[(oy + py) * ATLAS_W + ox + px] = 0;
+    }
+}
+
+static void initBallTex(void)
+{
+    int i;
+    for (i = 0; i < 16; i++) renderBall(i, (i % 4) * 32, (i / 4) * 32);
+    memset(&ballTex, 0, sizeof(ballTex));
+    ballTex.Width = ATLAS_W; ballTex.Height = ATLAS_W;
+    ballTex.PSM = GS_PSM_CT32;
+    ballTex.Mem = (void *)atlas;
+    ballTex.Filter = GS_FILTER_LINEAR;
+    ballTex.Vram = gsKit_vram_alloc(g, gsKit_texture_size(ATLAS_W, ATLAS_W, GS_PSM_CT32),
+                                    GSKIT_ALLOC_USERBUFFER);
+    if (ballTex.Vram == GSKIT_ALLOC_ERROR) return;
+    gsKit_texture_upload(g, &ballTex);
+    useTex = 1;
+}
+
 static void drawBallAt(int i, float x, float y, float r)
 {
-    int id = (i > 8) ? i - 8 : i;
-    if (i == 0 || i > 8) {
-        disc(x, y, r, COL(250,250,250));
-        if (i > 8) rect(x-r*0.85f, y-r*0.5f, x+r*0.85f, y+r*0.5f,
-                        COL(BC[id][0], BC[id][1], BC[id][2]));
-    } else {
-        disc(x, y, r, COL(BC[i][0], BC[i][1], BC[i][2]));
-        if (i != 8) disc(x, y, r*0.38f, COL(250,250,250));
-    }
+    float h = r * 16.0f / 15.0f;
+    int col = i % 4, row = i / 4;
+    if (!useTex) { drawBallVec(i, x, y, r); return; }
+    gsKit_prim_sprite_texture(g, &ballTex,
+        x - h + OX, y - h + OY, col * 32.0f, row * 32.0f,
+        x + h + OX, y + h + OY, (col + 1) * 32.0f, (row + 1) * 32.0f,
+        1, COL(0x80, 0x80, 0x80));
 }
 
 /* ---------- logica ---------- */
@@ -424,6 +593,8 @@ static void draw(void)
         return;
     }
     drawTable();
+    if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
+    else for (i = 1; i < 16; i++) drawShadow(i);
     for (i = 1; i < 16; i++) if (b[i].in) drawBallAt(i, b[i].x, b[i].y, R);
     if (b[0].in) {
         if (state == S_PLACE) {
@@ -458,7 +629,7 @@ int main(void)
     padPortOpen(0, 0, padbuf0);
     padPortOpen(1, 0, padbuf1);
 
-    g = gsKit_init_global_custom(192 * 1024, 256 * 1024);
+    g = gsKit_init_global_custom(384 * 1024, 256 * 1024);
     g->ZBuffering = GS_SETTING_OFF;
     g->DoubleBuffering = GS_SETTING_ON;
     g->PrimAlphaEnable = GS_SETTING_ON;
@@ -471,6 +642,9 @@ int main(void)
     gsKit_set_primalpha(g, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
     fm = gsKit_init_fontm();
     gsKit_fontm_upload(g, fm);
+#if USE_TEXTURE_BALLS
+    initBallTex();
+#endif
     OX = (g->Width  - 640) / 2.0f; if (OX < 0) OX = 0;
     OY = (g->Height - 448) / 2.0f; if (OY < 0) OY = 0;
 
