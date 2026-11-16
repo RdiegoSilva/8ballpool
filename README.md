@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.2.0
+- Versão: 1.3.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR e CRÉDITOS
@@ -61,11 +61,23 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
 
 ## Pausa (START)
-Continuar, **Som**, **Música**, **Volume**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas, Reiniciar partida e Menu principal.
-Obs.: o jogo ainda não tem áudio; as opções de som, música e volume já ficam salvas no menu.
+Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas, Reiniciar partida e Menu principal.
+Obs.: os sons dos efeitos (tacadas, caçapas) ainda não existem; a opção **Som** já fica salva no menu.
+
+## Música durante a partida
+O jogo toca as suas músicas enquanto você joga (toca sozinho ao abrir, em ordem aleatória, e segue para a próxima faixa).
+- Formatos: **MP3** e **WAV** (PCM 8/16 bits). Nomes de arquivo ficam em maiúsculas e sem acentos na tela
+- Onde colocar: uma pasta **MUSIC** (ou MUSICA, MUSICAS, MP3) na raiz do pen drive / HD externo USB, ou uma pasta **MUSIC** ao lado do `pool8.elf`. Subpastas (até 2 níveis) também são lidas. No PCSX2 também vale a pasta `host:MUSIC`
+- Se a pasta não existir, o jogo procura direto na raiz do pen drive
+- O USB demora alguns segundos para aparecer: o jogo tenta sozinho por cerca de 30 segundos. Também dá para apertar TRIÂNGULO na tela do player
+- START → **Player de músicas**: CIMA/BAIXO escolhe, X toca, QUADRADO pausa/continua, L1/R1 faixa anterior/próxima, ESQ/DIR volume, TRIÂNGULO procura de novo
+- Ao trocar de faixa aparece o nome no topo da tela
+- HD interno da PS2 e rede (SMB) ainda não são lidos
 
 ## Compilar
 ```
 make
 ```
 Gera `pool8.elf` (requer PS2SDK e gsKit; rode no PCSX2 ou no PS2).
+O player de músicas usa audsrv, fileXio, USB (BDM) e o decodificador MP3 minimp3 (domínio público, já incluso em `minimp3.h`). Os módulos `.irx` do PS2SDK são embutidos no `.elf` pelo Makefile.
+Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.

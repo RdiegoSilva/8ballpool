@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "music.h"
 
 #define R     8.0f
 #define TX0   70.0f
@@ -112,7 +113,7 @@ static const CueDef CUES[NCUES] = {
     { "SNIPER",     40,  10, 100, 100, {235, 60, 55}, { 96,104, 92}, { 38, 44, 36}, {255, 70, 60}, { 18, 22, 18} },
 };
 
-#define GAME_VERSION "1.2.0"
+#define GAME_VERSION "1.3.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1983,9 +1984,10 @@ static void drawMenuScreen(void)
 
 /* ---------- pausa (START) ---------- */
 static int paused, pauseSel, pauseView;          /* pauseView: 0 = lista, 1 = controles e dicas */
-enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+static int plSel;                                /* cursor da lista de musicas */
 
-static void pauseOpen(void) { paused = 1; pauseSel = 0; pauseView = 0; }
+static void pauseOpen(void) { paused = 1; pauseSel = 0; pauseView = 0; plSel = musicCur() > 0 ? musicCur() : 0; }
 
 static void pauseInput(u32 pr)
 {
@@ -1994,16 +1996,32 @@ static void pauseInput(u32 pr)
         if (pr & (PAD_CROSS | PAD_CIRCLE | PAD_START)) pauseView = 0;
         return;
     }
+    if (pauseView == 2) {                            /* player de musicas */
+        int n = musicCount();
+        if (pr & (PAD_CIRCLE | PAD_START)) { pauseView = 0; return; }
+        if (n > 0) {
+            if (pr & PAD_UP)   plSel = (plSel + n - 1) % n;
+            if (pr & PAD_DOWN) plSel = (plSel + 1) % n;
+            if (pr & PAD_CROSS)    { musOn = 1; musicSetEnabled(1); musicPlay(plSel); }
+            if (pr & PAD_SQUARE)   { musicToggle(); musOn = (musicState() == 1); }
+            if (pr & PAD_L1)       { musicNext(-1); plSel = musicCur() >= 0 ? musicCur() : plSel; }
+            if (pr & PAD_R1)       { musicNext(1);  plSel = musicCur() >= 0 ? musicCur() : plSel; }
+        }
+        if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); }
+        if (pr & PAD_TRIANGLE) { musicScan(); plSel = 0; }
+        return;
+    }
     if (pr & PAD_UP)   pauseSel = (pauseSel + NPI - 1) % NPI;
     if (pr & PAD_DOWN) pauseSel = (pauseSel + 1) % NPI;
     if (pr & (PAD_START | PAD_CIRCLE)) { paused = 0; return; }
     switch (pauseSel) {
     case PI_SND:     if (tog) sndOn = !sndOn; break;
-    case PI_MUS:     if (tog) musOn = !musOn; break;
-    case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; } break;
+    case PI_MUS:     if (tog) { musOn = !musOn; musicSetEnabled(musOn); } break;
+    case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case PI_FX:      if (tog) fxOn = !fxOn; break;
     case PI_TIPS:    if (tog) tipsOn = !tipsOn; break;
     case PI_RESUME:  if (pr & PAD_CROSS) paused = 0; break;
+    case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
     case PI_CTRL:    if (pr & PAD_CROSS) pauseView = 1; break;
     case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; newGame(mode); } break;
     case PI_MENU:    if (pr & PAD_CROSS) { paused = 0; menuInit(); state = S_MENU; } break;
@@ -2012,12 +2030,47 @@ static void pauseInput(u32 pr)
 
 static void drawPause(void)
 {
-    static const char *LB[NPI] = { "CONTINUAR", "SOM", "MUSICA", "VOLUME", "EFEITOS", "DICAS NA TELA",
-                                   "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
+    static const char *LB[NPI] = { "CONTINUAR", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA",
+                                   "PLAYER DE MUSICAS", "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
     char buf[32];
     int i;
     rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x58, 0x00));
 
+    if (pauseView == 2) {                            /* player de musicas */
+        int n = musicCount(), top, rows = 8;
+        char b[96];
+        hbox(60, 14, 580, 434, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x88));
+        textC(22, 0.7f, COL(255,215,70), "MUSICAS");
+        rect(180, 56, 460, 58, CA(255,215,60,0x50));
+        snprintf(b, sizeof b, "%s   VOLUME %d%%", musicStatus(), volLvl * 10);
+        textC(66, 0.34f, COL(150,220,255), b);
+        if (musicSource()[0]) { snprintf(b, sizeof b, "PASTA: %s", musicSource()); textC(82, 0.28f, COL(140,150,165), b); }
+        if (n == 0) {
+            textC(150, 0.4f, COL(255,235,170), "COLOQUE SUAS MUSICAS (MP3 OU WAV)");
+            textC(176, 0.4f, COL(255,235,170), "NA PASTA MUSIC DO PEN DRIVE OU HD USB");
+            textC(202, 0.4f, COL(255,235,170), "(OU AO LADO DO JOGO, EM UMA PASTA MUSIC)");
+            textC(240, 0.34f, COL(190,200,215), "ESPERE UNS SEGUNDOS E APERTE TRIANGULO PARA PROCURAR");
+        } else {
+            int i;
+            top = plSel - rows / 2; if (top > n - rows) top = n - rows; if (top < 0) top = 0;
+            for (i = 0; i < rows && top + i < n; i++) {
+                int k = top + i;
+                float y = 100.0f + i * 30.0f;
+                u64 tc = (k == plSel) ? COL(255,240,150) : COL(175,185,195);
+                if (k == plSel) rect(76, y - 5, 564, y + 22, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+                if (k == musicCur() && musicState() == 1) tri(82, y + 1, 82, y + 15, 93, y + 8, COL(90,255,130));
+                else if (k == musicCur()) rect(82, y + 1, 90, y + 15, COL(255,200,70));
+                snprintf(b, sizeof b, "%d. %s", k + 1, musicName(k));
+                text(104, y, 0.45f, tc, b);
+            }
+            snprintf(b, sizeof b, "%d / %d", plSel + 1, n);
+            text(564 - tw(0.3f, b), 346, 0.3f, COL(140,150,165), b);
+        }
+        textC(372, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: TOCAR   QUADRADO: PAUSAR/CONTINUAR");
+        textC(390, 0.3f, COL(170,180,195), "L1/R1: ANTERIOR/PROXIMA   ESQ/DIR: VOLUME   TRIANGULO: PROCURAR DE NOVO");
+        textC(408, 0.3f, COL(170,180,195), "O / START: VOLTAR");
+        return;
+    }
     if (pauseView == 1) {
         static const char *L[] = {
             "ESQ/DIR: GIRAR A MIRA        L1/R1: AJUSTE FINO",
@@ -2047,11 +2100,11 @@ static void drawPause(void)
     textC(30, 0.7f, COL(255,215,70), "PAUSADO");
     rect(180, 62, 460, 64, CA(255,215,60,0x50));
     for (i = 0; i < NPI; i++) {
-        float y = 78.0f + i * 33.0f, bob = 4.0f * sinf(menuT * 0.2f);
+        float y = 74.0f + i * 29.5f, bob = 4.0f * sinf(menuT * 0.2f);
         int sel = (i == pauseSel), hasVal = 1;
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
         if (sel) {
-            rect(138, y - 6, 502, y + 23, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+            rect(138, y - 5, 502, y + 22, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
             tri(144 + bob, y + 1, 144 + bob, y + 15, 155 + bob, y + 8, COL(255,230,60));
         }
         text(166, y, 0.5f, tc, LB[i]);
@@ -2065,8 +2118,10 @@ static void drawPause(void)
         }
         if (hasVal) text(494 - tw(0.5f, buf), y, 0.5f, COL(255,255,255), buf);
     }
-    if (pauseSel == PI_SND || pauseSel == PI_MUS || pauseSel == PI_VOL)
-        textC(386, 0.3f, COL(255,190,120), "AUDIO EM BREVE: A OPCAO JA FICA SALVA");
+    if (pauseSel == PI_SND)
+        textC(376, 0.3f, COL(255,190,120), "SONS DOS EFEITOS EM BREVE: A OPCAO JA FICA SALVA");
+    else if (pauseSel == PI_MUS || pauseSel == PI_VOL || pauseSel == PI_PLAYER)
+        textC(376, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
     textC(404, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   START/O: CONTINUAR");
 }
 
@@ -2105,6 +2160,11 @@ static void draw(void)
     }
     drawHUD();
     if (state == S_CUES) drawCueMenu();
+    if (!paused && musicToast()) {
+        char tb[80];
+        snprintf(tb, sizeof tb, "MUSICA: %s", musicToast());
+        textC(14, 0.32f, COL(190,220,255), tb);
+    }
     if (paused) drawPause();
     if (state == S_OVER) {
         int *w = mode == 0 ? winsBot : winsVs;
@@ -2122,7 +2182,7 @@ static void draw(void)
 }
 
 /* ---------- main ---------- */
-int main(void)
+int main(int argc, char *argv[])
 {
     u32 in, prev = 0, pressed, p0, p1;
     int i;
@@ -2133,6 +2193,8 @@ int main(void)
     padInit(0);
     padPortOpen(0, 0, padbuf0);
     padPortOpen(1, 0, padbuf1);
+    musicInit(argc > 0 ? argv[0] : NULL);          /* player de musicas (USB / pasta do jogo) */
+    musicSetVolume(volLvl);
 
     g = gsKit_init_global_custom(384 * 1024, 256 * 1024);
     g->ZBuffering = GS_SETTING_OFF;
@@ -2155,6 +2217,7 @@ int main(void)
     menuInit();
 
     for (;;) {
+        musicUpdate();
         p0 = readpad(0);
         p1 = (mode == 1 || state == S_MENU || state == S_SETUP || state == S_NAME) ? readpad(1) : 0;
         if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME) in = p0 | p1;
