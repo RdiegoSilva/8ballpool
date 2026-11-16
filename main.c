@@ -53,6 +53,9 @@ static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhid
 static int colSel[2] = { 1, 2 };                 /* cores das bolas no modo brasileiro */
 static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
 static int takeList[16], takeN, takeSel;         /* bolas que podem ser tiradas apos uma falta (brasileira) */
+static int timeSel, turnT, turnCur = -1, turnReset = 1;   /* tempo por jogada (versus): 0 = sem tempo */
+static const int TIME_SEC[5] = { 0, 15, 20, 25, 30 };
+#define NTIMES 5
 static char overNote[48];                         /* motivo do fim de jogo */
 static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
@@ -561,6 +564,7 @@ static void newGame(int m)
     cur = 0; ang = 0; pwr = 0;
     charging = 0; breakShot = (gmode == GM_8BALL); botTimer = 0; botPlanned = 0; state = S_AIM;
     spinSel = spinCur = 0; barDir = 1.0f;
+    turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
 }
@@ -775,7 +779,8 @@ static void botTakePick(void)                       /* o bot tira a propria bola
    - vence quem encacapar as 4 bolas da sua cor primeiro; encacapou a sua sem falta, joga de novo
    - nao acertar a sua bola primeiro (acertar a do adversario ou nenhuma): o adversario tira
      uma das PROPRIAS bolas da mesa e joga
-   - suicidio (branca na cacapa): derrota na hora */
+   - suicidio (branca na cacapa): derrota na hora
+   - meteu a ultima bola da sua cor COM falta: perde, mesmo que o adversario ainda tenha as 4 bolas */
 static void resolveBR(void)
 {
     int i, foul, own = 0, mine, theirs;
@@ -790,6 +795,11 @@ static void resolveBR(void)
     for (i = 1; i < 16; i++)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
+    if (foul && mine == 0) {                         /* meteu a ultima bola, mas com falta: perde mesmo assim */
+        strcpy(overNote, firstHit < 0 ? "FALTA: NAO TOCOU NA PROPRIA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO");
+        endGame(1 - cur);
+        return;
+    }
     if (mine == 0 || theirs == 0) { endGame(theirs == 0 ? 1 - cur : cur); return; }
     if (foul) {
         cur = 1 - cur;
@@ -1535,6 +1545,17 @@ static void drawPlayerPanel(int pl)
     text(x1 + 14, y1 + 5, 0.5f, act ? COL(255,235,110) : COL(165,170,180), nm);
     text(x1 + 14, y1 + 23, 0.32f, act ? COL(255,255,255) : COL(130,138,152), gn);
 
+    if (act && timeSel && mode == 1 && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
+        int sec = (turnT + 59) / 60;
+        float fr = (float)turnT / (float)(TIME_SEC[timeSel] * 60);
+        char tb[8];
+        u64 tcol = sec <= 5 ? ((menuT / 8) & 1 ? COL(255,90,80) : COL(255,160,140)) : COL(255,255,255);
+        if (fr < 0) fr = 0; if (fr > 1) fr = 1;
+        sprintf(tb, "%dS", sec);
+        text(x2 - 10 - tw(0.5f, tb), y1 + 21, 0.5f, tcol, tb);
+        rect(x1, y2 + 3, x2, y2 + 7, CA(40, 44, 56, 0x70));
+        rect(x1, y2 + 3, x1 + (x2 - x1) * fr, y2 + 7, sec <= 5 ? COL(255,90,80) : (fr < 0.5f ? COL(255,200,60) : COL(110,230,130)));
+    }
     if (grp[pl] < 0) return;
     for (k = 0; k < nb; k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
@@ -1735,7 +1756,7 @@ static void panel(float x1, float y1, float x2, float y2)
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_MODE, SR_TABLE, SR_C0, SR_C1, SR_GO, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_C0, SR_C1, SR_GO, NSR };
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
 static char nameBuf[12];
 static int nameLen, nameCur;
@@ -1746,6 +1767,7 @@ static int setRows(int *v)                 /* linhas visiveis na tela de configu
     int n = 0;
     v[n++] = SR_OPP;
     if (oppSel == 0) v[n++] = SR_LVL;
+    else             v[n++] = SR_TIME;       /* tempo por jogada so contra outro jogador */
     v[n++] = SR_MODE;
     v[n++] = SR_TABLE;
     if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
@@ -1794,6 +1816,7 @@ static void setupInput(u32 pr)
     switch (row) {
     case SR_OPP:   oppSel = 1 - oppSel; break;
     case SR_LVL:   botLevel = (botLevel + d + NLEVELS) % NLEVELS; break;
+    case SR_TIME:  timeSel = (timeSel + d + NTIMES) % NTIMES; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
     case SR_TABLE: tableSel = (tableSel + d + NTABLES) % NTABLES; break;
     case SR_C0:    cycleColor(0, d); break;
@@ -1825,7 +1848,7 @@ static void nameInput(u32 pr)
 
 static void drawSetupScreen(void)
 {
-    static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "MODO", "MESA",
+    static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
                                     "COR JOGADOR 1", "COR JOGADOR 2", "INICIAR PARTIDA" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
@@ -1859,6 +1882,9 @@ static void drawSetupScreen(void)
         case SR_OPP:   strcpy(buf, oppSel ? "< JOGADOR 2 >" : "< BOT >"); break;
         case SR_LVL:   sprintf(buf, "< %s >", LVL_NAME[botLevel]);
                        vc = COL(LC[botLevel][0], LC[botLevel][1], LC[botLevel][2]); break;
+        case SR_TIME:  if (timeSel) sprintf(buf, "< %d SEGUNDOS >", TIME_SEC[timeSel]);
+                       else strcpy(buf, "< SEM TEMPO >");
+                       vc = timeSel ? COL(255,230,110) : COL(255,255,255); break;
         case SR_MODE:  sprintf(buf, "< %s >", GMN[gmode]); break;
         case SR_TABLE: sprintf(buf, "< %s >", TABLES[tableSel].name); break;
         case SR_C0:    sprintf(buf, "< %s >", BRC_NAME[colSel[0]]); break;
@@ -1881,6 +1907,8 @@ static void drawSetupScreen(void)
     if (v[setSel] == SR_MODE)
         hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA DAS SUAS. BRANCA NA CACAPA: PERDE"
                               : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
+    else if (v[setSel] == SR_TIME)
+        hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
     else
@@ -2473,6 +2501,31 @@ int main(int argc, char *argv[])
             if (pressed & PAD_CROSS) { rs += 7919 + menuT; newGame(mode); }
             else if (pressed & PAD_START) { menuInit(); state = S_MENU; }
             break;
+        }
+
+        /* tempo por jogada (so no versus): passou o tempo, perde a vez */
+        {
+            int inTurn = (state == S_AIM || state == S_PLACE || state == S_TAKE || state == S_CUES);
+            if (!(timeSel && mode == 1)) { turnReset = 1; turnT = -1; }
+            else if (!inTurn) turnReset = 1;
+            else {
+                if (turnReset || cur != turnCur) { turnT = TIME_SEC[timeSel] * 60; turnCur = cur; turnReset = 0; }
+                if (!paused && --turnT <= 0) {
+                    char tb[64];
+                    if (state == S_PLACE || (state == S_CUES && cueRet == S_PLACE)) {   /* bola na mao: deixa a branca num lugar valido */
+                        int tries;
+                        for (tries = 0; tries < 500 && !validPlace(b[0].x, b[0].y); tries++) {
+                            b[0].x = TX0 + R + (rnd() % (int)(TX1 - TX0 - 2*R));
+                            b[0].y = TY0 + R + (rnd() % (int)(TY1 - TY0 - 2*R));
+                        }
+                    }
+                    sprintf(tb, "TEMPO ESGOTADO! %s PERDE A VEZ", pname(cur));
+                    charging = 0; pwr = 0; spinSel = 0;
+                    cur = 1 - cur; state = S_AIM; botTimer = 0; botPlanned = 0;
+                    turnCur = cur; turnT = TIME_SEC[timeSel] * 60;
+                    setmsg(tb);
+                }
+            }
         }
 
         /* animacoes por frame: barra de forca, bolas na cacapa, taco */

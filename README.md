@@ -11,6 +11,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida** (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
   - ADVERSÁRIO: BOT ou JOGADOR 2. Com JOGADOR 2, ao iniciar abre a tela para **digitar o nome** (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 2")
+  - TEMPO POR JOGADA (só contra o JOGADOR 2): SEM TEMPO, 15, 20, 25 ou 30 segundos. O contador e a barra aparecem no painel de quem joga; passou o tempo, **perde a vez**
   - DIFICULDADE (só contra o BOT): FÁCIL, MÉDIO, DIFÍCIL ou PROFISSIONAL
     - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
     - Médio: comportamento padrão
@@ -28,6 +29,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - Encaçapou uma bola sua sem errar? Joga de novo
   - **Errou a sua bola** (tocou primeiro na bola do adversário ou não tocou em nenhuma): o adversário **tira da mesa uma das PRÓPRIAS bolas** (só as da cor dele; Setas escolhem a bola, X tira) e joga em seguida. O bot tira a própria bola mais difícil
   - **Suicídio** (branca na caçapa): quem fez perde na hora
+  - **Meteu a última bola com falta**: se faltava só 1 bola para o jogador e ele a encaçapa tocando primeiro na bola do adversário (ou sem tocar em nada), ele **perde mesmo assim**, ainda que o adversário tenha as 4 bolas na mesa
   - Se a última bola de um jogador sair da mesa (por tacada ou por bola tirada), a partida acaba
 
 ## Placar
