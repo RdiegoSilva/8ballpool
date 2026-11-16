@@ -72,7 +72,8 @@ static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador /
 
 static const float PX[6] = { TX0, TCX, TX1, TX0, TCX, TX1 };
 static const float PY[6] = { TY0, TY0, TY0, TY1, TY1, TY1 };
-static const float PR[6] = { 12.2f, 10.0f, 12.2f, 12.2f, 10.0f, 12.2f };   /* raio das cacapas (menores) */
+static const float PR[6] = { 14.6f, 12.0f, 14.6f, 14.6f, 12.0f, 14.6f };   /* raio das cacapas */
+#define POCK_PULL 450.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 static const u8 BC[15][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
@@ -599,6 +600,7 @@ static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     for (i = 0; i < 16; i++) {
+        int inMouth = 0;
         if (!b[i].in) continue;
         if (i == 0 && spinCur != 0.0f) {          /* efeito: a trajetoria curva */
             float a = spinCur * spinK * dt, c = cosf(a), sn = sinf(a);
@@ -608,13 +610,22 @@ static int stepPhysics(float dt)
         }
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
-            float dx = b[i].x - PX[p], dy = b[i].y - PY[p];
-            if (dx*dx + dy*dy < PR[p]*PR[p]) {
+            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, mouth = PR[p] + R;
+            if (d2 < PR[p]*PR[p]) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; pocketed[i] = 1; break;
             }
+            if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
+                float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
+                inMouth = 1;
+                if (d > 0.001f && toward > 0.0f && POCK_PULL > 0.0f) {   /* so ajuda quem vai em direcao ao buraco */
+                    b[i].vx -= dx / d * POCK_PULL * dt;
+                    b[i].vy -= dy / d * POCK_PULL * dt;
+                }
+            }
         }
         if (!b[i].in) continue;
+        if (inMouth) continue;                            /* sem rebote enquanto esta na boca */
         if (b[i].x < TX0+R) { b[i].x = TX0+R; if (b[i].vx < 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
         if (b[i].x > TX1-R) { b[i].x = TX1-R; if (b[i].vx > 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
         if (b[i].y < TY0+R) { b[i].y = TY0+R; if (b[i].vy < 0) { b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
@@ -692,14 +703,13 @@ static void endGame(int w)
     state = S_OVER;
 }
 
-/* falta na brasileira: o adversario escolhe qualquer bola da mesa e a tira */
+/* falta na brasileira: o adversario tira UMA DAS PROPRIAS bolas da mesa (nunca a do outro) */
 static void takeInit(void)
 {
     int i;
     takeN = 0; takeSel = 0;
-    for (i = 1; i < 16; i++) if (b[i].in) takeList[takeN++] = i;
-    for (i = 0; i < takeN; i++)
-        if (ballGroup(takeList[i]) == grp[cur]) { takeSel = i; break; }   /* comeca numa bola propria */
+    for (i = 1; i < 16; i++)                         /* so as bolas de quem vai tirar (cur) */
+        if (b[i].in && ballGroup(i) == grp[cur]) takeList[takeN++] = i;
 }
 
 static void takeMove(int dx, int dy)
@@ -763,7 +773,7 @@ static void botTakePick(void)                       /* o bot tira a propria bola
 /* regras da sinuca brasileira (4 bolas para cada jogador):
    - vence quem encacapar as 4 bolas da sua cor primeiro; encacapou a sua sem falta, joga de novo
    - nao acertar a sua bola primeiro (acertar a do adversario ou nenhuma): o adversario tira
-     qualquer uma bola da mesa e joga
+     uma das PROPRIAS bolas da mesa e joga
    - suicidio (branca na cacapa): derrota na hora */
 static void resolveBR(void)
 {
@@ -1868,7 +1878,7 @@ static void drawSetupScreen(void)
     }
 
     if (v[setSel] == SR_MODE)
-        hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA BOLA. BRANCA NA CACAPA: PERDE"
+        hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA DAS SUAS. BRANCA NA CACAPA: PERDE"
                               : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
@@ -2082,7 +2092,7 @@ static void drawPause(void)
         static const char *T[] = {
             "A BARRA SOBE E DESCE: APERTE X NO MOMENTO DE MAIS FORCA SO QUANDO PRECISAR",
             "TACO SNIPER: LASER MOSTRA A TACADA INTEIRA COM REBOTES, MAS BATE FRACO",
-            "BRASILEIRA: ERROU A SUA BOLA? O ADVERSARIO TIRA UMA BOLA DA MESA",
+            "BRASILEIRA: ERROU A SUA BOLA? O ADVERSARIO TIRA UMA DAS PROPRIAS BOLAS",
             "BRANCA NA CACAPA NA BRASILEIRA = DERROTA NA HORA"
         };
         hbox(40, 20, 600, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));

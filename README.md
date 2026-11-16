@@ -26,7 +26,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - **Sinuca Brasileira**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, como numa mesa de verdade: 2 bolas juntas no centro da cabeceira de cada jogador e 1 bola em cada tabela comprida
   - Vence quem encaçapar as 4 bolas da sua cor primeiro
   - Encaçapou uma bola sua sem errar? Joga de novo
-  - **Errou a sua bola** (tocou primeiro na bola do adversário ou não tocou em nenhuma): o adversário **tira qualquer uma bola da mesa** (Setas escolhem a bola, X tira) e joga em seguida. O bot tira a própria bola mais difícil
+  - **Errou a sua bola** (tocou primeiro na bola do adversário ou não tocou em nenhuma): o adversário **tira da mesa uma das PRÓPRIAS bolas** (só as da cor dele; Setas escolhem a bola, X tira) e joga em seguida. O bot tira a própria bola mais difícil
   - **Suicídio** (branca na caçapa): quem fez perde na hora
   - Se a última bola de um jogador sair da mesa (por tacada ou por bola tirada), a partida acaba
 
