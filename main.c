@@ -452,7 +452,6 @@ static int isBot(void) { return mode == 0 && cur == 1; }
 static int curCue(void) { return isBot() ? 0 : cueSel[cur]; }
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
-static float cueGuideMax(int c)   { return 40.0f + 2.6f * CUES[c].aim; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
 static float cueBarSpeed(int c)   { return 0.026f - 0.00016f * CUES[c].ctl; }
 
@@ -804,70 +803,149 @@ static void thick(float x1, float y1, float x2, float y2, u64 c)
     line(x1 - nx, y1 - ny, x2 - nx, y2 - ny, c);
 }
 
-/* mira estilo 8 Ball Pool: linha ate a bola fantasma, linha da bola alvo
-   e desvio da bola branca; nas tabelas mostra o rebote.
-   O tamanho da linha depende da "mira" do taco equipado. */
-static void drawGuide(void)
+/* ---- linha de mira: feixes com brilho (3 camadas), sempre ate a bola ---- */
+static u64 CA(int r, int gg, int bb, int a)
 {
-    u64 W = COL(250,250,250), D = COL(190,190,190);
-    float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
-    float tmin = 1e9f, t, gx, gy;
-    float lim = cueGuideMax(curCue()), gs = cueGuideScale(curCue());
-    int i, hit = -1, wall = 0;
+    if (a < 0) a = 0;
+    if (a > 0x80) a = 0x80;
+    return GS_SETREG_RGBAQ(r, gg, bb, a, 0x00);
+}
 
+static void beam(float x1, float y1, float x2, float y2, float w, u64 c)
+{
+    float dx = x2 - x1, dy = y2 - y1, l = sqrtf(dx*dx + dy*dy), nx, ny;
+    if (l < 0.01f) return;
+    nx = -dy / l * w * 0.5f; ny = dx / l * w * 0.5f;
+    quad(x1 + nx, y1 + ny, x2 + nx, y2 + ny, x2 - nx, y2 - ny, x1 - nx, y1 - ny, c);
+}
+
+static void glow(float x1, float y1, float x2, float y2, int a, int r, int gg, int bb)
+{
+    beam(x1, y1, x2, y2, 6.0f, CA(r, gg, bb, a / 8));
+    beam(x1, y1, x2, y2, 3.6f, CA(r, gg, bb, a / 4));
+    beam(x1, y1, x2, y2, 1.8f, CA(r, gg, bb, a));
+}
+
+/* linha que vai sumindo (a0 -> a1) */
+static void glowFade(float x1, float y1, float x2, float y2, int a0, int a1, int r, int gg, int bb)
+{
+    int k;
+    for (k = 0; k < 8; k++) {
+        float u0 = k / 8.0f, u1 = (k + 1) / 8.0f;
+        glow(x1 + (x2-x1)*u0, y1 + (y2-y1)*u0, x1 + (x2-x1)*u1, y1 + (y2-y1)*u1,
+             a0 + (int)((a1 - a0) * (u0 + u1) * 0.5f), r, gg, bb);
+    }
+}
+
+static void ringN(float cx, float cy, float r, float w, int n, u64 c)
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+        beam(cx + cosf(a0)*r, cy + sinf(a0)*r, cx + cosf(a1)*r, cy + sinf(a1)*r, w, c);
+    }
+}
+
+/* primeiro obstaculo no caminho do centro da bola: bola (hit>0) ou tabela (wall) */
+static float castRay(float cx, float cy, float dx, float dy, int ignore, int *hit, int *wall)
+{
+    float tmin = 1e9f, t;
+    int i;
+    *hit = -1; *wall = 0;
     for (i = 1; i < 16; i++) {
         float fx, fy, proj, perp2;
-        if (!b[i].in) continue;
+        if (!b[i].in || i == ignore) continue;
         fx = b[i].x - cx; fy = b[i].y - cy;
         proj = fx*dx + fy*dy;
         if (proj < 0) continue;
         perp2 = fx*fx + fy*fy - proj*proj;
         if (perp2 > 4*R*R) continue;
         t = proj - sqrtf(4*R*R - perp2);
-        if (t < tmin) { tmin = t; hit = i; wall = 0; }
+        if (t < tmin) { tmin = t; *hit = i; *wall = 0; }
     }
-    if (dx > 0.0001f)  { t = (TX1-R-cx)/dx; if (t < tmin) { tmin = t; hit = -1; wall = 1; } }
-    if (dx < -0.0001f) { t = (TX0+R-cx)/dx; if (t < tmin) { tmin = t; hit = -1; wall = 1; } }
-    if (dy > 0.0001f)  { t = (TY1-R-cy)/dy; if (t < tmin) { tmin = t; hit = -1; wall = 2; } }
-    if (dy < -0.0001f) { t = (TY0+R-cy)/dy; if (t < tmin) { tmin = t; hit = -1; wall = 2; } }
+    if (dx >  0.0001f) { t = (TX1-R-cx)/dx; if (t < tmin) { tmin = t; *hit = -1; *wall = 1; } }
+    if (dx < -0.0001f) { t = (TX0+R-cx)/dx; if (t < tmin) { tmin = t; *hit = -1; *wall = 1; } }
+    if (dy >  0.0001f) { t = (TY1-R-cy)/dy; if (t < tmin) { tmin = t; *hit = -1; *wall = 2; } }
+    if (dy < -0.0001f) { t = (TY0+R-cy)/dy; if (t < tmin) { tmin = t; *hit = -1; *wall = 2; } }
     if (tmin < 0) tmin = 0;
+    return tmin;
+}
 
-    if (tmin > lim) {                         /* alvo alem do alcance da linha do taco */
-        int k;
-        for (k = 0; k < 8; k++) {
-            float a0 = R + (lim - R) * k / 8.0f, a1 = R + (lim - R) * (k + 1) / 8.0f;
-            int al = 0x80 - (k > 3 ? (k - 3) * 0x16 : 0);
-            thick(cx + dx*a0, cy + dy*a0, cx + dx*a1, cy + dy*a1, GS_SETREG_RGBAQ(250,250,250,al,0x00));
-        }
-        return;
+static int nearPocket(float x, float y)
+{
+    int k;
+    for (k = 0; k < 6; k++) {
+        float ex = x - PX[k], ey = y - PY[k];
+        if (ex*ex + ey*ey < (PR[k] + 4.0f) * (PR[k] + 4.0f)) return k;
     }
+    return -1;
+}
 
-    gx = cx + dx*tmin; gy = cy + dy*tmin;
-    thick(cx + dx*R, cy + dy*R, gx - dx*R, gy - dy*R, W);
-    ring(gx, gy, R, W);
-    ring(gx, gy, R - 0.7f, W);
+/* mira estilo 8 Ball Pool: a linha SEMPRE chega ate a bola fantasma (ou ate a
+   tabela, quando quica ate 2 vezes). Depois do impacto mostra o caminho da bola
+   alvo e o desvio da branca; o taco (stat "mira") controla o comprimento dessas. */
+static void drawGuide(void)
+{
+    float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
+    float gs = cueGuideScale(curCue());
+    int seg;
 
-    if (hit > 0) {
-        float nx = b[hit].x - gx, ny = b[hit].y - gy, nl = sqrtf(nx*nx + ny*ny);
-        float dot, tx, ty, tl, L;
-        if (nl < 0.01f) return;
-        nx /= nl; ny /= nl;
-        dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
-        /* caminho da bola alvo */
-        L = (35.0f + 110.0f * dot) * gs;
-        thick(b[hit].x + nx*R, b[hit].y + ny*R,
-              b[hit].x + nx*(R + L), b[hit].y + ny*(R + L), W);
-        /* desvio da bola branca */
-        tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
-        if (tl > 0.05f) {
-            tx /= tl; ty /= tl;
-            L = (18.0f + 60.0f * tl) * gs;
-            thick(gx + tx*R, gy + ty*R, gx + tx*(R + L), gy + ty*(R + L), D);
+    for (seg = 0; seg < 3; seg++) {
+        int hit, wall, al = seg == 0 ? 0x7c : (seg == 1 ? 0x5c : 0x40);
+        float t = castRay(cx, cy, dx, dy, -1, &hit, &wall);
+        float gx = cx + dx*t, gy = cy + dy*t;
+        float sx = cx + (seg == 0 ? dx*R : 0), sy = cy + (seg == 0 ? dy*R : 0);
+        float ex = gx - dx*R, ey = gy - dy*R;
+
+        if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, 255, 255, 255);
+        discN(gx, gy, R, CA(255, 255, 255, 0x12), 20);
+        ringN(gx, gy, R,        1.6f, 28, CA(255, 255, 255, al));
+        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(255, 255, 255, al / 2));
+
+        if (hit > 0) {
+            float nx = b[hit].x - gx, ny = b[hit].y - gy, nl = sqrtf(nx*nx + ny*ny);
+            float dot, tx, ty, tl, L, tmax;
+            int h2, w2, pk;
+            if (nl < 0.01f) return;
+            nx /= nl; ny /= nl;
+            dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
+
+            /* caminho da bola alvo: ate a tabela/outra bola, destacando cacapa */
+            L = (70.0f + 230.0f * dot) * gs;
+            tmax = castRay(b[hit].x, b[hit].y, nx, ny, hit, &h2, &w2);
+            if (L >= tmax - 0.5f) {
+                L = tmax;
+                if (h2 < 0) {
+                    pk = nearPocket(b[hit].x + nx*L, b[hit].y + ny*L);
+                    if (pk >= 0) {
+                        ringN(PX[pk], PY[pk], PR[pk] + 2.0f, 2.0f, 24, CA(90, 255, 120, 0x78));
+                        ringN(PX[pk], PY[pk], PR[pk] + 5.0f, 1.2f, 24, CA(90, 255, 120, 0x40));
+                    }
+                }
+            }
+            if (L > R) glowFade(b[hit].x + nx*R, b[hit].y + ny*R,
+                                b[hit].x + nx*L,  b[hit].y + ny*L, 0x7c, L >= tmax - 0.5f ? 0x50 : 0x10, 255, 255, 255);
+
+            /* desvio da bola branca */
+            tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
+            if (tl > 0.05f) {
+                tx /= tl; ty /= tl;
+                L = (24.0f + 90.0f * tl) * gs;
+                tmax = castRay(gx, gy, tx, ty, hit, &h2, &w2);
+                if (L > tmax) L = tmax;
+                if (L > R) glowFade(gx + tx*R, gy + ty*R, gx + tx*L, gy + ty*L, 0x60, 0x10, 190, 215, 255);
+            }
+            return;
         }
-    } else if (wall) {
-        float rx = dx, ry = dy;
-        if (wall == 1) rx = -rx; else ry = -ry;
-        thick(gx + rx*R, gy + ry*R, gx + rx*(R + 70*gs), gy + ry*(R + 70*gs), D);
+
+        /* tabela: cacapa encerra; senao quica e continua */
+        if (nearPocket(gx, gy) >= 0) {
+            int pk = nearPocket(gx, gy);
+            ringN(PX[pk], PY[pk], PR[pk] + 2.0f, 2.0f, 24, CA(255, 90, 80, 0x78));
+            return;
+        }
+        if (wall == 1) dx = -dx; else dy = -dy;
+        cx = gx; cy = gy;
     }
 }
 
@@ -937,6 +1015,29 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
     line(ax, ay, bx, by, shadeA(cd->butt, 1.7f, 30, al));
 }
 
+/* largura aproximada do texto da fonte (medida no emulador): ~24.5 px por letra em escala 1 */
+#define FADV 24.5f
+static float tw(float s, const char *t) { return strlen(t) * FADV * s; }
+
+/* caixa do HUD: borda + fundo escuro translucido + brilho no topo */
+static void hbox(float x1, float y1, float x2, float y2, u64 border, u64 fill)
+{
+    rect(x1 - 1.5f, y1 - 1.5f, x2 + 1.5f, y2 + 1.5f, border);
+    rect(x1, y1, x2, y2, fill);
+    rect(x1, y1, x2, y1 + (y2 - y1) * 0.42f, CA(255, 255, 255, 0x07));
+}
+
+/* tecla + descricao; devolve a largura usada */
+static float keycap(float x, float y, const char *k, const char *d, u64 kc, u64 dc)
+{
+    const float s = 0.36f;
+    float kw = tw(s, k) + 12.0f;
+    hbox(x, y, x + kw, y + 17, CA(120, 128, 146, 0x70), CA(38, 42, 56, 0x7c));
+    text(x + 6, y + 4, s, kc, k);
+    text(x + kw + 6, y + 4, s, dc, d);
+    return kw + 6 + tw(s, d);
+}
+
 /* barra de forca vertical no lado esquerdo: ao apertar X ela sobe e desce
    sozinha; X de novo dispara, O cancela. Depois da tacada ela volta a zero. */
 static void drawPowerBar(void)
@@ -963,49 +1064,93 @@ static void drawPowerBar(void)
     for (k = 1; k < 4; k++)
         line(bx + bw + 4, by1 - k * (by1 - by0) / 4, bx + bw + 8, by1 - k * (by1 - by0) / 4,
              COL(190,190,190));
-    text(4, 72, 0.42f, COL(230,230,230), "FORCA");
+    text(5, 58, 0.36f, COL(230,230,230), "FORCA");
     sprintf(buf, "%d%%", (int)(barLevel * 100 + 0.5f));
-    text(8, by1 + 10, 0.42f, COL(255,230,60), buf);
+    text(8, by1 + 12, 0.36f, COL(255,230,60), buf);
 }
 
 /* indicador de efeito (L2/R2): o ponto vermelho mostra o lado do efeito */
 static void drawSpinIndicator(void)
 {
-    const float cx = 22.0f, cy = 402.0f, r = 10.0f;
+    const float cx = 30.0f, cy = 410.0f, r = 10.0f;
     discN(cx, cy, r + 1.5f, COL(60,60,66), 16);
     discN(cx, cy, r, COL(236,236,230), 16);
     line(cx, cy - r, cx, cy + r, COL(190,190,184));
     line(cx - r, cy, cx + r, cy, COL(190,190,184));
     discN(cx + spinSel * (r - 3.5f), cy, 2.8f, COL(215,40,40), 8);
-    text(2, 416, 0.34f, COL(220,220,220), "EFEITO");
+    text(8, 424, 0.3f, COL(200,200,205), "EFEITO");
+}
+
+/* painel de cada jogador (topo): nome, grupo e as bolas que ainda restam */
+static void drawPlayerPanel(int pl)
+{
+    float x1 = pl == 0 ? 70.0f : 348.0f, x2 = x1 + 250.0f, y1 = 6.0f, y2 = 64.0f;
+    int act = (pl == cur), i, k;
+    const char *nm = (pl == 1 && mode == 0) ? "BOT" : (pl == 0 ? "JOGADOR 1" : "JOGADOR 2");
+    const char *gn = grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS");
+
+    hbox(x1, y1, x2, y2, act ? CA(255, 215, 60, 0x7c) : CA(70, 78, 96, 0x60),
+         act ? CA(44, 38, 10, 0x74) : CA(8, 12, 22, 0x68));
+    rect(x1, y1, x1 + 5, y2, act ? COL(255,215,60) : COL(70,78,96));
+    text(x1 + 14, y1 + 6, 0.5f, act ? COL(255,235,110) : COL(165,170,180), nm);
+    text(x2 - 8 - tw(0.34f, gn), y1 + 10, 0.34f, act ? COL(255,255,255) : COL(130,138,152), gn);
+    rect(x1 + 14, y1 + 25, x2 - 8, y1 + 26, act ? CA(255, 215, 60, 0x50) : CA(120, 128, 146, 0x30));
+
+    if (grp[pl] < 0) return;
+    for (k = 0; k < 7; k++) {
+        int id = grp[pl] == 0 ? k + 1 : k + 9;
+        float bx = x1 + 26 + k * 28.0f, by = y1 + 42.0f;
+        if (b[id].in) drawBallAt(id, bx, by, 7.0f);
+        else          ring(bx, by, 6.0f, COL(70,76,90));
+    }
+    if (countGroup(grp[pl]) == 0) {                   /* so falta a bola 8 */
+        drawBallAt(8, x1 + 26 + 7 * 28.0f, y1 + 42.0f, 7.0f);
+        (void)i;
+    }
 }
 
 static void drawHUD(void)
 {
-    char buf[64];
-    int pl, i;
-    sprintf(buf, "JOGADOR 1%s", ""); 
-    for (pl = 0; pl < 2; pl++) {
-        float x = pl == 0 ? 70 : 400;
-        const char *nm = (pl == 1 && mode == 0) ? "BOT" : (pl == 0 ? "JOGADOR 1" : "JOGADOR 2");
-        const char *gn = grp[pl] < 0 ? "" : (grp[pl] == 0 ? " (LISAS)" : " (LISTRADAS)");
-        sprintf(buf, "%s%s", nm, gn);
-        text(x, 38, 0.6f, pl == cur ? COL(255,230,60) : COL(160,160,160), buf);
-        if (pl == cur) rect(x, 62, x + 160, 65, COL(255,230,60));
-        if (grp[pl] >= 0) {
-            int k = 0;
-            for (i = 1; i < 16; i++)
-                if (ballGroup(i) == grp[pl] && !b[i].in) {
-                    drawBallAt(i, x + 8 + k*17, 420, 7); k++;
-                }
-        }
-    }
-    if (msgTimer > 0) { msgTimer--; text(150, 80, 0.55f, COL(255,255,255), msg); }
+    float x;
+    int pl;
+    for (pl = 0; pl < 2; pl++) drawPlayerPanel(pl);
+
     drawPowerBar();
     drawSpinIndicator();
+
+    /* barra inferior: mensagem + teclas + taco equipado */
+    hbox(70, 396, 598, 443, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x70));
+    if (msgTimer > 0) {
+        msgTimer--;
+        text(334 - tw(0.42f, msg) * 0.5f, 401, 0.42f, COL(255,235,110), msg);
+    }
+
+    x = 80.0f;
     if (state == S_AIM && !isBot()) {
-        if (charging) text(210, 396, 0.45f, COL(255,230,60), "X: DISPARAR   O: CANCELAR");
-        else text(150, 396, 0.4f, COL(200,200,200), "X: FORCA   L2/R2: EFEITO   SELECT: TACOS");
+        if (charging) {
+            x += keycap(x, 421, "X", "DISPARAR", COL(255,230,60), COL(235,235,240)) + 16;
+            keycap(x, 421, "O", "CANCELAR", COL(255,230,60), COL(235,235,240));
+        } else {
+            x += keycap(x, 421, "X", "FORCA", COL(255,230,60), COL(235,235,240)) + 14;
+            x += keycap(x, 421, "L2/R2", "EFEITO", COL(255,230,60), COL(235,235,240)) + 14;
+            keycap(x, 421, "SELECT", "TACOS", COL(255,230,60), COL(235,235,240));
+        }
+    } else if (state == S_PLACE && !isBot()) {
+        x += keycap(x, 421, "SETAS", "MOVER", COL(255,230,60), COL(235,235,240)) + 14;
+        keycap(x, 421, "X", "CONFIRMAR", COL(255,230,60), COL(235,235,240));
+    } else if (state == S_AIM || state == S_PLACE) {
+        text(x, 425, 0.4f, COL(170,176,190), "VEZ DO BOT...");
+    } else if (state == S_ROLL || state == S_STRIKE) {
+        text(x, 425, 0.4f, COL(170,176,190), "AGUARDE AS BOLAS PARAREM...");
+    }
+
+    if (state == S_AIM || state == S_CUES) {
+        const CueDef *cd = &CUES[curCue()];
+        char buf[40];
+        sprintf(buf, "TACO: %s", cd->name);
+        rect(590 - tw(0.36f, buf) - 16, 424, 590 - tw(0.36f, buf) - 8, 432,
+             COL(cd->tip[0], cd->tip[1], cd->tip[2]));
+        text(590 - tw(0.36f, buf), 423, 0.36f, COL(205,210,220), buf);
     }
 }
 
@@ -1231,11 +1376,13 @@ static void draw(void)
     drawHUD();
     if (state == S_CUES) drawCueMenu();
     if (state == S_OVER) {
-        rect(120, 150, 520, 290, COL(0,0,0));
+        rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x40, 0x00));
+        hbox(120, 150, 520, 290, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
         sprintf(buf, "%s VENCEU!", (winner == 1 && mode == 0) ? "BOT" :
                 (winner == 0 ? "JOGADOR 1" : "JOGADOR 2"));
-        text(180, 190, 0.9f, COL(255,230,60), buf);
-        text(180, 250, 0.5f, COL(220,220,220), "START: VOLTAR AO MENU");
+        text(320 - tw(0.7f, buf) * 0.5f, 185, 0.7f, COL(255,230,60), buf);
+        rect(160, 232, 480, 234, CA(255, 215, 60, 0x50));
+        text(320 - tw(0.42f, "START: VOLTAR AO MENU") * 0.5f, 252, 0.42f, COL(220,220,225), "START: VOLTAR AO MENU");
     }
 }
 

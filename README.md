@@ -33,7 +33,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
-- Mira: tamanho da linha de mira (no máximo cerca de 60% da mesa, e ela some aos poucos no fim)
+- Mira: comprimento das linhas depois do impacto (bola alvo e desvio da branca). A linha até a bola sempre aparece inteira, com até 2 rebotes nas tabelas; a caçapa de destino da bola alvo fica verde
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
 
 ## Compilar
