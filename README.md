@@ -2,9 +2,17 @@
 
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
-## Modos
-- 1 jogador (contra o BOT)
-- 2 jogadores (dois controles)
+- Criador: Diego Reis
+- Versão: 1.0.0
+
+## Menu inicial (animado)
+- 1 JOGADOR (VS BOT), 2 JOGADORES, DIFICULDADE e CRÉDITOS
+- Cima/Baixo escolhe, X confirma
+- DIFICULDADE: Esquerda/Direita (ou X) troca entre FÁCIL, MÉDIO e DIFÍCIL (vale para o BOT no modo 1 jogador)
+  - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
+  - Médio: comportamento padrão
+  - Difícil: mira quase perfeita e responde rápido
+- CRÉDITOS: mostra o criador e a versão do jogo
 
 ## Controles
 - Esquerda/Direita: girar a mira | L1/R1: ajuste fino
@@ -25,7 +33,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
-- Mira: tamanho da linha de mira
+- Mira: tamanho da linha de mira (no máximo cerca de 60% da mesa, e ela some aos poucos no fim)
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
 
 ## Compilar
