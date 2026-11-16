@@ -30,7 +30,8 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME };
+enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; } Ball;
 
@@ -47,6 +48,9 @@ static int cur, grp[2], breakShot, charging;
 static float ang, pwr;
 static int pocketed[16], firstHit, gAtStart, startOwnLeft;
 static int winner, botTimer, botPlanned;
+static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhidos */
+static int colSel[2] = { 0, 1 };                 /* cores das bolas no modo brasileiro */
+static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
 static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
 static char msg[64];
@@ -71,6 +75,18 @@ static const u8 BC[9][3] = {
     {255,255,255}, {240,200,20}, {30,60,200}, {210,30,30}, {120,40,150},
     {240,120,20},  {20,140,60},  {130,20,30}, {15,15,15}
 };
+
+/* cores escolhaveis no modo brasileiro (indice em BC) */
+static const int   BRC[6]      = { 2, 3, 1, 6, 4, 5 };
+static const char *BRC_NAME[6] = { "AZUL", "VERMELHA", "AMARELA", "VERDE", "ROXA", "LARANJA" };
+
+/* estilo de cada bola: cor (indice em BC), listra e numero (mudam no modo brasileiro) */
+static int skinCol[16], skinStripe[16], skinNum[16], skinKey = 0;
+static void skinDefaults(void)
+{
+    int i;
+    for (i = 0; i < 16; i++) { skinCol[i] = i > 8 ? i - 8 : i; skinStripe[i] = i > 8; skinNum[i] = i > 0; }
+}
 
 /* tacos: estatisticas de 0 a 100 + cores para o desenho */
 typedef struct {
@@ -196,14 +212,14 @@ static u64 shade(const u8 *c, float f, int add) { return shadeA(c, f, add, 0x80)
 static void drawBallVec(int i, float x, float y, float r)
 {
     static const u8 WHITE[3] = {250,250,250};
-    int id = (i > 8) ? i - 8 : i;
-    const u8 *c = (i == 0 || i > 8) ? WHITE : BC[i];
+    int id = skinCol[i];
+    const u8 *c = (i == 0 || skinStripe[i]) ? WHITE : BC[id];
     float r2 = r * 0.93f;
 
     discN(x, y, r, shade(c, 0.55f, 0), 12);          /* borda escura */
     discN(x, y, r2, shade(c, 1.0f, 0), 12);          /* cor base */
 
-    if (i > 8) {                                      /* listra colorida */
+    if (skinStripe[i]) {                              /* listra colorida */
         static const float DY[5] = {-0.55f, -0.28f, 0.0f, 0.28f, 0.55f};
         int k;
         for (k = 0; k < 4; k++) {
@@ -216,7 +232,7 @@ static void drawBallVec(int i, float x, float y, float r)
         discN(x - r*0.12f, y - r*0.12f, r*0.62f, shade(c, 1.2f, 25), 8); /* luz */
     }
 
-    if (i > 0) drawNumber(i, x, y, r);
+    if (skinNum[i]) drawNumber(i, x, y, r);
 
     discN(x - r*0.38f, y - r*0.40f, r*0.2f, COL(255,255,255), 6);       /* brilho */
 }
@@ -272,17 +288,17 @@ static void renderSkin(int id, int ox, int oy)
             float x = cLat[jj] * cLon[ii], y = sLat[jj], z = cLat[jj] * sLon[ii];
             float cr = 245, cg = 245, cb = 238;
             if (id > 0) {
-                int col = id > 8 ? id - 8 : id;
+                int col = skinCol[id];
                 cr = BC[col][0]; cg = BC[col][1]; cb = BC[col][2];
-                if (id > 8 && fabsf(y) > 0.55f) { cr = 245; cg = 245; cb = 238; }
+                if (skinStripe[id] && fabsf(y) > 0.55f) { cr = 245; cg = 245; cb = 238; }
                 {
                     float d[4]  = { z, x, -z, -x };
                     float gu[4] = { x, -z, -x, z };
                     float gv = -y;
                     for (k = 0; k < 4; k++)
-                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < 0.2116f) {
+                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < (skinNum[id] ? 0.2116f : 0.016f)) {
                             cr = cg = cb = 248;
-                            if (digitInk(id, gu[k] / 0.46f, gv / 0.46f)) cr = cg = cb = 20;
+                            if (skinNum[id] && digitInk(id, gu[k] / 0.46f, gv / 0.46f)) cr = cg = cb = 20;
                             break;
                         }
                 }
@@ -297,6 +313,7 @@ static void renderSkin(int id, int ox, int oy)
 static void initBallTex(void)
 {
     int i, a, c;
+    skinDefaults();
     for (i = 0; i < SKW * SS; i++) {
         float l = (i + 0.5f) / (SKW * SS) * 6.2831853f;
         cLon[i] = cosf(l); sLon[i] = sinf(l);
@@ -330,6 +347,24 @@ static void initBallTex(void)
     if (ballTex.Vram == GSKIT_ALLOC_ERROR) return;
     gsKit_texture_upload(g, &ballTex);
     useTex = 1;
+}
+
+/* muda o visual das bolas (modo brasileiro: bolas lisas sem numero, na cor de cada jogador) */
+static void setSkins(int br)
+{
+    int i, k, key = br ? 1 + colSel[0] * 6 + colSel[1] : 0;
+    if (key == skinKey) return;
+    skinKey = key;
+    skinDefaults();
+    if (br)
+        for (k = 0; k < 4; k++) {
+            skinCol[1 + k] = BRC[colSel[0]]; skinStripe[1 + k] = 0; skinNum[1 + k] = 0;
+            skinCol[9 + k] = BRC[colSel[1]]; skinStripe[9 + k] = 0; skinNum[9 + k] = 0;
+        }
+    if (useTex) {
+        for (i = 1; i < 16; i++) renderSkin(i, (i % 4) * SKW, (i / 4) * SKH);
+        gsKit_texture_upload(g, &ballTex);
+    }
 }
 
 /* orientacao inicial da bola (giro aleatorio ao redor do eixo Z) */
@@ -450,6 +485,7 @@ static int countGroup(int gr)
 
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
+static const char *pname(int pl) { return (pl == 1 && mode == 0) ? "BOT" : pnames[pl]; }
 static int curCue(void) { return isBot() ? 0 : cueSel[cur]; }
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
@@ -471,12 +507,32 @@ static void rack(void)
         }
 }
 
+/* modo brasileiro: branca no meio e 4 bolas de cada jogador espalhadas pela mesa */
+static void rackBR(void)
+{
+    static const float LP0[4][2] = { {0.20f,0.22f}, {0.26f,0.19f}, {0.10f,0.66f}, {0.46f,0.17f} };
+    static const float LP1[4][2] = { {0.73f,0.30f}, {0.89f,0.72f}, {0.84f,0.81f}, {0.40f,0.84f} };
+    int i, k;
+    memset(fallT, 0, sizeof(fallT));
+    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 0; resetOrient(i); }
+    b[0].in = 1; b[0].x = TCX; b[0].y = TCY;
+    for (k = 0; k < 4; k++) {
+        b[1 + k].in = 1; b[1 + k].x = TX0 + LP0[k][0] * (TX1 - TX0); b[1 + k].y = TY0 + LP0[k][1] * (TY1 - TY0);
+        b[9 + k].in = 1; b[9 + k].x = TX0 + LP1[k][0] * (TX1 - TX0); b[9 + k].y = TY0 + LP1[k][1] * (TY1 - TY0);
+    }
+}
+
 static void newGame(int m)
 {
-    mode = m; rack(); grp[0] = grp[1] = -1; cur = 0; ang = 0; pwr = 0;
-    charging = 0; breakShot = 1; botTimer = 0; botPlanned = 0; state = S_AIM;
+    char buf[40];
+    mode = m;
+    if (gmode == GM_BR) { rackBR(); grp[0] = 0; grp[1] = 1; }
+    else                { rack();   grp[0] = grp[1] = -1; }
+    cur = 0; ang = 0; pwr = 0;
+    charging = 0; breakShot = (gmode == GM_8BALL); botTimer = 0; botPlanned = 0; state = S_AIM;
     spinSel = spinCur = 0; barDir = 1.0f;
-    setmsg("JOGADOR 1 - QUEBRA");
+    sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
+    setmsg(buf);
 }
 
 static void shoot(float p)
@@ -582,10 +638,49 @@ static int validPlace(float x, float y)
     return 1;
 }
 
+static void endTurn(int foul, int ownPocket)
+{
+    char buf[64];
+    botTimer = 0; botPlanned = 0;
+    if (foul) {
+        if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY; }
+        b[0].vx = b[0].vy = 0;
+        cur = 1 - cur;
+        state = S_PLACE;
+        sprintf(buf, "FALTA! BOLA NA MAO - %s", pname(cur));
+        setmsg(buf);
+    } else {
+        if (!ownPocket) cur = 1 - cur;
+        state = S_AIM;
+        sprintf(buf, "VEZ DE %s", pname(cur));
+        setmsg(buf);
+    }
+}
+
+/* regras do brasileiro: cada um joga nas suas 4 bolas; vence quem encacapa todas as suas.
+   Falta: branca na cacapa, nao tocar bola ou tocar primeiro na bola do adversario. */
+static void resolveBR(void)
+{
+    int i, foul, own = 0, mine, theirs;
+    foul = pocketed[0] || firstHit < 0;
+    if (!foul && ballGroup(firstHit) != grp[cur]) foul = 1;
+    for (i = 1; i < 16; i++)
+        if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
+    mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
+    if (mine == 0 || theirs == 0) {
+        winner = (theirs == 0 || pocketed[0]) ? 1 - cur : cur;
+        (mode == 0 ? winsBot : winsVs)[winner]++;
+        state = S_OVER;
+        return;
+    }
+    endTurn(foul, own);
+}
+
 static void resolve(void)
 {
     int i, foul, ownPocket = 0;
-    char buf[64];
+
+    if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
@@ -609,20 +704,7 @@ static void resolve(void)
         for (i = 1; i < 16; i++)
             if (pocketed[i] && ballGroup(i) == grp[cur]) ownPocket = 1;
 
-    botTimer = 0; botPlanned = 0;
-    if (foul) {
-        if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = HEADX; b[0].y = TCY; }
-        b[0].vx = b[0].vy = 0;
-        cur = 1 - cur;
-        state = S_PLACE;
-        sprintf(buf, "FALTA! BOLA NA MAO - JOGADOR %d", cur + 1);
-        setmsg(buf);
-    } else {
-        if (!ownPocket) cur = 1 - cur;
-        state = S_AIM;
-        if (mode == 0 && cur == 1) setmsg("VEZ DO BOT");
-        else { sprintf(buf, "VEZ DO JOGADOR %d", cur + 1); setmsg(buf); }
-    }
+    endTurn(foul, ownPocket);
 }
 
 /* ---------- BOT ---------- */
@@ -711,45 +793,63 @@ static u32 readpad(int port)
 }
 
 /* ---------- desenho do jogo ---------- */
+typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; } TableDef;
+#define NTABLES 5
+static const TableDef TABLES[NTABLES] = {
+    { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
+    { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
+    { "OCEANO",   { 28, 92,170}, {118, 78, 40}, {236,226,190} },
+    { "VINHO",    {130, 28, 44}, { 70, 38, 22}, {230,210,170} },
+    { "ROYAL",    { 98, 52,150}, { 30, 30, 38}, {230,226,240} },
+};
+static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
+
 static void cushH(float xa, float xb, float yo, float yi)
 {
-    quad(xa - 7, yo, xb + 7, yo, xb, yi, xa, yi, COL(12,84,46));
-    line(xa, yi, xb, yi, COL(48,160,98));
-    line(xa - 7, yo, xb + 7, yo, COL(8,56,30));
+    quad(xa - 7, yo, xb + 7, yo, xb, yi, xa, yi, tcCush);
+    line(xa, yi, xb, yi, tcCushHi);
+    line(xa - 7, yo, xb + 7, yo, tcCushLo);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 7, xo, yb + 7, xi, yb, xi, ya, COL(12,84,46));
-    line(xi, ya, xi, yb, COL(48,160,98));
-    line(xo, ya - 7, xo, yb + 7, COL(8,56,30));
+    quad(xo, ya - 7, xo, yb + 7, xi, yb, xi, ya, tcCush);
+    line(xi, ya, xi, yb, tcCushHi);
+    line(xo, ya - 7, xo, yb + 7, tcCushLo);
 }
 
 static void diamond(float cx, float cy)
 {
-    quad(cx, cy - 3, cx + 3, cy, cx, cy + 3, cx - 3, cy, COL(236,226,190));
+    quad(cx, cy - 3, cx + 3, cy, cx, cy + 3, cx - 3, cy, tcDia);
 }
 
 static void drawTable(void)
 {
+    const TableDef *T = &TABLES[tableSel];
+    u64 w0 = shade(T->wood, 0.36f, 0), w1 = shade(T->wood, 0.80f, 0), w2 = shade(T->wood, 1.0f, 0);
+    u64 whi = shade(T->wood, 1.28f, 14), wlo = shade(T->wood, 0.48f, 0), wgr = shade(T->wood, 0.42f, 0);
+    u64 ga = shade(T->wood, 0.90f, 0), gb = shade(T->wood, 1.10f, 5);
     int p, k;
     float x, y;
+
+    tcCush = shade(T->felt, 0.50f, 0); tcCushHi = shade(T->felt, 1.35f, 12); tcCushLo = shade(T->felt, 0.33f, 0);
+    tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
     /* sombra da mesa no chao */
     rect(TX0 - 22, TY0 - 20, TX1 + 40, TY1 + 42, GS_SETREG_RGBAQ(0, 0, 0, 0x30, 0x00));
 
     /* moldura de madeira em camadas (bisel) */
-    rect(TX0 - 30, TY0 - 30, TX1 + 30, TY1 + 30, COL(44,24,9));
-    rect(TX0 - 28, TY0 - 28, TX1 + 28, TY1 + 28, COL(98,56,25));
-    rect(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, COL(124,74,33));
-    line(TX0 - 28, TY0 - 28, TX1 + 28, TY0 - 28, COL(158,102,50));
-    line(TX0 - 28, TY0 - 28, TX0 - 28, TY1 + 28, COL(158,102,50));
-    line(TX0 - 28, TY1 + 28, TX1 + 28, TY1 + 28, COL(60,33,13));
-    line(TX1 + 28, TY0 - 28, TX1 + 28, TY1 + 28, COL(60,33,13));
+    rect(TX0 - 30, TY0 - 30, TX1 + 30, TY1 + 30, w0);
+    rect(TX0 - 28, TY0 - 28, TX1 + 28, TY1 + 28, w1);
+    rect(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, w2);
+    line(TX0 - 28, TY0 - 28, TX1 + 28, TY0 - 28, whi);
+    line(TX0 - 28, TY0 - 28, TX0 - 28, TY1 + 28, whi);
+    line(TX0 - 28, TY1 + 28, TX1 + 28, TY1 + 28, wlo);
+    line(TX1 + 28, TY0 - 28, TX1 + 28, TY1 + 28, wlo);
 
     /* veios da madeira */
     for (k = 0; k < 4; k++) {
-        u64 gc = (k & 1) ? COL(112,65,28) : COL(136,84,38);
+        u64 gc = (k & 1) ? ga : gb;
         line(TX0 - 24, TY0 - 23 + k*3.4f, TX1 + 24, TY0 - 23 + k*3.4f, gc);
         line(TX0 - 24, TY1 + 13 + k*3.4f, TX1 + 24, TY1 + 13 + k*3.4f, gc);
         line(TX0 - 23 + k*3.4f, TY0 - 24, TX0 - 23 + k*3.4f, TY1 + 24, gc);
@@ -757,13 +857,12 @@ static void drawTable(void)
     }
 
     /* sulco entre a madeira e a borracha */
-    rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, COL(52,29,12));
+    rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, wgr);
 
     /* feltro com leve brilho no centro (luz de cima) */
-    rect(TX0, TY0, TX1, TY1, COL(24,114,68));
+    rect(TX0, TY0, TX1, TY1, shade(T->felt, 1.0f, 0));
     for (k = 1; k < 8; k++)
-        rect(TX0 + k*22, TY0 + k*14, TX1 - k*22, TY1 - k*14,
-             COL(24 + k*2, 114 + k*3, 68 + k*2));
+        rect(TX0 + k*22, TY0 + k*14, TX1 - k*22, TY1 - k*14, shade(T->felt, 1.0f, k * 3));
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY0 - 11, TY0);
@@ -791,9 +890,9 @@ static void drawTable(void)
     }
 
     /* linha da cabeceira e marcas do feltro */
-    line(HEADX, TY0, HEADX, TY1, COL(52,152,96));
-    disc(HEADX, TCY, 2.2f, COL(16,88,52));
-    disc(FOOTX, TCY, 2.2f, COL(16,88,52));
+    line(HEADX, TY0, HEADX, TY1, shade(T->felt, 1.0f, 34));
+    disc(HEADX, TCY, 2.2f, shade(T->felt, 0.77f, 0));
+    disc(FOOTX, TCY, 2.2f, shade(T->felt, 0.77f, 0));
 }
 
 static void thick(float x1, float y1, float x2, float y2, u64 c)
@@ -1089,8 +1188,11 @@ static void drawPlayerPanel(int pl)
 {
     float x1 = pl == 0 ? 70.0f : 378.0f, x2 = x1 + 220.0f, y1 = 6.0f, y2 = 64.0f;
     int act = (pl == cur), k;
-    const char *nm = (pl == 1 && mode == 0) ? "BOT" : (pl == 0 ? "JOGADOR 1" : "JOGADOR 2");
-    const char *gn = grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS");
+    const char *nm = pname(pl);
+    const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
+                     (grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
+    int nb = gmode == GM_BR ? 4 : 7;
+    float sp = gmode == GM_BR ? 36.0f : 26.0f;
 
     hbox(x1, y1, x2, y2, act ? CA(255, 215, 60, 0x7c) : CA(70, 78, 96, 0x60),
          act ? CA(44, 38, 10, 0x74) : CA(8, 12, 22, 0x68));
@@ -1099,13 +1201,13 @@ static void drawPlayerPanel(int pl)
     text(x1 + 14, y1 + 23, 0.32f, act ? COL(255,255,255) : COL(130,138,152), gn);
 
     if (grp[pl] < 0) return;
-    for (k = 0; k < 7; k++) {
+    for (k = 0; k < nb; k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
-        float bx = x1 + 24 + k * 26.0f, by = y1 + 46.0f;
+        float bx = x1 + 24 + k * sp, by = y1 + 46.0f;
         if (b[id].in) drawBallAt(id, bx, by, 7.0f);
         else          ring(bx, by, 6.0f, COL(70,76,90));
     }
-    if (countGroup(grp[pl]) == 0)                      /* so falta a bola 8 */
+    if (gmode == GM_8BALL && countGroup(grp[pl]) == 0) /* so falta a bola 8 */
         drawBallAt(8, x1 + 24 + 7 * 26.0f, y1 + 46.0f, 7.0f);
 }
 
@@ -1187,7 +1289,7 @@ static void drawCueMenu(void)
     rect(108, 84, 532, 386, COL(84,88,104));
     rect(110, 86, 530, 384, COL(18,20,30));
     rect(110, 86, 530, 116, COL(34,42,70));
-    sprintf(buf, "TACOS - JOGADOR %d", cur + 1);
+    sprintf(buf, "TACOS - %s", pname(cur));
     text(128, 90, 0.6f, COL(255,230,60), buf);
 
     /* foto do taco (palco de feltro) */
@@ -1292,14 +1394,209 @@ static void panel(float x1, float y1, float x2, float y2)
     rect(x1, y1, x2, y2, GS_SETREG_RGBAQ(4, 10, 18, 0x60, 0x00));
 }
 
+/* ---------- configuracao da partida e nome do jogador 2 ---------- */
+enum { SR_OPP, SR_LVL, SR_MODE, SR_TABLE, SR_C0, SR_C1, SR_GO, NSR };
+static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
+static char nameBuf[12];
+static int nameLen, nameCur;
+static const char KBCH[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+static int setRows(int *v)                 /* linhas visiveis na tela de configuracao */
+{
+    int n = 0;
+    v[n++] = SR_OPP;
+    if (oppSel == 0) v[n++] = SR_LVL;
+    v[n++] = SR_MODE;
+    v[n++] = SR_TABLE;
+    if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
+    v[n++] = SR_GO;
+    return n;
+}
+
+static void cycleColor(int pl, int d)      /* cada jogador usa uma cor diferente */
+{
+    int o = colSel[1 - pl];
+    do { colSel[pl] = (colSel[pl] + d + 6) % 6; } while (colSel[pl] == o);
+}
+
+static void startMatch(void)
+{
+    rs += 7919 + menuT;
+    setSkins(gmode == GM_BR);
+    newGame(oppSel);
+}
+
+static void confirmName(void)
+{
+    int n = nameLen;
+    while (n > 0 && nameBuf[n - 1] == ' ') n--;
+    nameBuf[n] = 0; nameLen = n;
+    strcpy(pnames[1], n > 0 ? nameBuf : "JOGADOR 2");
+    startMatch();
+}
+
+static void setupInput(u32 pr)
+{
+    int v[NSR], n = setRows(v), d = 0, row;
+    if (pr & PAD_UP)    setSel = (setSel + n - 1) % n;
+    if (pr & PAD_DOWN)  setSel = (setSel + 1) % n;
+    if (pr & PAD_LEFT)  d = -1;
+    if (pr & PAD_RIGHT) d = 1;
+    if (pr & PAD_CROSS) d = 1;
+    if (pr & PAD_CIRCLE) { state = S_MENU; return; }
+    row = v[setSel];
+    if ((pr & PAD_START) || ((pr & PAD_CROSS) && row == SR_GO)) {
+        if (oppSel == 1) { state = S_NAME; nameCur = 0; }       /* abre a tela para digitar o nome */
+        else startMatch();
+        return;
+    }
+    if (d == 0) return;
+    switch (row) {
+    case SR_OPP:   oppSel = 1 - oppSel; break;
+    case SR_LVL:   botLevel = (botLevel + d + 3) % 3; break;
+    case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
+    case SR_TABLE: tableSel = (tableSel + d + NTABLES) % NTABLES; break;
+    case SR_C0:    cycleColor(0, d); break;
+    case SR_C1:    cycleColor(1, d); break;
+    default: break;
+    }
+    n = setRows(v);
+    if (setSel >= n) setSel = n - 1;
+}
+
+static void nameInput(u32 pr)
+{
+    if (pr & PAD_LEFT)  nameCur = (nameCur % 10 == 0) ? nameCur + 9 : nameCur - 1;
+    if (pr & PAD_RIGHT) nameCur = (nameCur % 10 == 9) ? nameCur - 9 : nameCur + 1;
+    if (pr & PAD_UP)    nameCur = (nameCur + 30) % 40;
+    if (pr & PAD_DOWN)  nameCur = (nameCur + 10) % 40;
+    if (pr & PAD_SELECT) { state = S_SETUP; return; }
+    if (pr & PAD_START)  { confirmName(); return; }
+    if (pr & PAD_CIRCLE) { if (nameLen > 0) nameBuf[--nameLen] = 0; }
+    if (pr & PAD_CROSS) {
+        if (nameCur >= 38) { confirmName(); return; }
+        if (nameCur == 37) { if (nameLen > 0) nameBuf[--nameLen] = 0; }
+        else if (nameLen < 10) {
+            nameBuf[nameLen++] = (nameCur == 36) ? ' ' : KBCH[nameCur];
+            nameBuf[nameLen] = 0;
+        }
+    }
+}
+
+static void drawSetupScreen(void)
+{
+    static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "MODO", "MESA",
+                                    "COR JOGADOR 1", "COR JOGADOR 2", "INICIAR PARTIDA" };
+    static const char *GMN[NGM] = { "BOLA 8", "BRASILEIRO" };
+    static const u8 LC[3][3] = { {90,230,110}, {245,215,70}, {240,80,70} };
+    int v[NSR], n = setRows(v), i;
+    float y2 = 90.0f + n * 36.0f + 6.0f;
+    const char *hint;
+    char buf[40];
+
+    textC(24, 0.7f, COL(255,215,70), "CONFIGURAR PARTIDA");
+    rect(120, 62, 520, 64, COL(50,90,70));
+    panel(60, 76, 580, y2);
+
+    for (i = 0; i < n; i++) {
+        int row = v[i], sel = (i == setSel);
+        float y = 90.0f + i * 36.0f, bob = 4.0f * sinf(menuT * 0.2f), vx;
+        u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
+
+        if (sel) {
+            rect(68, y - 7, 572, y + 22,
+                 GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+            tri(74 + bob, y, 74 + bob, y + 14, 85 + bob, y + 7, COL(255,230,60));
+        }
+        if (row == SR_GO) {
+            text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
+            if (oppSel == 1)
+                text(556 - tw(0.34f, "PROXIMO: NOME"), y + 3, 0.34f, COL(150,160,175), "PROXIMO: NOME");
+            continue;
+        }
+        text(98, y, 0.5f, tc, LBL[row]);
+        switch (row) {
+        case SR_OPP:   strcpy(buf, oppSel ? "< JOGADOR 2 >" : "< BOT >"); break;
+        case SR_LVL:   sprintf(buf, "< %s >", LVL_NAME[botLevel]);
+                       vc = COL(LC[botLevel][0], LC[botLevel][1], LC[botLevel][2]); break;
+        case SR_MODE:  sprintf(buf, "< %s >", GMN[gmode]); break;
+        case SR_TABLE: sprintf(buf, "< %s >", TABLES[tableSel].name); break;
+        case SR_C0:    sprintf(buf, "< %s >", BRC_NAME[colSel[0]]); break;
+        default:       sprintf(buf, "< %s >", BRC_NAME[colSel[1]]); break;
+        }
+        vx = 556 - tw(0.5f, buf);
+        text(vx, y, 0.5f, vc, buf);
+        if (row == SR_TABLE) {                          /* mini mesa */
+            const TableDef *T = &TABLES[tableSel];
+            rect(vx - 46, y - 1, vx - 12, y + 16, shade(T->wood, 0.9f, 0));
+            rect(vx - 43, y + 2, vx - 15, y + 13, shade(T->felt, 1.0f, 0));
+        } else if (row == SR_C0 || row == SR_C1) {      /* bolinha da cor */
+            const u8 *bc = BC[BRC[colSel[row == SR_C0 ? 0 : 1]]];
+            discN(vx - 18, y + 7, 8.0f, shade(bc, 0.55f, 0), 12);
+            discN(vx - 18, y + 7, 7.2f, shade(bc, 1.0f, 0), 12);
+            discN(vx - 20.5f, y + 4.5f, 1.8f, COL(255,255,255), 6);
+        }
+    }
+
+    if (v[setSel] == SR_MODE)
+        hint = gmode == GM_BR ? "BRASILEIRO: 4 BOLAS PARA CADA JOGADOR - ENCACAPE AS SUAS PRIMEIRO"
+                              : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
+    else
+        hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
+    textC(y2 + 10, 0.32f, COL(170,180,195), hint);
+}
+
+static void drawNameScreen(void)
+{
+    const float x0 = 82.0f, y0 = 118.0f, cw = 44.0f, ch = 34.0f, gap = 4.0f;
+    char one[2] = { 0, 0 };
+    int i;
+
+    textC(24, 0.7f, COL(255,215,70), "NOME DO JOGADOR 2");
+    rect(120, 62, 520, 64, COL(50,90,70));
+
+    hbox(170, 72, 470, 106, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
+    if (nameLen == 0) {
+        textC(80, 0.5f, COL(110,118,132), "JOGADOR 2");
+    } else {
+        textC(78, 0.6f, COL(255,255,255), nameBuf);
+        if ((menuT / 20) & 1) {
+            float xe = 320.0f + tw(0.6f, nameBuf) * 0.5f;
+            rect(xe + 3, 94, xe + 13, 97, COL(255,230,60));
+        }
+    }
+
+    for (i = 0; i < 40; i++) {
+        int col = i % 10, row = i / 10, sel = (nameCur == i) || (i == 38 && nameCur == 39);
+        float x = x0 + col * (cw + gap), y = y0 + row * (ch + gap), w = cw;
+        const char *lb;
+        if (i == 39) continue;                          /* o OK ocupa duas celulas */
+        if (i == 38) w = cw * 2 + gap;
+        hbox(x, y, x + w, y + ch, sel ? CA(255, 215, 60, 0x7c) : CA(80, 88, 106, 0x60),
+             sel ? CA(70, 60, 14, 0x78) : CA(8, 12, 22, 0x68));
+        if (i < 36) { one[0] = KBCH[i]; lb = one; }
+        else lb = i == 36 ? "ESP" : (i == 37 ? "APAG" : "OK");
+        {
+            float sc = i < 36 ? 0.5f : (i == 38 ? 0.5f : 0.3f);
+            text(x + w * 0.5f - tw(sc, lb) * 0.5f, y + (ch - 24.0f * sc) * 0.5f, sc,
+                 sel ? COL(255,240,150) : COL(190,198,210), lb);
+        }
+    }
+    textC(y0 + 4 * (ch + gap) + 12, 0.34f, COL(170,180,195), "X: ESCOLHER   O: APAGAR   START: CONFIRMAR");
+    textC(y0 + 4 * (ch + gap) + 32, 0.34f, COL(150,160,175), "SELECT: VOLTAR");
+}
+
 static void drawMenuScreen(void)
 {
-    static const char *ITEM[5] = { "MODO HISTORIA", "VERSUS BOT", "VERSUS PLAY", "DIFICULDADE", "CREDITOS" };
+    static const char *ITEM[3] = { "MODO HISTORIA", "JOGAR", "CREDITOS" };
     char buf[48];
     int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
 
     drawBackdrop();
+
+    if (state == S_SETUP) { drawSetupScreen(); return; }
+    if (state == S_NAME)  { drawNameScreen();  return; }
 
     if (state == S_CREDITS) {
         u64 pc = COL(255, 200 + (int)(40 * s1), 50 + (int)(30 * s2));
@@ -1330,37 +1627,23 @@ static void drawMenuScreen(void)
     rect(180, 104, 460, 106, COL(50,90,70));
     rect(180 + fmodf(menuT * 3.0f, 240.0f), 103, 220 + fmodf(menuT * 3.0f, 240.0f), 107, COL(240,240,200));
 
-    /* opcoes: rotulo na esquerda, valor alinhado na direita */
-    panel(100, 120, 540, 346);
-    for (i = 0; i < 5; i++) {
-        float y = 134.0f + i * 42.0f, bob = 4.0f * sinf(menuT * 0.2f);
+    /* opcoes */
+    panel(100, 126, 540, 294);
+    for (i = 0; i < 3; i++) {
+        float y = 144.0f + i * 50.0f, bob = 4.0f * sinf(menuT * 0.2f);
         int sel = (i == menuSel);
         u64 tc = i == 0 ? (sel ? COL(170,175,190) : COL(105,112,128))
                         : (sel ? COL(255,240,150) : COL(170,180,190));
         if (sel) {
-            rect(108, y - 9, 532, y + 22,
+            rect(108, y - 9, 532, y + 26,
                  GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-            tri(114 + bob, y - 1, 114 + bob, y + 14, 126 + bob, y + 6, COL(255,230,60));
+            tri(114 + bob, y, 114 + bob, y + 16, 127 + bob, y + 8, COL(255,230,60));
         }
-        text(140, y, 0.55f, tc, ITEM[i]);
-        if (i == 0) {
-            text(520 - tw(0.36f, "EM BREVE"), y + 2, 0.36f, COL(150,130,70), "EM BREVE");
-        } else if (i == 3) {
-            static const u8 LC[3][3] = { {90,230,110}, {245,215,70}, {240,80,70} };
-            u64 lc = COL(LC[botLevel][0], LC[botLevel][1], LC[botLevel][2]);
-            sprintf(buf, "< %s >", LVL_NAME[botLevel]);
-            text(520 - tw(0.55f, buf), y, 0.55f, lc, buf);
-        } else if (i == 1 || i == 2) {
-            int *w = i == 1 ? winsBot : winsVs;
-            if (w[0] + w[1] > 0) {
-                sprintf(buf, "PLACAR %d X %d", w[0], w[1]);
-                text(520 - tw(0.36f, buf), y + 2, 0.36f, COL(150,160,175), buf);
-            }
-        }
+        text(142, y, 0.65f, tc, ITEM[i]);
+        if (i == 0) text(520 - tw(0.36f, "EM BREVE"), y + 4, 0.36f, COL(150,130,70), "EM BREVE");
     }
-    if (menuNote > 0) { menuNote--; textC(358, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
-    else textC(358, 0.36f, COL(170,180,195), menuSel == 3 ?
-               "ESQ/DIR: MUDAR NIVEL DO BOT" : "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
+    if (menuNote > 0) { menuNote--; textC(308, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
+    else textC(308, 0.36f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
 
     text(14, 424, 0.34f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
     sprintf(buf, "VERSAO %s", GAME_VERSION);
@@ -1371,7 +1654,7 @@ static void draw(void)
 {
     int i;
     char buf[64];
-    if (state == S_MENU || state == S_CREDITS) { drawMenuScreen(); return; }
+    if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
     drawTable();
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
     else for (i = 1; i < 16; i++) drawShadow(i);
@@ -1400,11 +1683,10 @@ static void draw(void)
         const char *hint = "X: REVANCHE   START: MENU";
         rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x40, 0x00));
         hbox(120, 150, 520, 290, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
-        sprintf(buf, "%s VENCEU!", (winner == 1 && mode == 0) ? "BOT" :
-                (winner == 0 ? "JOGADOR 1" : "JOGADOR 2"));
+        sprintf(buf, "%s VENCEU!", pname(winner));
         text(320 - tw(0.7f, buf) * 0.5f, 170, 0.7f, COL(255,230,60), buf);
         rect(160, 204, 480, 206, CA(255, 215, 60, 0x50));
-        sprintf(buf, "J1 %d X %d %s", w[0], w[1], mode == 0 ? "BOT" : "J2");
+        sprintf(buf, "%s %d X %d %s", pname(0), w[0], w[1], pname(1));
         text(320 - tw(0.5f, buf) * 0.5f, 218, 0.5f, COL(255,255,255), buf);
         text(320 - tw(0.36f, hint) * 0.5f, 258, 0.36f, COL(200,205,215), hint);
     }
@@ -1445,29 +1727,32 @@ int main(void)
 
     for (;;) {
         p0 = readpad(0);
-        p1 = (mode == 1 || state == S_MENU) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_CREDITS) in = p0 | p1;
+        p1 = (mode == 1 || state == S_MENU || state == S_SETUP || state == S_NAME) ? readpad(1) : 0;
+        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_SETUP || state == S_NAME) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         pressed = in & ~prev;
         prev = in;
         menuT++;
-        if (state == S_MENU || state == S_CREDITS) menuUpdate();
+        if (state == S_MENU || state == S_CREDITS || state == S_SETUP || state == S_NAME) menuUpdate();
 
         switch (state) {
         case S_MENU:
-            if (pressed & PAD_UP)   menuSel = (menuSel + 4) % 5;
-            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 5;
-            if (menuSel == 3) {
-                if (pressed & PAD_LEFT)  botLevel = (botLevel + 2) % 3;
-                if (pressed & PAD_RIGHT) botLevel = (botLevel + 1) % 3;
-            }
+            if (pressed & PAD_UP)   menuSel = (menuSel + 2) % 3;
+            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 3;
             if (pressed & (PAD_CROSS | PAD_START)) {
                 if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
-                else if (menuSel <= 2) { rs += 7919 + menuT; newGame(menuSel - 1); }
-                else if (menuSel == 3) botLevel = (botLevel + 1) % 3;
+                else if (menuSel == 1) { state = S_SETUP; setSel = 0; }
                 else state = S_CREDITS;
             }
+            break;
+
+        case S_SETUP:
+            setupInput(pressed);
+            break;
+
+        case S_NAME:
+            nameInput(pressed);
             break;
 
         case S_CREDITS:

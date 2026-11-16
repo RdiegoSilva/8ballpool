@@ -6,16 +6,29 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Versão: 1.0.0
 
 ## Menu inicial (animado)
-- MODO HISTÓRIA (em breve), VERSUS BOT, VERSUS PLAY (2 jogadores), DIFICULDADE e CRÉDITOS
+- MODO HISTÓRIA (em breve), JOGAR e CRÉDITOS
 - Cima/Baixo escolhe, X confirma
-- DIFICULDADE: Esquerda/Direita (ou X) troca entre FÁCIL, MÉDIO e DIFÍCIL (vale para o BOT no VERSUS BOT)
-  - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
-  - Médio: comportamento padrão
-  - Difícil: mira quase perfeita e responde rápido
+- JOGAR abre a tela **Configurar partida** (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
+  - ADVERSÁRIO: BOT ou JOGADOR 2. Com JOGADOR 2, ao iniciar abre a tela para **digitar o nome** (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 2")
+  - DIFICULDADE (só contra o BOT): FÁCIL, MÉDIO ou DIFÍCIL
+    - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
+    - Médio: comportamento padrão
+    - Difícil: mira quase perfeita e responde rápido
+  - MODO: BOLA 8 ou BRASILEIRO
+  - MESA: Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho ou Royal
+  - COR JOGADOR 1 / 2 (só no Brasileiro): Azul, Vermelha, Amarela, Verde, Roxa ou Laranja (cada jogador usa uma cor diferente; padrão: azul x vermelha)
 - CRÉDITOS: mostra o criador e a versão do jogo
 
+## Modos de jogo
+- **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)
+- **Brasileiro**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, espalhadas pela mesa
+  - Vence quem encaçapar as 4 bolas da sua cor primeiro
+  - Continua jogando quem encaçapa uma bola sua sem faltar
+  - Falta: branca na caçapa, não tocar em nenhuma bola ou tocar primeiro na bola do adversário. O adversário joga com bola na mão
+  - Encaçapar a bola do adversário não é falta, mas ela fica fora da mesa (ajuda o adversário). Encaçapar a branca junto com a sua última bola faz você perder
+
 ## Placar
-- Cada modo (VERSUS BOT e VERSUS PLAY) tem seu placar de vitórias no topo da partida, entre os painéis dos jogadores
+- Contra o BOT e contra o JOGADOR 2 têm placares separados de vitórias no topo da partida, entre os painéis dos jogadores
 - Fim de jogo: X = revanche (mantém o placar), START = voltar ao menu
 - O placar zera ao desligar o jogo
 
