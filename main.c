@@ -458,7 +458,7 @@ int main(void)
     padPortOpen(0, 0, padbuf0);
     padPortOpen(1, 0, padbuf1);
 
-    g = gsKit_init_global();
+    g = gsKit_init_global_custom(1024 * 1024, 256 * 1024);
     g->ZBuffering = GS_SETTING_OFF;
     g->DoubleBuffering = GS_SETTING_ON;
     g->PrimAlphaEnable = GS_SETTING_ON;
