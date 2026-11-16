@@ -42,11 +42,12 @@ static char padbuf0[256] __attribute__((aligned(64)));
 static char padbuf1[256] __attribute__((aligned(64)));
 
 static Ball b[16];
-static int state = S_MENU, mode = 0, menuSel = 0;
+static int state = S_MENU, mode = 0, menuSel = 1;
 static int cur, grp[2], breakShot, charging;
 static float ang, pwr;
 static int pocketed[16], firstHit, gAtStart, startOwnLeft;
 static int winner, botTimer, botPlanned;
+static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
 static char msg[64];
 static int msgTimer;
@@ -589,6 +590,7 @@ static void resolve(void)
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
         winner = ok ? cur : 1 - cur;
+        (mode == 0 ? winsBot : winsVs)[winner]++;
         state = S_OVER;
         return;
     }
@@ -882,16 +884,17 @@ static int nearPocket(float x, float y)
 }
 
 /* mira estilo 8 Ball Pool: a linha SEMPRE chega ate a bola fantasma (ou ate a
-   tabela, quando quica ate 2 vezes). Depois do impacto mostra o caminho da bola
-   alvo e o desvio da branca; o taco (stat "mira") controla o comprimento dessas. */
+   tabela, sem quicar). Depois do impacto mostra um trecho curto da bola alvo e do
+   desvio da branca. O taco (stat "mira") aumenta esses trechos; o MIRA LONGA
+   ainda mostra um rebote na tabela. */
 static void drawGuide(void)
 {
     float dx = cosf(ang), dy = sinf(ang), cx = b[0].x, cy = b[0].y;
     float gs = cueGuideScale(curCue());
-    int seg;
+    int seg, maxSeg = CUES[curCue()].aim >= 100 ? 2 : 1;   /* so o taco MIRA LONGA mostra o rebote */
 
-    for (seg = 0; seg < 3; seg++) {
-        int hit, wall, al = seg == 0 ? 0x7c : (seg == 1 ? 0x5c : 0x40);
+    for (seg = 0; seg < maxSeg; seg++) {
+        int hit, wall, al = seg == 0 ? 0x7c : 0x50;
         float t = castRay(cx, cy, dx, dy, -1, &hit, &wall);
         float gx = cx + dx*t, gy = cy + dy*t;
         float sx = cx + (seg == 0 ? dx*R : 0), sy = cy + (seg == 0 ? dy*R : 0);
@@ -911,7 +914,7 @@ static void drawGuide(void)
             dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
 
             /* caminho da bola alvo: ate a tabela/outra bola, destacando cacapa */
-            L = (70.0f + 230.0f * dot) * gs;
+            L = (22.0f + 70.0f * dot) * gs;
             tmax = castRay(b[hit].x, b[hit].y, nx, ny, hit, &h2, &w2);
             if (L >= tmax - 0.5f) {
                 L = tmax;
@@ -930,7 +933,7 @@ static void drawGuide(void)
             tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
             if (tl > 0.05f) {
                 tx /= tl; ty /= tl;
-                L = (24.0f + 90.0f * tl) * gs;
+                L = (12.0f + 40.0f * tl) * gs;
                 tmax = castRay(gx, gy, tx, ty, hit, &h2, &w2);
                 if (L > tmax) L = tmax;
                 if (L > R) glowFade(gx + tx*R, gy + ty*R, gx + tx*L, gy + ty*L, 0x60, 0x10, 190, 215, 255);
@@ -1084,29 +1087,40 @@ static void drawSpinIndicator(void)
 /* painel de cada jogador (topo): nome, grupo e as bolas que ainda restam */
 static void drawPlayerPanel(int pl)
 {
-    float x1 = pl == 0 ? 70.0f : 348.0f, x2 = x1 + 250.0f, y1 = 6.0f, y2 = 64.0f;
-    int act = (pl == cur), i, k;
+    float x1 = pl == 0 ? 70.0f : 378.0f, x2 = x1 + 220.0f, y1 = 6.0f, y2 = 64.0f;
+    int act = (pl == cur), k;
     const char *nm = (pl == 1 && mode == 0) ? "BOT" : (pl == 0 ? "JOGADOR 1" : "JOGADOR 2");
     const char *gn = grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS");
 
     hbox(x1, y1, x2, y2, act ? CA(255, 215, 60, 0x7c) : CA(70, 78, 96, 0x60),
          act ? CA(44, 38, 10, 0x74) : CA(8, 12, 22, 0x68));
     rect(x1, y1, x1 + 5, y2, act ? COL(255,215,60) : COL(70,78,96));
-    text(x1 + 14, y1 + 6, 0.5f, act ? COL(255,235,110) : COL(165,170,180), nm);
-    text(x2 - 8 - tw(0.34f, gn), y1 + 10, 0.34f, act ? COL(255,255,255) : COL(130,138,152), gn);
-    rect(x1 + 14, y1 + 25, x2 - 8, y1 + 26, act ? CA(255, 215, 60, 0x50) : CA(120, 128, 146, 0x30));
+    text(x1 + 14, y1 + 5, 0.5f, act ? COL(255,235,110) : COL(165,170,180), nm);
+    text(x1 + 14, y1 + 23, 0.32f, act ? COL(255,255,255) : COL(130,138,152), gn);
 
     if (grp[pl] < 0) return;
     for (k = 0; k < 7; k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
-        float bx = x1 + 26 + k * 28.0f, by = y1 + 42.0f;
+        float bx = x1 + 24 + k * 26.0f, by = y1 + 46.0f;
         if (b[id].in) drawBallAt(id, bx, by, 7.0f);
         else          ring(bx, by, 6.0f, COL(70,76,90));
     }
-    if (countGroup(grp[pl]) == 0) {                   /* so falta a bola 8 */
-        drawBallAt(8, x1 + 26 + 7 * 28.0f, y1 + 42.0f, 7.0f);
-        (void)i;
-    }
+    if (countGroup(grp[pl]) == 0)                      /* so falta a bola 8 */
+        drawBallAt(8, x1 + 24 + 7 * 26.0f, y1 + 46.0f, 7.0f);
+}
+
+/* placar de vitorias (centro do topo) */
+static void drawScoreBoard(void)
+{
+    int *w = mode == 0 ? winsBot : winsVs;
+    char buf[16];
+    float s;
+    hbox(296, 6, 372, 64, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x68));
+    text(334 - tw(0.28f, "PLACAR") * 0.5f, 13, 0.28f, COL(150,158,175), "PLACAR");
+    rect(304, 28, 364, 29, CA(120, 128, 146, 0x30));
+    sprintf(buf, "%d : %d", w[0] > 99 ? 99 : w[0], w[1] > 99 ? 99 : w[1]);
+    s = strlen(buf) <= 5 ? 0.55f : 0.4f;
+    text(334 - tw(s, buf) * 0.5f, 37, s, COL(255,235,110), buf);
 }
 
 static void drawHUD(void)
@@ -1114,6 +1128,7 @@ static void drawHUD(void)
     float x;
     int pl;
     for (pl = 0; pl < 2; pl++) drawPlayerPanel(pl);
+    drawScoreBoard();
 
     drawPowerBar();
     drawSpinIndicator();
@@ -1247,7 +1262,7 @@ static void menuUpdate(void)
 
 /* texto centralizado (largura estimada) */
 static void textC(float y, float sc, u64 c, const char *t)
-{ text(320.0f - strlen(t) * 7.75f * sc, y, sc, c, t); }
+{ text(320.0f - tw(sc, t) * 0.5f, y, sc, c, t); }
 
 /* fundo: degrade, brilho do feltro, feixes de luz, bolas rolando */
 static void drawBackdrop(void)
@@ -1279,8 +1294,9 @@ static void panel(float x1, float y1, float x2, float y2)
 
 static void drawMenuScreen(void)
 {
+    static const char *ITEM[5] = { "MODO HISTORIA", "VERSUS BOT", "VERSUS PLAY", "DIFICULDADE", "CREDITOS" };
     char buf[48];
-    int i, k;
+    int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
 
     drawBackdrop();
@@ -1301,50 +1317,54 @@ static void drawMenuScreen(void)
 
     /* titulo com brilho e leve movimento */
     {
-        float ty = 50.0f + 3.0f * sinf(menuT * 0.06f), sc = 1.35f;
+        float ty = 34.0f + 3.0f * sinf(menuT * 0.06f), sc = 1.2f;
         const char *tt = "8 BALL POOL";
-        float x0 = 320.0f - strlen(tt) * 7.75f * sc;
+        float x0 = 320.0f - tw(sc, tt) * 0.5f;
         u64 glow = GS_SETREG_RGBAQ(140, 70, 10, 0x40, 0x00);
         u64 tc = COL(255, 200 + (int)(45 * s1), 40 + (int)(30 * s2));
         text(x0 - 3, ty - 3, sc, glow, tt); text(x0 + 3, ty - 3, sc, glow, tt);
         text(x0 - 3, ty + 3, sc, glow, tt); text(x0 + 3, ty + 4, sc, glow, tt);
         text(x0, ty, sc, tc, tt);
     }
-    textC(104, 0.55f, COL(190,200,225), "PS2 EDITION");
-    rect(180, 128, 460, 130, COL(50,90,70));
-    rect(180 + fmodf(menuT * 3.0f, 240.0f), 127, 220 + fmodf(menuT * 3.0f, 240.0f), 131, COL(240,240,200));
+    textC(80, 0.42f, COL(190,200,225), "PS2 EDITION");
+    rect(180, 104, 460, 106, COL(50,90,70));
+    rect(180 + fmodf(menuT * 3.0f, 240.0f), 103, 220 + fmodf(menuT * 3.0f, 240.0f), 107, COL(240,240,200));
 
-    /* opcoes */
-    panel(130, 150, 510, 332);
-    for (i = 0; i < 4; i++) {
-        float y = 164.0f + i * 38.0f;
+    /* opcoes: rotulo na esquerda, valor alinhado na direita */
+    panel(100, 120, 540, 346);
+    for (i = 0; i < 5; i++) {
+        float y = 134.0f + i * 42.0f, bob = 4.0f * sinf(menuT * 0.2f);
         int sel = (i == menuSel);
-        u64 tc = sel ? COL(255,240,150) : COL(170,180,190);
+        u64 tc = i == 0 ? (sel ? COL(170,175,190) : COL(105,112,128))
+                        : (sel ? COL(255,240,150) : COL(170,180,190));
         if (sel) {
-            rect(138, y - 6, 502, y + 30,
+            rect(108, y - 9, 532, y + 22,
                  GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-            tri(146 + 4 * sinf(menuT * 0.2f), y + 2, 146 + 4 * sinf(menuT * 0.2f), y + 22,
-                158 + 4 * sinf(menuT * 0.2f), y + 12, COL(255,230,60));
+            tri(114 + bob, y - 1, 114 + bob, y + 14, 126 + bob, y + 6, COL(255,230,60));
         }
-        if (i == 0) text(170, y, 0.75f, tc, "1 JOGADOR (VS BOT)");
-        else if (i == 1) text(170, y, 0.75f, tc, "2 JOGADORES");
-        else if (i == 3) text(170, y, 0.75f, tc, "CREDITOS");
-        else {
+        text(140, y, 0.55f, tc, ITEM[i]);
+        if (i == 0) {
+            text(520 - tw(0.36f, "EM BREVE"), y + 2, 0.36f, COL(150,130,70), "EM BREVE");
+        } else if (i == 3) {
             static const u8 LC[3][3] = { {90,230,110}, {245,215,70}, {240,80,70} };
             u64 lc = COL(LC[botLevel][0], LC[botLevel][1], LC[botLevel][2]);
-            text(170, y, 0.7f, tc, "DIFICULDADE");
             sprintf(buf, "< %s >", LVL_NAME[botLevel]);
-            text(345, y, 0.7f, lc, buf);
-            for (k = 0; k < 3; k++)
-                disc(480.0f + k * 13.0f, y + 12, 4.0f, k <= botLevel ? lc : COL(50,55,65));
+            text(520 - tw(0.55f, buf), y, 0.55f, lc, buf);
+        } else if (i == 1 || i == 2) {
+            int *w = i == 1 ? winsBot : winsVs;
+            if (w[0] + w[1] > 0) {
+                sprintf(buf, "PLACAR %d X %d", w[0], w[1]);
+                text(520 - tw(0.36f, buf), y + 2, 0.36f, COL(150,160,175), buf);
+            }
         }
     }
-    textC(350, 0.4f, COL(170,180,195), menuSel == 2 ?
-          "ESQ/DIR: NIVEL DO BOT (MODO 1 JOGADOR)" : "CIMA/BAIXO: ESCOLHER   X: OK");
+    if (menuNote > 0) { menuNote--; textC(358, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
+    else textC(358, 0.36f, COL(170,180,195), menuSel == 3 ?
+               "ESQ/DIR: MUDAR NIVEL DO BOT" : "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
 
-    text(14, 422, 0.4f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
+    text(14, 424, 0.34f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
     sprintf(buf, "VERSAO %s", GAME_VERSION);
-    text(626.0f - strlen(buf) * 6.2f, 422, 0.4f, COL(150,160,175), buf);
+    text(626.0f - tw(0.34f, buf), 424, 0.34f, COL(150,160,175), buf);
 }
 
 static void draw(void)
@@ -1376,13 +1396,17 @@ static void draw(void)
     drawHUD();
     if (state == S_CUES) drawCueMenu();
     if (state == S_OVER) {
+        int *w = mode == 0 ? winsBot : winsVs;
+        const char *hint = "X: REVANCHE   START: MENU";
         rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x40, 0x00));
         hbox(120, 150, 520, 290, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
         sprintf(buf, "%s VENCEU!", (winner == 1 && mode == 0) ? "BOT" :
                 (winner == 0 ? "JOGADOR 1" : "JOGADOR 2"));
-        text(320 - tw(0.7f, buf) * 0.5f, 185, 0.7f, COL(255,230,60), buf);
-        rect(160, 232, 480, 234, CA(255, 215, 60, 0x50));
-        text(320 - tw(0.42f, "START: VOLTAR AO MENU") * 0.5f, 252, 0.42f, COL(220,220,225), "START: VOLTAR AO MENU");
+        text(320 - tw(0.7f, buf) * 0.5f, 170, 0.7f, COL(255,230,60), buf);
+        rect(160, 204, 480, 206, CA(255, 215, 60, 0x50));
+        sprintf(buf, "J1 %d X %d %s", w[0], w[1], mode == 0 ? "BOT" : "J2");
+        text(320 - tw(0.5f, buf) * 0.5f, 218, 0.5f, COL(255,255,255), buf);
+        text(320 - tw(0.36f, hint) * 0.5f, 258, 0.36f, COL(200,205,215), hint);
     }
 }
 
@@ -1432,15 +1456,16 @@ int main(void)
 
         switch (state) {
         case S_MENU:
-            if (pressed & PAD_UP)   menuSel = (menuSel + 3) % 4;
-            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 4;
-            if (menuSel == 2) {
+            if (pressed & PAD_UP)   menuSel = (menuSel + 4) % 5;
+            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 5;
+            if (menuSel == 3) {
                 if (pressed & PAD_LEFT)  botLevel = (botLevel + 2) % 3;
                 if (pressed & PAD_RIGHT) botLevel = (botLevel + 1) % 3;
             }
             if (pressed & (PAD_CROSS | PAD_START)) {
-                if (menuSel < 2) { rs += 7919 + menuT; newGame(menuSel); }
-                else if (menuSel == 2) botLevel = (botLevel + 1) % 3;
+                if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
+                else if (menuSel <= 2) { rs += 7919 + menuT; newGame(menuSel - 1); }
+                else if (menuSel == 3) botLevel = (botLevel + 1) % 3;
                 else state = S_CREDITS;
             }
             break;
@@ -1544,7 +1569,8 @@ int main(void)
             break;
 
         case S_OVER:
-            if (pressed & PAD_START) { menuInit(); state = S_MENU; }
+            if (pressed & PAD_CROSS) { rs += 7919 + menuT; newGame(mode); }
+            else if (pressed & PAD_START) { menuInit(); state = S_MENU; }
             break;
         }
 

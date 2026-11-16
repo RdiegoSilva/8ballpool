@@ -6,13 +6,18 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Versão: 1.0.0
 
 ## Menu inicial (animado)
-- 1 JOGADOR (VS BOT), 2 JOGADORES, DIFICULDADE e CRÉDITOS
+- MODO HISTÓRIA (em breve), VERSUS BOT, VERSUS PLAY (2 jogadores), DIFICULDADE e CRÉDITOS
 - Cima/Baixo escolhe, X confirma
-- DIFICULDADE: Esquerda/Direita (ou X) troca entre FÁCIL, MÉDIO e DIFÍCIL (vale para o BOT no modo 1 jogador)
+- DIFICULDADE: Esquerda/Direita (ou X) troca entre FÁCIL, MÉDIO e DIFÍCIL (vale para o BOT no VERSUS BOT)
   - Fácil: erra mais a mira e a força, pensa devagar e faz jogadas ruins de vez em quando
   - Médio: comportamento padrão
   - Difícil: mira quase perfeita e responde rápido
 - CRÉDITOS: mostra o criador e a versão do jogo
+
+## Placar
+- Cada modo (VERSUS BOT e VERSUS PLAY) tem seu placar de vitórias no topo da partida, entre os painéis dos jogadores
+- Fim de jogo: X = revanche (mantém o placar), START = voltar ao menu
+- O placar zera ao desligar o jogo
 
 ## Controles
 - Esquerda/Direita: girar a mira | L1/R1: ajuste fino
@@ -33,7 +38,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
-- Mira: comprimento das linhas depois do impacto (bola alvo e desvio da branca). A linha até a bola sempre aparece inteira, com até 2 rebotes nas tabelas; a caçapa de destino da bola alvo fica verde
+- Mira: tamanho da linha de mira (no máximo cerca de 60% da mesa, e ela some aos poucos no fim)
 - Controle: velocidade da barra (maior = barra mais lenta, mais fácil de acertar)
 
 ## Compilar
