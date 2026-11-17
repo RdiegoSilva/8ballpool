@@ -84,10 +84,12 @@ static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (s
 static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define PO 4.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
+#define PO 9.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
 static const float PX[6] = { TX0 - PO, TCX, TX1 + PO, TX0 - PO, TCX, TX1 + PO };
 static const float PY[6] = { TY0 - PO, TY0 - PO, TY0 - PO, TY1 + PO, TY1 + PO, TY1 + PO };
-static const float PR[6] = { 12.6f, 10.0f, 12.6f, 12.6f, 10.0f, 12.6f };   /* raio das cacapas (menores = mais dificil) */
+static const float PR[6] = { 12.6f, 10.0f, 12.6f, 12.6f, 10.0f, 12.6f };   /* raio DESENHADO do buraco */
+/* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
+static const float PRC[6] = { 18.6f, 15.5f, 18.6f, 18.6f, 15.5f, 18.6f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -731,14 +733,14 @@ static int stepPhysics(float dt)
         }
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
-            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, mouth = PR[p] + R;
-            if (!air && d2 < PR[p]*PR[p]) {
+            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, mouth = PRC[p] + R;
+            if (!air && d2 < PRC[p]*PRC[p]) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; break;
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
-                inMouth = 1; mdx = fabsf(dx); mdy = fabsf(dy); mpr = PR[p]; mpx = PX[p]; mpy = PY[p];
+                inMouth = 1; mdx = fabsf(dx); mdy = fabsf(dy); mpr = PRC[p]; mpx = PX[p]; mpy = PY[p];
                 if (d > 0.001f && toward > 0.0f && POCK_PULL > 0.0f) {   /* so ajuda quem vai em direcao ao buraco */
                     b[i].vx -= dx / d * POCK_PULL * dt;
                     b[i].vy -= dy / d * POCK_PULL * dt;
@@ -1713,12 +1715,15 @@ static void drawTable(void)
     tableDeco(1, T);
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
-    cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY0 - 11, TY0);
-    cushH(TCX + PR[1] + 4, TX1 - PR[0] - 4, TY0 - 11, TY0);
-    cushH(TX0 + PR[0] + 4, TCX - PR[1] - 4, TY1 + 11, TY1);
-    cushH(TCX + PR[1] + 4, TX1 - PR[0] - 4, TY1 + 11, TY1);
-    cushV(TY0 + PR[0] + 4, TY1 - PR[0] - 4, TX0 - 11, TX0);
-    cushV(TY0 + PR[0] + 4, TY1 - PR[0] - 4, TX1 + 11, TX1);
+    {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
+        float ce = PRC[0] - PO + 2.0f, cm = PRC[1] + 1.0f;
+        cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0);
+        cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0);
+        cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1);
+        cushH(TCX + cm, TX1 - ce, TY1 + 11, TY1);
+        cushV(TY0 + ce, TY1 - ce, TX0 - 11, TX0);
+        cushV(TY0 + ce, TY1 - ce, TX1 + 11, TX1);
+    }
 
     /* diamantes de mira na madeira */
     for (k = 1; k <= 3; k++) {
