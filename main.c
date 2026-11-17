@@ -1078,7 +1078,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 16
+#define NTABLES 17
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1096,6 +1096,7 @@ static const TableDef TABLES[NTABLES] = {
     { "ROSA",     {198, 72,132}, { 92, 32, 62}, {255,226,236} },
     { "TURQUESA", { 12,138,150}, { 22, 52, 62}, {230,250,250} },
     { "FAROESTE", {176,130, 74}, { 74, 42, 22}, {244,210,140}, 9 },
+    { "NOITE LUA",{ 10, 16, 44}, { 12, 14, 30}, {190,205,255}, 10 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -1121,6 +1122,7 @@ static void diamond(float cx, float cy)
 
 /* ---------- mesas especiais: PRETA OURO (detalhes dourados) e NEON (animada) ---------- */
 static u64 CA(int r, int gg, int bb, int a);        /* definida mais abaixo */
+static void glowFade(float x1, float y1, float x2, float y2, int a0, int a1, int r, int gg, int bb);   /* idem */
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c);   /* idem */
 static void ringN(float cx, float cy, float r, float w, int n, u64 c);   /* idem */
 
@@ -1374,6 +1376,75 @@ static void tableDecoFx(int stage, int style, int mt)
     }
 }
 
+/* ---------- mesa NOITE LUA (style 10): ceu escuro, lua crescente, estrelas, nuvens e estrela cadente ---------- */
+static void moonCrescent(float cx, float cy, float r, int a, int cr, int cg, int cb)
+{
+    float dy, ri = r * 0.84f, off = r * 0.42f, step = r > 12.0f ? 1.5f : 1.0f;
+    for (dy = -r + 0.01f; dy < r; dy += step) {
+        float wo = sqrtf(r * r - dy * dy), xl = cx - wo, xr = cx + wo, wi2 = ri * ri - dy * dy;
+        if (wi2 > 0.0f) {
+            float wi = sqrtf(wi2), ia = cx + off - wi, ib = cx + off + wi;
+            if (ia > xl) rect(xl, cy + dy, ia < xr ? ia : xr, cy + dy + step, CA(cr, cg, cb, a));
+            if (ib < xr) rect(ib, cy + dy, xr, cy + dy + step, CA(cr, cg, cb, a));
+        } else {
+            rect(xl, cy + dy, xr, cy + dy + step, CA(cr, cg, cb, a));
+        }
+    }
+}
+
+static void tableDecoNight(int stage, int mt)
+{
+    int k;
+    float W = TX1 - TX0;
+    if (stage == 0) {
+        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, COL(150,162,200));
+        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(90, 105, 160, 0x60));
+        for (k = 0; k < 28; k++) {                          /* estrelinhas na moldura */
+            float px, py, nx, ny, tw2 = sinf(mt * 0.06f + k * 2.3f);
+            perim(k, 28, 19.0f, &px, &py, &nx, &ny);
+            if (tw2 < 0) tw2 = 0;
+            rect(px - 1.0f, py - 1.0f, px + 1.0f, py + 1.0f, CA(215, 225, 255, 0x28 + (int)(0x50 * tw2)));
+        }
+    } else if (stage == 1) {
+        float ph = fmodf((float)mt, 480.0f);
+        discN(TCX, TCY, 92.0f, CA(150, 175, 255, 0x05), 28);           /* brilho da lua */
+        discN(TCX, TCY, 70.0f, CA(170, 190, 255, 0x06), 28);
+        discN(TCX, TCY, 50.0f, CA(190, 205, 255, 0x08), 28);
+        moonCrescent(TCX, TCY, 36.0f, 0x44, 236, 236, 214);
+        moonCrescent(TCX, TCY, 36.0f, 0x14, 255, 255, 240);
+        for (k = 0; k < 40; k++) {                                     /* estrelas piscando */
+            float sx = TX0 + 10 + fmodf(k * 137.5f, 508.0f), sy = TY0 + 8 + fmodf(k * 71.3f, 248.0f);
+            float tw2 = sinf(mt * 0.05f + k * 1.9f);
+            if (tw2 < 0) tw2 = 0;
+            disc(sx, sy, (k % 5 == 0) ? 1.6f : 1.1f, CA(205, 220, 255, 0x10 + (int)(0x58 * tw2)));
+            if (k % 7 == 0 && tw2 > 0.5f) {                            /* brilho em cruz nas maiores */
+                line(sx - 3.5f, sy, sx + 3.5f, sy, CA(205, 220, 255, 0x30));
+                line(sx, sy - 3.5f, sx, sy + 3.5f, CA(205, 220, 255, 0x30));
+            }
+        }
+        for (k = 0; k < 3; k++) {                                      /* nuvens passando devagar */
+            float cx0 = TX0 - 70.0f + fmodf(mt * (0.18f + k * 0.07f) + k * 230.0f, W + 140.0f);
+            float cy0 = TY0 + 50.0f + k * 70.0f;
+            discN(cx0, cy0, 16.0f, CA(120, 135, 190, 0x0a), 12);
+            discN(cx0 + 18.0f, cy0 - 5.0f, 20.0f, CA(120, 135, 190, 0x0a), 12);
+            discN(cx0 + 40.0f, cy0, 15.0f, CA(120, 135, 190, 0x0a), 12);
+        }
+        if (ph < 45.0f) {                                              /* estrela cadente */
+            float u = ph / 45.0f, sx = TX0 + 60.0f + u * 220.0f, sy = TY0 + 18.0f + u * 90.0f;
+            int a = (int)(0x70 * (1.0f - u));
+            glowFade(sx - 46.0f, sy - 20.0f, sx, sy, 0, a, 215, 225, 255);
+            disc(sx, sy, 1.8f, CA(255, 255, 255, a));
+        }
+    } else {
+        for (k = 0; k < 6; k++) {
+            float pulse = 0.5f + 0.5f * sinf(mt * 0.08f + k * 1.1f);
+            discN(PX[k], PY[k], PR[k] + 7.0f, CA(150, 175, 255, 0x0c + (int)(0x08 * pulse)), 12);
+            ring(PX[k], PY[k], PR[k] + 4.5f, CA(175, 192, 255, 0x78));
+        }
+        line(HEADX, TY0, HEADX, TY1, CA(170, 190, 255, 0x2c));
+    }
+}
+
 /* stage 0: moldura (antes do feltro) | 1: feltro (antes das tabelas) | 2: por cima das cacapas */
 static void tableDeco(int stage, const TableDef *T)
 {
@@ -1448,6 +1519,8 @@ static void tableDeco(int stage, const TableDef *T)
             }
             line(HEADX, TY0, HEADX, TY1, hueCol(t * 0.3f, 0x50));
         }
+    } else if (T->style == 10) {
+        tableDecoNight(stage, mt);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
@@ -1490,6 +1563,11 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
                  CA(255, 225, 100, (((i + mt / 7) % 3) == 0) ? 0x78 : 0x30));
             rect(px - 1.2f, y1 + f * 0.75f - 1.2f, px + 1.2f, y1 + f * 0.75f + 1.2f,
                  CA(255, 225, 100, (((i + mt / 7) % 3) == 0) ? 0x78 : 0x30));
+            break;
+        case 10:                                             /* noite lua: lua e estrelas */
+            if (i == 0) moonCrescent((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, h * 0.30f, 0x48, 236, 236, 214);
+            rect(x0 + fmodf(i * 41.3f, w) - 0.7f, y0 + fmodf(i * 19.9f, h) - 0.7f,
+                 x0 + fmodf(i * 41.3f, w) + 0.7f, y0 + fmodf(i * 19.9f, h) + 0.7f, CA(210, 222, 255, 0x20 + (int)(0x50 * s)));
             break;
         case 9:                                              /* faroeste: bola de mato e poeira */
             if (i == 0) ring(x0 + fmodf(mt * 0.5f, w), y1 - 6.0f - fabsf(sinf(mt * 0.06f)) * 6.0f, 2.6f, CA(112, 76, 38, 0x90));
@@ -1565,7 +1643,7 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
             brPos(j, &bx, &by);
             pvBall(x0 + (bx - TX0) * k, y0 + (by - TY0) * k, pr, j < 4 ? c0 : c1);
         }
-        pvBall(cx, cy, pr, BC[0]);
+        pvBall(cx, cy, pr, WB_COL[wbSel[0]]);
     } else {
         int n = 0, r2, cc;
         for (r2 = 0; r2 < 5; r2++)
@@ -1573,7 +1651,7 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
                 bx = FOOTX + r2 * (R * 1.76f); by = TCY + (cc - r2 * 0.5f) * (2 * R + 0.4f);
                 pvBall(x0 + (bx - TX0) * k, y0 + (by - TY0) * k, pr, THEME[ballTheme][n++ % 8]);
             }
-        pvBall(x0 + (HEADX - TX0) * k, cy, pr, BC[0]);
+        pvBall(x0 + (HEADX - TX0) * k, cy, pr, WB_COL[wbSel[0]]);
     }
 }
 
@@ -3345,9 +3423,10 @@ enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_WB0, PI_GD0, PI_WB1
 static int pauseRows(int *v)
 {
     int n = 0, k;
-    for (k = 0; k < NPI; k++)
+    for (k = 0; k < NPI; k++) {
         if (k == PI_WB0 || k == PI_WB1) continue;            /* cor da bola branca: so no menu Configurar partida */
         if (mode == 1 || k != PI_GD1) v[n++] = k;
+    }
     return n;
 }
 static int plSel;                                /* cursor da lista de musicas */

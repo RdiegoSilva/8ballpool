@@ -18,7 +18,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA (16 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (17 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -26,12 +26,13 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Vegas**: lâmpadas piscando em volta da mesa, feltro vermelho com detalhes dourados
     - **Arco-íris**: faixas de cor que mudam no feltro e moldura em cores correndo
     - **Rosa** e **Turquesa**: mesas coloridas (sem animação)
+    - **Noite Lua**: céu escuro com lua crescente, estrelas piscando, nuvens passando devagar, estrela cadente e caçapas com brilho azulado
     - **Faroeste**: feltro cor de areia, moldura de tábuas com pregos e corda, estrela de xerife no centro, cactos nos cantos, poeira soprando e uma bola de mato rolando pela mesa
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
   - **BOLA BRANCA** (12 cores: Branca, Marfim, Vermelha, Azul, Verde, Amarela, Rosa, Ciano, Laranja, Roxa, Dourada e Prata) e **LINHA GUIA** (10 cores: Branca, Vermelha, Verde, Azul, Amarela, Rosa, Ciano, Laranja, Roxa e Arco-íris, que muda de cor sozinha). Na tela de configurar valem como cor inicial dos dois jogadores
-  - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
+  - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
 Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 10 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking e Gato. Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
