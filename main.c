@@ -1030,7 +1030,7 @@ static void botTakePick(void)                       /* o bot tira a propria bola
      uma das PROPRIAS bolas da mesa e joga
    - suicidio (branca na cacapa): derrota na hora
    - meteu a ultima bola da sua cor COM falta: perde, mesmo que o adversario ainda tenha as 4 bolas */
-/* Mestre do Tempo: a tacada perdeu a partida -> pergunta se quer voltar no tempo */
+/* Mestre do Tempo: depois de QUALQUER tacada com a habilidade, pergunta se quer voltar no tempo e refazer a jogada */
 static int tmOffer(const char *note, int eight)
 {
     if (!tmNow || !tmSnap) return 0;
@@ -1047,7 +1047,6 @@ static void resolveBR(void)
     char buf[64];
     overNote[0] = 0;
     if (pocketed[0]) {
-        if (tmOffer("SUICIDIO - BRANCA NA CACAPA", 0)) return;
         strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
         endGame(1 - cur);
         return;
@@ -1058,7 +1057,6 @@ static void resolveBR(void)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
     if (foul && mine == 0) {                         /* meteu a ultima bola, mas com falta: perde mesmo assim */
-        if (tmOffer(firstHit < 0 ? "FALTA: NAO TOCOU NA PROPRIA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO", 0)) return;
         strcpy(overNote, firstHit < 0 ? "FALTA: NAO TOCOU NA PROPRIA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO");
         endGame(1 - cur);
         return;
@@ -1084,11 +1082,15 @@ static void resolve(void)
     overNote[0] = 0;
     tmNow = tmArmed && tmSnap; tmArmed = 0;
     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
+    if (tmNow) {                                      /* MESTRE DO TEMPO: qualquer jogada pode ser desfeita */
+        const char *nt = pocketed[0] ? "A BRANCA CAIU NA CACAPA" : (pocketed[8] ? "A BOLA 8 CAIU NA CACAPA" :
+                         (firstHit < 0 ? "NAO TOCOU EM NENHUMA BOLA" : "A JOGADA TERMINOU"));
+        if (tmOffer(nt, 0)) return;
+    }
     if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
-        if (!ok && tmOffer("BOLA 8 ENCACAPADA ANTES DA HORA", 1)) return;
         winner = ok ? cur : 1 - cur;
         (mode == 0 ? winsBot : winsVs)[winner]++;
         state = S_OVER;
@@ -3513,7 +3515,7 @@ static void drawCueMenu(void)
         { "+20% DE FORCA E A BRANCA PARA NA HORA AO", "BATER NA BOLA (TACADA CORTADA)." },
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
         { "CHIPOTE CHILLON! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
-        { "SE A TACADA FIZER VOCE PERDER (SUICIDIO), PODE", "VOLTAR NO TEMPO - SO SE VOCE ACEITAR." } };
+        { "DEPOIS DE QUALQUER TACADA, VOCE PODE VOLTAR NO", "TEMPO E REFAZER A JOGADA - SE QUISER." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
     char buf[64];
@@ -4705,7 +4707,7 @@ static void drawRewind(void)
     line(320, 180, 328, 184, CA(120, 200, 255, 0xa0));
     textC(204, 0.44f, COL(255,214,90), "MESTRE DO TEMPO");
     textC(228, 0.3f, COL(255,150,130), tmNote);
-    textC(246, 0.3f, COL(215,220,232), "VOLTAR NO TEMPO E NAO PERDER A PARTIDA?");
+    textC(246, 0.3f, COL(215,220,232), "VOLTAR NO TEMPO E REFAZER A JOGADA?");
     text(190, 272, 0.4f, tmSel == 0 ? COL(110,255,140) : COL(130,138,155), tmSel == 0 ? "> SIM" : "  SIM");
     text(350, 272, 0.4f, tmSel == 1 ? COL(255,120,110) : COL(130,138,155), tmSel == 1 ? "> NAO" : "  NAO");
     textC(290, 0.24f, COL(150,155,170), "SETAS ESCOLHEM   X CONFIRMA");
@@ -5065,10 +5067,9 @@ int main(int argc, char *argv[])
                     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; abilForgive = 0;
                     overNote[0] = 0; botTimer = 0; botPlanned = 0; state = S_AIM;
                     setmsg("VOLTOU NO TEMPO! JOGUE DE NOVO");
-                } else if (tmEight) {                               /* NAO: a derrota vale */
-                    winner = 1 - cur; (mode == 0 ? winsBot : winsVs)[winner]++; overNote[0] = 0; overT = 0; state = S_OVER;
-                } else {
-                    strcpy(overNote, tmNote); endGame(1 - cur);
+                } else {                                            /* NAO: a jogada vale; resolve normalmente */
+                    tmSnap = 0; tmArmed = 0; tmNow = 0;
+                    resolve();
                 }
                 tmSnap = 0;
             }
