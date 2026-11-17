@@ -4798,7 +4798,10 @@ static void drawScene(void)
         tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,230,60));
     }
     drawHUD();
-    if (state == S_CUES) drawCueMenu();
+    if (state == S_CUES) {
+        gsKit_queue_exec(g);          /* descarrega a cena para a GS antes do catalogo (evita estourar o buffer do quadro) */
+        drawCueMenu();
+    }
     if (!paused && musicToast()) {
         char tb[80];
         snprintf(tb, sizeof tb, "MUSICA: %s", musicToast());
@@ -4908,7 +4911,7 @@ int main(int argc, char *argv[])
     musicInit(argc > 0 ? argv[0] : NULL);          /* player de musicas (USB / pasta do jogo) */
     musicSetVolume(volLvl);
 
-    g = gsKit_init_global_custom(384 * 1024, 256 * 1024);
+    g = gsKit_init_global_custom(1024 * 1024, 256 * 1024);   /* buffer maior: o menu de tacos desenha muita coisa num quadro so */
     g->ZBuffering = GS_SETTING_OFF;
     g->DoubleBuffering = GS_SETTING_ON;
     g->PrimAlphaEnable = GS_SETTING_ON;
