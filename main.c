@@ -184,7 +184,7 @@ static CueDef CUES[NCUES] = {
     { "PISTOLEIRO", 70,  35,  60,  55, {205,165, 72}, {122, 74, 36}, { 52, 30, 16}, {255,215, 80}, {150, 98, 48}, 4 },
 };
 
-#define GAME_VERSION "1.8.0"
+#define GAME_VERSION "1.9.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1610,6 +1610,12 @@ static void drawTable(void)
         line(TX1 + 13 + k*3.4f, TY0 - 24, TX1 + 13 + k*3.4f, TY1 + 24, gc);
     }
 
+    /* brilho e sombra na madeira */
+    rect(TX0 - 25, TY0 - 25, TX1 + 25, TY0 - 22, CA(255, 255, 255, 0x0c));
+    rect(TX0 - 25, TY0 - 25, TX0 - 22, TY1 + 25, CA(255, 255, 255, 0x08));
+    rect(TX0 - 25, TY1 + 22, TX1 + 25, TY1 + 25, CA(0, 0, 0, 0x16));
+    rect(TX1 + 22, TY0 - 25, TX1 + 25, TY1 + 25, CA(0, 0, 0, 0x12));
+
     /* sulco entre a madeira e a borracha */
     rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, wgr);
     tableDeco(0, T);
@@ -1618,6 +1624,14 @@ static void drawTable(void)
     rect(TX0, TY0, TX1, TY1, shade(T->felt, 1.0f, 0));
     for (k = 1; k < 8; k++)
         rect(TX0 + k*22, TY0 + k*14, TX1 - k*22, TY1 - k*14, shade(T->felt, 1.0f, k * 3));
+    for (k = 0; k < 6; k++) {                           /* sombra do feltro junto das tabelas (profundidade) */
+        int a = 0x24 - k * 4;
+        float d = k * 3.0f;
+        rect(TX0, TY0 + d, TX1, TY0 + d + 3, CA(0, 0, 0, a));
+        rect(TX0, TY1 - d - 3, TX1, TY1 - d, CA(0, 0, 0, a));
+        rect(TX0 + d, TY0 + d + 3, TX0 + d + 3, TY1 - d - 3, CA(0, 0, 0, a));
+        rect(TX1 - d - 3, TY0 + d + 3, TX1 - d, TY1 - d - 3, CA(0, 0, 0, a));
+    }
     tableDeco(1, T);
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
@@ -1640,9 +1654,14 @@ static void drawTable(void)
 
     /* cacapas: aro de couro, borda dourada e buraco */
     for (p = 0; p < 6; p++) {
+        discN(PX[p], PY[p], PR[p] + 7, CA(0, 0, 0, 0x1a), 20);
         discN(PX[p], PY[p], PR[p] + 4, COL(52,31,14), 20);
+        discN(PX[p] - 1.0f, PY[p] - 1.5f, PR[p] + 2.5f, COL(70,42,20), 20);
         ring(PX[p], PY[p], PR[p] + 4, COL(176,132,58));
+        ring(PX[p], PY[p], PR[p] + 3, COL(214,172,86));
         discN(PX[p], PY[p], PR[p] + 0.5f, COL(3,3,5), 20);
+        ring(PX[p], PY[p], PR[p] + 0.5f, COL(28,20,12));
+        discN(PX[p] - PR[p] * 0.55f, PY[p] - PR[p] * 0.75f, 1.6f, CA(255, 240, 200, 0x40), 6);
     }
 
     /* linha da cabeceira e marcas do feltro */
@@ -1952,12 +1971,22 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
 #define FADV 24.5f
 static float tw(float s, const char *t) { return strlen(t) * FADV * s; }
 
-/* caixa do HUD: borda + fundo escuro translucido + brilho no topo */
+/* moldura fina (4 retangulos): nao tinge o interior da caixa */
+static void frameR(float x1, float y1, float x2, float y2, float t, u64 c)
+{
+    rect(x1, y1, x2, y1 + t, c); rect(x1, y2 - t, x2, y2, c);
+    rect(x1, y1 + t, x1 + t, y2 - t, c); rect(x2 - t, y1 + t, x2, y2 - t, c);
+}
+
+/* caixa do HUD: sombra, borda, fundo escuro translucido, brilho no topo e base mais escura */
 static void hbox(float x1, float y1, float x2, float y2, u64 border, u64 fill)
 {
+    rect(x1 - 1.5f, y1 - 1.5f, x2 + 3.5f, y2 + 3.5f, GS_SETREG_RGBAQ(0, 0, 0, 0x16, 0x00));
     rect(x1 - 1.5f, y1 - 1.5f, x2 + 1.5f, y2 + 1.5f, border);
     rect(x1, y1, x2, y2, fill);
     rect(x1, y1, x2, y1 + (y2 - y1) * 0.42f, CA(255, 255, 255, 0x07));
+    rect(x1, y1 + (y2 - y1) * 0.62f, x2, y2, CA(0, 0, 0, 0x0e));
+    rect(x1, y1, x2, y1 + 1.0f, CA(255, 255, 255, 0x22));
 }
 
 /* tecla + descricao; devolve a largura usada */
@@ -2700,27 +2729,59 @@ static void drawBackdrop(void)
 {
     int k;
     float t = menuT * 0.02f;
-    for (k = 0; k < 14; k++)
-        rect(0, k * 32.0f, 640, k * 32.0f + 32.0f, COL(6 + k/2, 10 + k, 34 - k));
-    for (k = 0; k < 5; k++)
+    for (k = 0; k < 28; k++)                                  /* degrade suave (28 faixas) */
+        rect(0, k * 16.0f, 640, k * 16.0f + 16.0f, COL(5 + k / 4, 8 + k / 2, 34 - k / 2));
+    for (k = 0; k < 5; k++)                                   /* brilho verde do feltro */
         discN(320.0f + 40.0f * sinf(t), 250.0f, 330.0f - k * 55.0f,
               GS_SETREG_RGBAQ(24, 120, 78, 0x0c, 0x00), 28);
+    for (k = 0; k < 3; k++)                                   /* luz quente do alto */
+        discN(320.0f - 60.0f * sinf(t * 0.7f), -40.0f, 300.0f - k * 80.0f,
+              GS_SETREG_RGBAQ(255, 190, 90, 0x06, 0x00), 28);
     for (k = 0; k < 2; k++) {
         float x = fmodf(menuT * 1.6f + k * 420.0f, 1100.0f) - 260.0f;
         quad(x, 0, x + 50, 0, x - 70, 448, x - 120, 448, GS_SETREG_RGBAQ(255,255,255,0x0a,0x00));
+    }
+    for (k = 0; k < 14; k++) {                                /* particulas de luz subindo */
+        float px = fmodf(k * 97.0f + menuT * (0.15f + (k % 4) * 0.08f), 680.0f) - 20.0f;
+        float py = 448.0f - fmodf(k * 61.0f + menuT * (0.35f + (k % 3) * 0.15f), 470.0f);
+        float pr = 2.0f + (k % 3) * 1.5f;
+        discN(px, py, pr, CA(255, 225, 150, 0x10 + (k % 3) * 4), 8);
+        discN(px, py, pr * 0.5f, CA(255, 240, 200, 0x24), 6);
     }
     for (k = 0; k < NMB; k++) {
         int id = MB_ID[k];
         discN(b[id].x + 5, b[id].y + 7, MBR * 1.05f, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00), 14);
         drawBallAt(id, b[id].x, b[id].y, MBR);
     }
+    for (k = 0; k < 6; k++) {                                 /* vinheta nas bordas */
+        int a = 0x2c - k * 6;
+        float d = k * 12.0f;
+        rect(0, d, 640, d + 12, CA(0, 0, 8, a));
+        rect(0, 448 - d - 12, 640, 448 - d, CA(0, 0, 8, a));
+        rect(d, 0, d + 12, 448, CA(0, 0, 8, a - 6));
+        rect(640 - d - 12, 0, 640 - d, 448, CA(0, 0, 8, a - 6));
+    }
     rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 10, 0x38, 0x00));   /* escurece p/ ler o menu */
 }
 
 static void panel(float x1, float y1, float x2, float y2)
 {
-    rect(x1 - 2, y1 - 2, x2 + 2, y2 + 2, GS_SETREG_RGBAQ(90, 150, 120, 0x50, 0x00));
-    rect(x1, y1, x2, y2, GS_SETREG_RGBAQ(4, 10, 18, 0x60, 0x00));
+    int k, n = 8;
+    float L = 14.0f;
+    u64 gold = CA(255, 215, 80, 0x7c);
+    rect(x1 - 5, y1 - 4, x2 + 6, y2 + 7, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00));      /* sombra */
+    for (k = 0; k < n; k++)                                                          /* fundo em degrade */
+        rect(x1, y1 + (y2 - y1) * k / n, x2, y1 + (y2 - y1) * (k + 1) / n,
+             CA(5 + (n - k) * 2, 12 + (n - k) * 2, 22 + (n - k) * 3, 0x68));
+    rect(x1, y1, x2, y1 + (y2 - y1) * 0.35f, CA(255, 255, 255, 0x06));
+    frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 1.0f, CA(150, 200, 170, 0x44));            /* friso externo */
+    frameR(x1, y1, x2, y2, 1.0f, CA(20, 40, 36, 0x70));                                /* friso interno */
+    rect(x1 + 2, y1 + 1, x2 - 2, y1 + 2, CA(255, 255, 255, 0x20));                     /* brilho */
+    /* cantoneiras douradas */
+    rect(x1 - 3, y1 - 3, x1 - 3 + L, y1 - 1, gold); rect(x1 - 3, y1 - 3, x1 - 1, y1 - 3 + L, gold);
+    rect(x2 + 3 - L, y1 - 3, x2 + 3, y1 - 1, gold); rect(x2 + 1, y1 - 3, x2 + 3, y1 - 3 + L, gold);
+    rect(x1 - 3, y2 + 1, x1 - 3 + L, y2 + 3, gold); rect(x1 - 3, y2 + 3 - L, x1 - 1, y2 + 3, gold);
+    rect(x2 + 3 - L, y2 + 1, x2 + 3, y2 + 3, gold); rect(x2 + 1, y2 + 3 - L, x2 + 3, y2 + 3, gold);
 }
 
 /* amostra de cor: kind 0 = bola branca, 1 = linha guia */
@@ -2904,6 +2965,7 @@ static void cycleChar(int pl, int d)       /* cada jogador usa um personagem dif
 static void startMatch(void)
 {
     rs += 7919 + menuT;
+    wbSel[1] = wbSel[0];                         /* a cor da bola branca vale para a partida toda */
     setSkins(gmode == GM_BR);
     newGame(oppSel);
 }
@@ -3150,7 +3212,12 @@ static void optInput(u32 pr)
 static void selBar(float x1, float x2, float y, float h)
 {
     float bob = 4.0f * sinf(menuT * 0.2f);
-    rect(x1, y - 6, x2, y + h, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+    int k, pul = 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f)));
+    for (k = 0; k < 10; k++)                                  /* brilho que some para a direita */
+        rect(x1 + (x2 - x1) * k / 10.0f, y - 6, x1 + (x2 - x1) * (k + 1) / 10.0f, y + h,
+             CA(255, 215, 60, pul + 12 - k * 4));
+    rect(x1, y - 6, x2, y - 5, CA(255, 240, 150, 0x30));
+    rect(x1, y + h - 1, x2, y + h, CA(255, 200, 60, 0x20));
     rect(x1, y - 6, x1 + 3, y + h, COL(255,230,60));
     tri(x1 + 10 + bob, y + 1, x1 + 10 + bob, y + 15, x1 + 23 + bob, y + 8, COL(255,230,60));
 }
@@ -3229,9 +3296,20 @@ static void drawMenuScreen(void)
         float x0 = 320.0f - tw(sc, tt) * 0.5f;
         u64 glow = GS_SETREG_RGBAQ(140, 70, 10, 0x40, 0x00);
         u64 tc = COL(255, 200 + (int)(45 * s1), 40 + (int)(30 * s2));
+        int e;
+        text(x0 + 4, ty + 6, sc, GS_SETREG_RGBAQ(0, 0, 0, 0x60, 0x00), tt);          /* sombra */
         text(x0 - 3, ty - 3, sc, glow, tt); text(x0 + 3, ty - 3, sc, glow, tt);
         text(x0 - 3, ty + 3, sc, glow, tt); text(x0 + 3, ty + 4, sc, glow, tt);
         text(x0, ty, sc, tc, tt);
+        text(x0, ty - 1.5f, sc, GS_SETREG_RGBAQ(255, 250, 205, 0x30, 0x00), tt);      /* brilho metalico */
+        for (e = 0; e < 2; e++) {                                                    /* bolas 8 nos lados */
+            float ex = e ? x0 + tw(sc, tt) + 30.0f : x0 - 30.0f, ey = ty + 16.0f;
+            discN(ex + 3, ey + 5, 17.0f, GS_SETREG_RGBAQ(0, 0, 0, 0x30, 0x00), 18);
+            discN(ex, ey, 17.0f, COL(12, 12, 18), 18);
+            discN(ex - 5.0f, ey - 6.0f, 4.5f, GS_SETREG_RGBAQ(255, 255, 255, 0x40, 0x00), 8);
+            discN(ex, ey, 8.5f, COL(245, 245, 245), 14);
+            text(ex - tw(0.5f, "8") * 0.5f + 1.0f, ey - 8.0f, 0.5f, COL(10, 10, 14), "8");
+        }
     }
     textC(80, 0.42f, COL(190,200,225), "PS2 EDITION");
     rect(180, 104, 460, 106, COL(50,90,70));
@@ -3268,7 +3346,8 @@ static int pauseRows(int *v)
 {
     int n = 0, k;
     for (k = 0; k < NPI; k++)
-        if (mode == 1 || (k != PI_WB1 && k != PI_GD1)) v[n++] = k;
+        if (k == PI_WB0 || k == PI_WB1) continue;            /* cor da bola branca: so no menu Configurar partida */
+        if (mode == 1 || k != PI_GD1) v[n++] = k;
     return n;
 }
 static int plSel;                                /* cursor da lista de musicas */
@@ -3314,7 +3393,6 @@ static void pauseInput(u32 pr)
     if (pr & (PAD_START | PAD_CIRCLE)) { paused = 0; return; }
     row = pv[pauseSel];
     switch (row) {
-    case PI_WB0: case PI_WB1: if (tog) { int w = row == PI_WB0 ? 0 : 1, dd = d ? d : 1; wbSel[w] = (wbSel[w] + dd + NWB) % NWB; } break;
     case PI_GD0: case PI_GD1: if (tog) { int w = row == PI_GD0 ? 0 : 1, dd = d ? d : 1; gdSel[w] = (gdSel[w] + dd + NGD) % NGD; } break;
     case PI_SND:     if (tog) sndOn = !sndOn; break;
     case PI_MUS:     if (tog) { musOn = !musOn; musicSetEnabled(musOn); } break;
@@ -3443,10 +3521,10 @@ static void drawPause(void)
             textC(388, 0.3f, COL(255,190,120), "SONS DOS EFEITOS EM BREVE: A OPCAO JA FICA SALVA");
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
             textC(388, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
-        else if (row == PI_WB0 || row == PI_WB1 || row == PI_GD0 || row == PI_GD1) {
-            int w = (row == PI_WB0 || row == PI_GD0) ? 0 : 1;
+        else if (row == PI_GD0 || row == PI_GD1) {
+            int w = (row == PI_GD0) ? 0 : 1;
             char hb[64];
-            if (mode == 0) strcpy(hb, "A COR MUDA NA HORA. VALE PARA VOCE NA SUA VEZ");
+            if (mode == 0) strcpy(hb, "A COR DA LINHA MUDA NA HORA");
             else sprintf(hb, "COR DE %s: VALE QUANDO E A VEZ DELE", pnames[w]);
             textC(388, 0.3f, COL(150,220,255), hb);
         }
@@ -3475,7 +3553,7 @@ static void drawChalkFx(float bx, float by, float d0)
     }
 }
 
-static void draw(void)
+static void drawScene(void)
 {
     int i;
     if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
@@ -3535,6 +3613,65 @@ static void draw(void)
     if (paused) drawPause();
 }
 
+/* categoria da tela: 1 = menus, 2 = fim de jogo, 3 = partida */
+static int stCat(int st)
+{
+    if (st == S_OVER) return 2;
+    if (st == S_MENU || st == S_CREDITS || st == S_OPTS || st == S_SETUP || st == S_NAME || st == S_PLAYER) return 1;
+    return 3;
+}
+
+/* desenha a tela e aplica um fade rapido ao trocar de tela */
+static void draw(void)
+{
+    static int lastSt = -1, fadeT = 0, fadeN = 14;
+    if (state != lastSt) {
+        if (lastSt >= 0) {
+            if (stCat(state) != stCat(lastSt)) { fadeT = fadeN = 16; }
+            else if (stCat(state) == 1)        { fadeT = fadeN = 6; }
+        }
+        lastSt = state;
+    }
+    drawScene();
+    if (fadeT > 0) {
+        rect(-OX, -OY, 640.0f + OX, 448.0f + OY, CA(0, 0, 0, fadeT * 0x80 / fadeN));
+        fadeT--;
+    }
+}
+
+/* tela de abertura: logo com fade, barra de carregamento; X ou START pula */
+static void splashScreen(void)
+{
+    int f, total = 200;
+    for (f = 0; f < total; f++) {
+        float sc = 1.5f;
+        int a = 0x80;
+        const char *tt = "8 BALL REIS";
+        float x0 = 320.0f - tw(sc, tt) * 0.5f, ty = 150.0f + 4.0f * sinf(f * 0.07f);
+        if (f < 36) a = f * 0x80 / 36;
+        if (f > total - 30) a = (total - f) * 0x80 / 30;
+        if (f > 40 && (readpad(0) & (PAD_START | PAD_CROSS))) { f = total - 30; }
+        menuT++;
+        menuUpdate();
+        gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x80, 0x00));
+        gsKit_prim_sprite(g, 0, 0, (float)g->Width, (float)g->Height, 1, COL(16, 16, 24));
+        drawBackdrop();
+        text(x0 + 5, ty + 7, sc, GS_SETREG_RGBAQ(0, 0, 0, a / 2, 0x00), tt);
+        text(x0 - 3, ty - 3, sc, GS_SETREG_RGBAQ(140, 70, 10, a / 2, 0x00), tt);
+        text(x0 + 3, ty + 4, sc, GS_SETREG_RGBAQ(140, 70, 10, a / 2, 0x00), tt);
+        text(x0, ty, sc, GS_SETREG_RGBAQ(255, 215, 70, a, 0x00), tt);
+        text(320.0f - tw(0.5f, "PS2 EDITION") * 0.5f, 214, 0.5f, GS_SETREG_RGBAQ(190, 200, 225, a, 0x00), "PS2 EDITION");
+        rect(200, 244, 440, 246, CA(60, 110, 90, a));
+        rect(200, 244, 200 + 240.0f * (f < total - 30 ? (float)f / (total - 30) : 1.0f), 246, CA(255, 225, 120, a));
+        text(320.0f - tw(0.34f, "CRIADO POR " GAME_AUTHOR) * 0.5f, 268, 0.34f, GS_SETREG_RGBAQ(170, 180, 195, a, 0x00), "CRIADO POR " GAME_AUTHOR);
+        if (f > 40 && (f / 24) % 2 == 0)
+            text(320.0f - tw(0.34f, "APERTE X OU START") * 0.5f, 400, 0.34f, GS_SETREG_RGBAQ(255, 235, 140, a, 0x00), "APERTE X OU START");
+        text(626.0f - tw(0.3f, "VERSAO " GAME_VERSION), 424, 0.3f, GS_SETREG_RGBAQ(150, 160, 175, a, 0x00), "VERSAO " GAME_VERSION);
+        gsKit_queue_exec(g);
+        gsKit_sync_flip(g);
+    }
+}
+
 /* ---------- main ---------- */
 int main(int argc, char *argv[])
 {
@@ -3568,6 +3705,8 @@ int main(int argc, char *argv[])
 #endif
     OX = (g->Width  - 640) / 2.0f; if (OX < 0) OX = 0;
     OY = (g->Height - 448) / 2.0f; if (OY < 0) OY = 0;
+    menuInit();
+    splashScreen();
     menuInit();
 
     for (;;) {

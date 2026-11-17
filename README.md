@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.8.0
+- Versão: 1.9.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -113,10 +113,18 @@ O taco começa com a ponta cheia de giz (ponta azul no taco e barrinha **GIZ** n
 - Quando o giz está abaixo da metade a barra de dicas mostra a tecla do giz
 
 ## Cor da bola branca e da linha guia
-Cada jogador tem a sua. Aperte **START** durante a partida e mude em **BOLA BRANCA** e **LINHA GUIA** (Esquerda/Direita ou X). Contra o BOT aparecem as opções do jogador 1; no versus aparecem **BRANCA J1 / GUIA J1** e **BRANCA J2 / GUIA J2**, e cada um muda a sua a qualquer momento. A cor muda na hora e a bola branca assume a cor de quem está na vez. A linha guia colorida vale para a linha de mira, a bola fantasma e o caminho da bola alvo (o laser do taco Sniper continua vermelho enquanto a guia estiver em Branca).
+A **cor da bola branca** é escolhida só no menu (**Configurar partida → BOLA BRANCA**) e vale para a partida inteira: não dá para trocar durante o jogo.
+A **linha guia** continua podendo ser trocada a qualquer momento: aperte **START** durante a partida e mude em **LINHA GUIA** (Esquerda/Direita ou X). Contra o BOT aparece a opção do jogador 1; no versus aparecem **GUIA J1** e **GUIA J2**, e a cor vale quando é a vez do jogador. A linha guia colorida vale para a linha de mira, a bola fantasma e o caminho da bola alvo (o laser do taco Sniper continua vermelho enquanto a guia estiver em Branca).
+
+## Visual (novo na 1.9)
+- **Tela de abertura** com logo, barra de carregamento e fade (X ou START pula)
+- **Transições suaves** (fade) entre menu, partida e fim de jogo
+- **Menus**: painéis com degradê, cantoneiras douradas e sombra; barra de seleção com brilho; título com sombra, brilho metálico e bolas 8 nos lados; fundo com partículas de luz e vinheta
+- **Mesa**: sombra do feltro junto das tabelas (mais profundidade), brilho na madeira e caçapas com aro de couro e latão mais detalhados
+- **HUD**: caixas com sombra, brilho no topo e base mais escura
 
 ## Pausa (START)
-Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da bola branca e da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
+Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
 Obs.: os sons dos efeitos (tacadas, caçapas) ainda não existem; a opção **Som** já fica salva no menu.
 
 ## Música durante a partida
