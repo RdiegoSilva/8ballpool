@@ -3,13 +3,13 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.1.0
+- Versão: 2.2.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
-- JOGAR abre a tela **Configurar partida**, agora em **4 etapas** (barra no topo): **1 Partida** (adversário, tempo ou dificuldade, modo), **2 Mesa e bolas**, **3 Bola branca e guia** e **4 Personagens**. Cima/Baixo escolhe, Esq/Dir muda, **X ou START em "PROXIMA ETAPA"** avança, **O** volta uma etapa (na primeira, volta ao menu) e **L1/R1** trocam de etapa. A última etapa tem **INICIAR PARTIDA**. Cada etapa mostra uma prévia (mesa, bola branca e linha guia, personagens). Detalhes de cada opção:
+- JOGAR abre a tela **Configurar partida**, agora em **4 etapas** (barra no topo): **1 Partida** (adversário, tempo ou dificuldade, modo), **2 Personagens**, **3 Mesa e bolas** e **4 Bola branca e guia**. Cima/Baixo escolhe, Esq/Dir muda, **X ou START em "PROXIMA ETAPA"** avança, **O** volta uma etapa (na primeira, volta ao menu) e **L1/R1** trocam de etapa. A última etapa (Bola branca e guia) tem **INICIAR PARTIDA**. Cada etapa mostra uma prévia (personagens com o taco e a mesa de cada um, mesa, bola branca e linha guia). Detalhes de cada opção:
 - (opções, como funcionam:) (Cima/Baixo escolhe a linha, Esquerda/Direita muda o valor, X ou START inicia, O volta):
   - ADVERSÁRIO: BOT ou JOGADOR 2. Ao iniciar abre a tela para **digitar o nome do JOGADOR 1** e, se o adversário for o JOGADOR 2, depois o nome dele (teclado na tela: direcional move, X escolhe a letra, O apaga, START confirma, SELECT volta; até 10 caracteres; vazio = "JOGADOR 1" / "JOGADOR 2"; os nomes ficam guardados até desligar)
   - TEMPO POR JOGADA (só contra o JOGADOR 2): SEM TEMPO, 15, 20, 25 ou 30 segundos. O contador e a barra aparecem no painel de quem joga; passou o tempo, **perde a vez**
@@ -21,7 +21,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
   - **MESA DO PERSONAGEM** (SIM/NÃO): usa automaticamente a mesa do personagem do Jogador 1 (veja a tabela de kits abaixo). Escolher uma mesa na mão desliga essa opção
   - **HABILIDADES** (só no versus): LIGADAS ou DESLIGADAS. Contra o BOT as habilidades ficam sempre ligadas para você
-  - MESA (21 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (22 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -35,6 +35,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Vampiro**: feltro vinho, espinhos góticos, velas nos cantos, lua pálida, morcegos e sangue escorrendo da tabela
     - **Natal**: feltro verde com moldura vermelha, pisca-pisca colorido, bolas de Natal nos cantos, neve, estrelas e o **trenó do Papai Noel** cruzando a mesa
     - **Hack**: grade e varredura ciano, chuva de bits ciano/magenta, pacotes de dados correndo na moldura, falhas (glitch), "HACK" piscando e mira nas caçapas
+    - **Chapolin**: feltro vermelho, moldura vermelha e amarela, corações nos cantos e subindo pelo feltro, grande coração amarelo no centro, estrelas e antenas saltitantes
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
@@ -105,19 +106,32 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Cowboy     | Pistoleiro | **TIRO**: a branca sai como uma bala (+50% de velocidade, sem efeito) com clarão de disparo | Faroeste |
 | Vampiro    | Vampiro    | **SUGAR**: depois da batida, a bola alvo é puxada para a caçapa mais próxima | Vampiro |
 | Papai Noel | Noel       | **PRESENTE**: perdoa uma falta (a vez passa sem bola na mão) | Natal |
+| Chapolin   | Chipote    | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
 | Hacker     | Hack       | **HACK**: a mira trava sozinha na melhor tacada, mostra o caminho todo e marca a **força ideal** na barra | Hack |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
 | Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
 | Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
 
-Pinguim, Robô, Alien, Mago, Gato e Chapolin: só mesa (Robô: Neon, Alien: Galáxia, Mago: Noite Lua, Gato: Rosa) ou nada.
+Robô, Alien, Mago e Gato: só mesa (Robô: Neon, Alien: Galáxia, Mago: Noite Lua, Gato: Rosa) ou nada.
 - **Usar a habilidade: O na mira.** Na maioria, o primeiro toque arma a habilidade (aparece "ARMADO!" no canto) e vale para a próxima tacada; tocar de novo cancela. O **HACK** age na hora
 - Depois de usar, a habilidade **recarrega em 3 tacadas** (o contador aparece ao lado do nome do taco)
 - O BOT não usa habilidades. No torneio ninguém usa (só taco Clássico)
 - No **versus** você escolhe na configuração se a partida é **com ou sem habilidades** (HABILIDADES: LIGADAS/DESLIGADAS). Desligadas, os tacos valem só pelos atributos
 
 ## Catálogo de tacos (SELECT na mira)
-Tela reorganizada: lista à esquerda separada em **PADRÃO** e **PERSONAGENS**; à direita, a foto do taco sobre o feltro da mesa do personagem, os atributos, a **caricatura do dono do taco**, a **habilidade** (com descrição e recarga) e a **mesa do personagem**. Cima/Baixo escolhe, X equipa, O ou SELECT volta.
+Tela reorganizada: lista à esquerda (com rolagem) separada em **PADRÃO**, **PAÍSES** e **PERSONAGENS**; à direita, a foto do taco sobre o feltro da mesa do personagem, os atributos, a **caricatura do dono do taco**, a **habilidade** (com descrição e recarga) e a **mesa do personagem**. Cima/Baixo escolhe, X equipa, O ou SELECT volta.
+
+## Tacos de países
+Categoria própria no catálogo: tacos com as cores da bandeira (faixas que giram e brilhos), só de atributos, sem habilidade.
+
+| Taco      | Força | Efeito | Mira | Controle |
+|-----------|-------|--------|------|----------|
+| Brasileiro | 60   | 50     | 60   | 60       |
+| Mexicano  | 58    | 52     | 58   | 57       |
+| Argentino | 56    | 56     | 58   | 58       |
+| Americano | 70    | 38     | 50   | 50       |
+| Italiano  | 55    | 60     | 55   | 55       |
+| Japonês   | 48    | 45     | 67   | 72       |
 
 ## Tacos
 | Taco       | Força | Efeito | Mira | Controle |
