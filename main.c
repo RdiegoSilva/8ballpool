@@ -1,10 +1,11 @@
 /* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
- * Criador: Diego Reis | Versao 1.5.0
+ * Criador: Diego Reis | Versao 1.6.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
  *                         X de novo = tacada | O = cancelar a tacada
- *                     L2/R2 = efeito na bola branca | SELECT = trocar de taco
+ *                     L2/R2 = efeito lateral | CIMA/BAIXO = rola/puxa
+ *                     TRIANGULO = pulo da bola branca | SELECT = trocar de taco
  * Bola na mao:        direcional move a bola branca, X confirma
  */
 #include <tamtypes.h>
@@ -34,7 +35,7 @@
 enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
-typedef struct { float x, y, vx, vy; int in; } Ball;
+typedef struct { float x, y, vx, vy; int in; float z, vz; } Ball;   /* z/vz: altura no pulo */
 
 static GSGLOBAL *g;
 static GSFONTM  *fm;
@@ -74,6 +75,13 @@ static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da 
 static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
 static float chalk[2] = { 1.0f, 1.0f }, cueChalk;      /* giz no taco (1 = cheio) e giz mostrado na ponta */
 static int   chalkAnim;                                /* animacao de passar giz (frames) */
+
+/* pulo e efeito vertical (v1.6) */
+#define JUMP_G     900.0f                          /* gravidade da bola no ar */
+#define JUMP_CLEAR 11.0f                           /* acima desta altura a branca passa por cima das outras bolas */
+static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (segue), - puxa (volta) */
+static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
+static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
 #define PO 4.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
 static const float PX[6] = { TX0 - PO, TCX, TX1 + PO, TX0 - PO, TCX, TX1 + PO };
@@ -161,7 +169,7 @@ static CueDef CUES[NCUES] = {
     { "OCEANO",     50,  70,  45,  55, {120,230,255}, { 70,150,190}, { 16, 70,130}, { 90,220,230}, { 10, 40, 80}, 3 },
 };
 
-#define GAME_VERSION "1.5.0"
+#define GAME_VERSION "1.6.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -250,9 +258,12 @@ static void drawNumber(int n, float cx, float cy, float r)
 
 static void drawShadow(int i)
 {
+    float z = (i == 0 && b[0].z > 0.0f) ? b[0].z : 0.0f;      /* no pulo a sombra fica no chao, menor e mais fraca */
     if (!b[i].in) return;
-    discN(b[i].x + 3.6f, b[i].y + 4.2f, R * 1.10f, GS_SETREG_RGBAQ(0, 18, 8, 0x14, 0x00), 12);
-    discN(b[i].x + 2.4f, b[i].y + 3.0f, R * 0.96f, GS_SETREG_RGBAQ(0, 14, 6, 0x24, 0x00), 12);
+    discN(b[i].x + 3.6f + z * 0.5f, b[i].y + 4.2f + z * 0.7f, R * (1.10f - z * 0.012f),
+          GS_SETREG_RGBAQ(0, 18, 8, z > 0.0f ? 0x0c : 0x14, 0x00), 12);
+    discN(b[i].x + 2.4f + z * 0.5f, b[i].y + 3.0f + z * 0.7f, R * (0.96f - z * 0.010f),
+          GS_SETREG_RGBAQ(0, 14, 6, z > 0.0f ? 0x16 : 0x24, 0x00), 12);
 }
 
 static u64 shadeA(const u8 *c, float f, int add, int a)
@@ -552,13 +563,15 @@ static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
 static float cueBarSpeed(int c)   { return 0.026f - 0.00016f * CUES[c].ctl; }
+static float cueVSpin(int c)      { return 0.30f + 0.0050f * CUES[c].effect; }   /* forca do rola/puxa */
+static float cueJumpMul(int c)    { return 0.80f + 0.0040f * CUES[c].effect; }   /* altura do pulo */
 
 static void rack(void)
 {
     static const int order[15] = {1,9,2,10,8,3,11,4,12,5,13,6,14,7,15};
     int i, r, c, k = 0;
     memset(fallT, 0, sizeof(fallT));
-    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 1; resetOrient(i); }
+    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; b[i].in = 1; resetOrient(i); }
     b[0].x = HEADX; b[0].y = TCY;
     for (r = 0; r < 5; r++)
         for (c = 0; c <= r; c++) {
@@ -591,7 +604,7 @@ static void rackBR(void)
 {
     int i, k;
     memset(fallT, 0, sizeof(fallT));
-    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].in = 0; resetOrient(i); }
+    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; b[i].in = 0; resetOrient(i); }
     b[0].in = 1; b[0].x = TCX; b[0].y = TCY;
     for (k = 0; k < 4; k++) {
         b[1 + k].in = 1; brPos(k, &b[1 + k].x, &b[1 + k].y);
@@ -608,6 +621,7 @@ static void newGame(int m)
     cur = 0; ang = 0; pwr = 0;
     charging = 0; breakShot = (gmode == GM_8BALL); botTimer = 0; botPlanned = 0; state = S_AIM;
     spinSel = spinCur = 0; barDir = 1.0f;
+    spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
@@ -624,15 +638,21 @@ static void shoot(float p)
     hitX = b[0].x; hitY = b[0].y; hitCue = curCue();
     if (!isBot()) {                                   /* giz: ponta sem giz escorrega e a tacada sai torta */
         float miss = (1.0f - ch) * 0.045f, dev = ((int)(rnd() % 2001) - 1000) / 1000.0f;
-        if (ch < 0.25f && fabsf(spinSel) > 0.6f) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
+        if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
         else if (ch < 0.25f) setmsg("POUCO GIZ! PASSE GIZ NO TACO");
         a += dev * miss;
-        chalk[cur] -= 0.12f + 0.08f * fabsf(spinSel);
+        chalk[cur] -= 0.12f + 0.08f * fabsf(spinSel) + 0.05f * fabsf(spinV) + (jumpArm ? 0.08f : 0.0f);
         if (chalk[cur] < 0.0f) chalk[cur] = 0.0f;
     }
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     spinCur = spinSel * (0.8f + 0.2f * ch); spinK = cueSpinK(hitCue); spinSel = 0;
+    spinVCur = spinV * (0.8f + 0.2f * ch); spinVK = cueVSpin(hitCue); spinV = 0;
+    if (jumpArm && !isBot()) {                        /* pulo: a branca sobe e passa por cima das outras bolas */
+        b[0].vz = (150.0f + 90.0f * p) * cueJumpMul(hitCue);
+        b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
+    }
+    jumpArm = 0;
     breakShot = 0; pwr = 0; charging = 0; follow = FOLLOWN; state = S_ROLL;
 }
 
@@ -659,9 +679,19 @@ static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     for (i = 0; i < 16; i++) {
-        int inMouth = 0;
+        int inMouth = 0, air, wl = 0;
         if (!b[i].in) continue;
-        if (i == 0 && spinCur != 0.0f) {          /* efeito: a trajetoria curva */
+        if (b[i].z > 0.0f) {                       /* pulo: sobe e desce sem atrito */
+            b[i].vz -= JUMP_G * dt; b[i].z += b[i].vz * dt;
+            if (b[i].z <= 0.0f) {
+                b[i].z = 0.0f;
+                if (b[i].vz < -45.0f) {            /* quica de leve ao cair */
+                    b[i].vz = -b[i].vz * 0.38f; b[i].vx *= 0.92f; b[i].vy *= 0.92f; b[i].z = 0.001f;
+                } else b[i].vz = 0.0f;
+            }
+        }
+        air = b[i].z > 3.0f;
+        if (i == 0 && spinCur != 0.0f && b[0].z <= 0.0f) {          /* efeito: a trajetoria curva */
             float a = spinCur * spinK * dt, c = cosf(a), sn = sinf(a);
             float ovx = b[0].vx, ovy = b[0].vy;
             b[0].vx = ovx * c - ovy * sn; b[0].vy = ovx * sn + ovy * c;
@@ -670,9 +700,9 @@ static int stepPhysics(float dt)
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
             float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, mouth = PR[p] + R;
-            if (d2 < PR[p]*PR[p]) {
+            if (!air && d2 < PR[p]*PR[p]) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
-                b[i].in = 0; b[i].vx = b[i].vy = 0; pocketed[i] = 1; break;
+                b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; break;
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
@@ -685,16 +715,22 @@ static int stepPhysics(float dt)
         }
         if (!b[i].in) continue;
         if (inMouth) continue;                            /* sem rebote enquanto esta na boca */
-        if (b[i].x < TX0+R) { b[i].x = TX0+R; if (b[i].vx < 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
-        if (b[i].x > TX1-R) { b[i].x = TX1-R; if (b[i].vx > 0) { b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
-        if (b[i].y < TY0+R) { b[i].y = TY0+R; if (b[i].vy < 0) { b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
-        if (b[i].y > TY1-R) { b[i].y = TY1-R; if (b[i].vy > 0) { b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        if (b[i].x < TX0+R) { b[i].x = TX0+R; if (b[i].vx < 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        if (b[i].x > TX1-R) { b[i].x = TX1-R; if (b[i].vx > 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        if (b[i].y < TY0+R) { b[i].y = TY0+R; if (b[i].vy < 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        if (b[i].y > TY1-R) { b[i].y = TY1-R; if (b[i].vy > 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        if (wl && i == 0 && spinCur != 0.0f) {          /* efeito lateral muda o angulo do rebote na tabela */
+            float kx = -b[0].vy, ky = b[0].vx;
+            b[0].vx += kx * spinCur * 0.12f; b[0].vy += ky * spinCur * 0.12f;
+            spinCur *= 0.55f;
+        }
     }
     for (i = 0; i < 16; i++) {
         if (!b[i].in) continue;
         for (j = i + 1; j < 16; j++) {
             float dx, dy, d2, d, nx, ny, rv, ov;
             if (!b[j].in) continue;
+            if (i == 0 && b[0].z > JUMP_CLEAR) break;      /* pulando: passa por cima de todas */
             dx = b[j].x - b[i].x; dy = b[j].y - b[i].y; d2 = dx*dx + dy*dy;
             if (d2 >= 4*R*R || d2 < 0.0001f) continue;
             d = sqrtf(d2); nx = dx / d; ny = dy / d;
@@ -702,16 +738,26 @@ static int stepPhysics(float dt)
             b[i].x -= nx*ov; b[i].y -= ny*ov; b[j].x += nx*ov; b[j].y += ny*ov;
             rv = (b[i].vx - b[j].vx) * nx + (b[i].vy - b[j].vy) * ny;
             if (rv > 0) {
+                float cvx = b[i].vx, cvy = b[i].vy;
                 rv *= 0.98f;                      /* choque quase elastico */
                 b[i].vx -= rv*nx; b[i].vy -= rv*ny;
                 b[j].vx += rv*nx; b[j].vy += rv*ny;
                 if (i == 0 && firstHit < 0) firstHit = j;
+                if (i == 0 && spinVCur != 0.0f) {              /* rola (segue) ou puxa (volta) depois da batida */
+                    float sp0 = sqrtf(cvx*cvx + cvy*cvy);
+                    if (sp0 > 1.0f) {
+                        float bst = spinVCur * spinVK * sp0;
+                        b[0].vx += cvx / sp0 * bst; b[0].vy += cvy / sp0 * bst;
+                    }
+                    spinVCur = 0.0f;
+                }
             }
         }
     }
     for (i = 0; i < 16; i++) {
         float sp, s2;
         if (!b[i].in) continue;
+        if (b[i].z > 0.0f) { moving = 1; continue; }       /* no ar nao ha atrito */
         sp = sqrtf(b[i].vx*b[i].vx + b[i].vy*b[i].vy);
         if (sp < 6.0f) { b[i].vx = b[i].vy = 0; continue; }
         s2 = sp * (1.0f - 0.6f * dt) - 24.0f * dt;
@@ -742,7 +788,7 @@ static void endTurn(int foul, int ownPocket)
     botTimer = 0; botPlanned = 0;
     if (foul) {
         if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY; }
-        b[0].vx = b[0].vy = 0;
+        b[0].vx = b[0].vy = 0; b[0].z = b[0].vz = 0;
         cur = 1 - cur;
         state = S_PLACE;
         sprintf(buf, "FALTA! BOLA NA MAO - %s", pname(cur));
@@ -757,7 +803,7 @@ static void endTurn(int foul, int ownPocket)
 
 static void endGame(int w)
 {
-    winner = w;
+    winner = w; overT = 0;
     (mode == 0 ? winsBot : winsVs)[w]++;
     state = S_OVER;
 }
@@ -1603,6 +1649,27 @@ static int nearPocket(float x, float y)
     return -1;
 }
 
+/* pulo armado: arco e marca de onde a branca deve cair (estimativa sem atrito) */
+static void drawJumpMark(void)
+{
+    float p = charging ? pwr : 0.5f, vz = (150.0f + 90.0f * p) * cueJumpMul(curCue());
+    float sp = p * MAXV * cuePowMul(curCue()) * 0.9f * 0.9f, T = 2.0f * vz / JUMP_G, dist = sp * T;
+    float apex = vz * vz / (2.0f * JUMP_G), dx = cosf(ang), dy = sinf(ang);
+    float lx = b[0].x + dx * dist, ly = b[0].y + dy * dist;
+    int k;
+    if (lx < TX0 + R) lx = TX0 + R;
+    if (lx > TX1 - R) lx = TX1 - R;
+    if (ly < TY0 + R) ly = TY0 + R;
+    if (ly > TY1 - R) ly = TY1 - R;
+    for (k = 1; k < 8; k++) {
+        float u = k / 8.0f;
+        discN(b[0].x + (lx - b[0].x) * u, b[0].y + (ly - b[0].y) * u - 4.0f * apex * u * (1.0f - u) * 0.55f,
+              1.5f, CA(130, 255, 160, 0x60), 6);
+    }
+    ringN(lx, ly, R + 2.0f + 1.5f * sinf(menuT * 0.2f), 1.8f, 20, CA(120, 255, 150, 0x70));
+    ringN(lx, ly, R * 0.45f, 1.2f, 12, CA(120, 255, 150, 0x50));
+}
+
 /* mira estilo 8 Ball Pool: a linha SEMPRE chega ate a bola fantasma (ou ate a
    tabela, sem quicar). Depois do impacto mostra um trecho curto da bola alvo e do
    desvio da branca. O taco (stat "mira") aumenta esses trechos; o MIRA LONGA
@@ -1827,16 +1894,17 @@ static void drawPowerBar(void)
     text(8, by1 + 12, 0.36f, COL(255,230,60), buf);
 }
 
-/* indicador de efeito (L2/R2): o ponto vermelho mostra o lado do efeito */
+/* indicador de efeito: o ponto vermelho mostra o lado (L2/R2) e o rola/puxa (CIMA/BAIXO); PULO acende com TRIANGULO */
 static void drawSpinIndicator(void)
 {
-    const float cx = 30.0f, cy = 410.0f, r = 10.0f;
+    const float cx = 30.0f, cy = 404.0f, r = 10.0f;
     discN(cx, cy, r + 1.5f, COL(60,60,66), 16);
     discN(cx, cy, r, COL(236,236,230), 16);
     line(cx, cy - r, cx, cy + r, COL(190,190,184));
     line(cx - r, cy, cx + r, cy, COL(190,190,184));
-    discN(cx + spinSel * (r - 3.5f), cy, 2.8f, COL(215,40,40), 8);
-    text(8, 424, 0.3f, COL(200,200,205), "EFEITO");
+    discN(cx + spinSel * (r - 3.5f), cy - spinV * (r - 3.5f), 2.8f, COL(215,40,40), 8);
+    text(8, 418, 0.3f, COL(200,200,205), "EFEITO");
+    text(8, 430, 0.3f, jumpArm ? (((menuT / 10) & 1) ? COL(120,255,150) : COL(60,200,100)) : COL(95,100,112), "PULO");
 }
 
 /* giz do jogador da vez (canto inferior direito) */
@@ -1859,6 +1927,8 @@ static void drawChalkIndicator(void)
 static float tipKey(float x, float y, const char *k, const char *l, u64 c1, u64 c2)
 { return tipsOn ? keycap(x, y, k, l, c1, c2) : 0.0f; }
 
+static void drawChar(int id, float cx, float cy, float s, int mood, int t, int full);
+
 /* painel de cada jogador (topo): nome, grupo e as bolas que ainda restam */
 static void drawPlayerPanel(int pl)
 {
@@ -1875,6 +1945,7 @@ static void drawPlayerPanel(int pl)
     rect(x1, y1, x1 + 5, y2, act ? COL(255,215,60) : COL(70,78,96));
     text(x1 + 14, y1 + 5, 0.5f, act ? COL(255,235,110) : COL(165,170,180), nm);
     text(x1 + 14, y1 + 23, 0.32f, act ? COL(255,255,255) : COL(130,138,152), gn);
+    drawChar(charSel[pl], x2 - 22.0f, y1 + 28.0f, 0.42f, 0, menuT, 0);          /* avatar do personagem */
 
     if (act && timeSel && mode == 1 && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
         int sec = (turnT + 59) / 60;
@@ -1883,7 +1954,7 @@ static void drawPlayerPanel(int pl)
         u64 tcol = sec <= 5 ? ((menuT / 8) & 1 ? COL(255,90,80) : COL(255,160,140)) : COL(255,255,255);
         if (fr < 0) fr = 0; if (fr > 1) fr = 1;
         sprintf(tb, "%dS", sec);
-        text(x2 - 10 - tw(0.5f, tb), y1 + 21, 0.5f, tcol, tb);
+        text(x2 - 44 - tw(0.5f, tb), y1 + 21, 0.5f, tcol, tb);
         rect(x1, y2 + 3, x2, y2 + 7, CA(40, 44, 56, 0x70));
         rect(x1, y2 + 3, x1 + (x2 - x1) * fr, y2 + 7, sec <= 5 ? COL(255,90,80) : (fr < 0.5f ? COL(255,200,60) : COL(110,230,130)));
     }
@@ -1936,6 +2007,10 @@ static void drawHUD(void)
             x += tipKey(x, 421, "X", "DISPARAR", COL(255,230,60), COL(235,235,240)) + 16;
             tipKey(x, 421, "O", "CANCELAR", COL(255,230,60), COL(235,235,240));
         } else {
+            if (tipsOn && ((menuT / 360) & 1)) {                    /* 2a pagina de dicas */
+                x += tipKey(x, 421, "CIMA/BAIXO", "ROLA/PUXA", COL(255,230,60), COL(235,235,240)) + 14;
+                tipKey(x, 421, "TRI", jumpArm ? "PULO LIGADO" : "PULO", COL(255,230,60), COL(235,235,240));
+            } else {
             x += tipKey(x, 421, "X", "FORCA", COL(255,230,60), COL(235,235,240)) + 14;
             if (chalk[cur] < 0.5f) {
                 x += tipKey(x, 421, "QUAD", "GIZ", COL(110,200,255), COL(235,235,240)) + 14;
@@ -1943,6 +2018,7 @@ static void drawHUD(void)
             } else {
                 x += tipKey(x, 421, "L2/R2", "EFEITO", COL(255,230,60), COL(235,235,240)) + 14;
                 tipKey(x, 421, "SELECT", "TACOS", COL(255,230,60), COL(235,235,240));
+            }
             }
         }
     } else if (state == S_PLACE && !isBot()) {
@@ -1971,6 +2047,453 @@ static void drawHUD(void)
 
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
+
+/* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
+#define NCHARS 10
+#define CPI 3.14159265f
+static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "ALIEN",
+                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO" };
+
+static void ell(float cx, float cy, float rx, float ry, u64 c)
+{
+    int i, n = 16;
+    for (i = 0; i < n; i++) {
+        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+        tri(cx, cy, cx + cosf(a0) * rx, cy + sinf(a0) * ry, cx + cosf(a1) * rx, cy + sinf(a1) * ry, c);
+    }
+}
+
+/* fatia de elipse (a0..a1 em rad; y cresce para baixo: 0..PI = metade de baixo, PI..2PI = metade de cima) */
+static void slice(float cx, float cy, float rx, float ry, float a0, float a1, u64 c)
+{
+    int i, n = 10;
+    for (i = 0; i < n; i++) {
+        float p0 = a0 + (a1 - a0) * i / n, p1 = a0 + (a1 - a0) * (i + 1) / n;
+        tri(cx, cy, cx + cosf(p0) * rx, cy + sinf(p0) * ry, cx + cosf(p1) * rx, cy + sinf(p1) * ry, c);
+    }
+}
+
+static void arcL(float cx, float cy, float rx, float ry, float a0, float a1, float w, u64 c)
+{
+    int i, n = 8;
+    for (i = 0; i < n; i++) {
+        float p0 = a0 + (a1 - a0) * i / n, p1 = a0 + (a1 - a0) * (i + 1) / n;
+        beam(cx + cosf(p0) * rx, cy + sinf(p0) * ry, cx + cosf(p1) * rx, cy + sinf(p1) * ry, w, c);
+    }
+}
+
+static void star4(float x, float y, float r, u64 c)
+{
+    quad(x, y - r, x + r * 0.32f, y, x, y + r, x - r * 0.32f, y, c);
+    quad(x - r, y, x, y - r * 0.32f, x + r, y, x, y + r * 0.32f, c);
+}
+
+/* lagrimas escorrendo dos olhos (derrota) */
+static void tears(float cx, float cy, float s, int t, float dx, float ey)
+{
+    int k, q;
+    for (k = -1; k <= 1; k += 2) {
+        float ex = cx + k * dx * s, y0 = cy + (ey + 4.0f) * s;
+        beam(ex + k * 1.5f * s, y0, ex + k * 2.5f * s, y0 + 15.0f * s, 3.0f * s, CA(120, 190, 255, 0x40));
+        for (q = 0; q < 2; q++) {
+            float age = fmodf(t * 0.9f + q * 8.0f + (k > 0 ? 4.0f : 0.0f), 16.0f);
+            discN(ex + k * (2.0f + age * 0.15f) * s, y0 + age * 1.6f * s, (2.4f - age * 0.06f) * s,
+                  CA(140, 205, 255, 0x78 - (int)(age * 3.0f)), 8);
+        }
+    }
+}
+
+/* rosto padrao: olhos, sobrancelhas e boca de acordo com o humor (0 normal, 1 vitoria, 2 derrota).
+   parts: 1 = olhos/sobrancelhas, 2 = boca. brow = 0 nao desenha sobrancelhas */
+static void faceStd(float cx, float cy, float s, int mood, int t, float dx, float ey, float my, u64 brow, int parts)
+{
+    int k;
+    u64 ink = COL(34, 22, 22), wh = COL(255, 255, 255);
+    if (parts & 1) {
+        for (k = -1; k <= 1; k += 2) {
+            float ex = cx + k * dx * s, yy = cy + ey * s;
+            if (mood == 1) {
+                beam(ex - 4.2f * s, yy + 2.0f * s, ex, yy - 2.2f * s, 2.4f * s, ink);
+                beam(ex, yy - 2.2f * s, ex + 4.2f * s, yy + 2.0f * s, 2.4f * s, ink);
+            } else {
+                float lk = (mood == 2) ? 1.6f : 0.0f;
+                discN(ex, yy, 4.6f * s, wh, 10);
+                discN(ex, yy + lk * s, 2.5f * s, ink, 8);
+                discN(ex - 0.9f * s, yy + (lk - 0.9f) * s, 0.9f * s, wh, 6);
+            }
+            if (brow) {
+                if (mood == 0)      beam(ex - 4.5f * s, yy - 7.5f * s, ex + 4.5f * s, yy - 7.5f * s, 2.0f * s, brow);
+                else if (mood == 1) arcL(ex, yy - 4.0f * s, 5.0f * s, 3.2f * s, 1.15f * CPI, 1.85f * CPI, 2.0f * s, brow);
+                else                beam(ex - k * 4.5f * s, yy - 10.0f * s, ex + k * 4.5f * s, yy - 6.0f * s, 2.0f * s, brow);
+            }
+        }
+        if (mood == 1) {
+            discN(cx - (dx + 3.0f) * s, cy + (ey + 8.0f) * s, 3.6f * s, CA(255, 110, 130, 0x40), 8);
+            discN(cx + (dx + 3.0f) * s, cy + (ey + 8.0f) * s, 3.6f * s, CA(255, 110, 130, 0x40), 8);
+        }
+        if (mood == 2) tears(cx, cy, s, t, dx, ey);
+    }
+    if (parts & 2) {
+        if (mood == 0) arcL(cx, cy + (my - 3.0f) * s, 6.0f * s, 4.0f * s, 0.15f * CPI, 0.85f * CPI, 1.8f * s, ink);
+        else if (mood == 1) {
+            slice(cx, cy + (my - 4.0f) * s, 9.0f * s, 9.0f * s, 0.0f, CPI, COL(140, 20, 30));
+            rect(cx - 8.0f * s, cy + (my - 4.0f) * s, cx + 8.0f * s, cy + (my - 1.2f) * s, wh);
+            ell(cx, cy + (my + 3.5f) * s, 4.5f * s, 2.8f * s, COL(235, 100, 120));
+        } else arcL(cx, cy + (my + 4.0f) * s, 6.5f * s, 4.5f * s, 1.15f * CPI, 1.85f * CPI, 1.8f * s, ink);
+    }
+}
+
+/* bracos: baixos (normal), levantados acenando (vitoria) ou caidos (derrota) */
+static void armsC(float cx, float cy, float s, int mood, int t, u64 sleeve, u64 hand, float w)
+{
+    int k;
+    for (k = -1; k <= 1; k += 2) {
+        float sx = cx + k * 26.0f * s, sy = cy + 44.0f * s, hx, hy;
+        if (mood == 1) {
+            hx = cx + k * (46.0f + 3.0f * sinf(t * 0.3f + k)) * s;
+            hy = cy + (2.0f + 7.0f * sinf(t * 0.35f + (k > 0 ? 3.1f : 0.0f))) * s;
+        } else if (mood == 2) { hx = cx + k * 31.0f * s; hy = cy + 86.0f * s; }
+        else                  { hx = cx + k * 37.0f * s; hy = cy + 74.0f * s; }
+        beam(sx, sy, hx, hy, w * s, sleeve);
+        discN(sx, sy, w * 0.5f * s, sleeve, 8);
+        discN(hx, hy, w * 0.62f * s, hand, 10);
+    }
+}
+
+static void legsC(float cx, float cy, float s, u64 pants, u64 shoe)
+{
+    int k;
+    for (k = -1; k <= 1; k += 2) {
+        rect(cx + (k > 0 ? 3.0f : -15.0f) * s, cy + 82.0f * s, cx + (k > 0 ? 15.0f : -3.0f) * s, cy + 99.0f * s, pants);
+        ell(cx + k * 10.0f * s, cy + 100.0f * s, 10.0f * s, 4.6f * s, shoe);
+    }
+}
+
+static void torsoC(float cx, float cy, float s, u64 c, u64 dk)
+{
+    quad(cx - 29.0f * s, cy + 44.0f * s, cx + 29.0f * s, cy + 44.0f * s, cx + 27.0f * s, cy + 86.0f * s, cx - 27.0f * s, cy + 86.0f * s, c);
+    ell(cx, cy + 40.0f * s, 29.0f * s, 17.0f * s, c);
+    rect(cx - 27.0f * s, cy + 82.0f * s, cx + 27.0f * s, cy + 86.0f * s, dk);
+}
+
+/* desenha o personagem id. (cx, cy) = centro da cabeca; s = escala (1 = cabeca com raio 25);
+   mood: 0 normal, 1 vitoria, 2 derrota; full: 0 so a cabeca (avatar), 1 corpo inteiro */
+static void drawChar(int id, float cx, float cy, float s, int mood, int t, int full)
+{
+    int k;
+    u64 skin = COL(241, 192, 152), ink = COL(34, 22, 22), wh = COL(255, 255, 255), gold = COL(255, 205, 50);
+    #define XX(v) (cx + (v) * s)
+    #define YY(v) (cy + (v) * s)
+    #define ZZ(v) ((v) * s)
+
+    switch (((id % NCHARS) + NCHARS) % NCHARS) {
+    case 0: {   /* PINGUIM */
+        u64 blk = COL(34, 38, 52), org = COL(255, 150, 30), red = COL(220, 50, 62);
+        if (full) {
+            ell(XX(-11), YY(101), ZZ(11), ZZ(4.6f), org); ell(XX(11), YY(101), ZZ(11), ZZ(4.6f), org);
+            ell(cx, YY(62), ZZ(33), ZZ(42), blk);
+            ell(cx, YY(66), ZZ(22), ZZ(34), wh);
+            for (k = -1; k <= 1; k += 2) {
+                float hx, hy;
+                if (mood == 1)      { hx = XX(k * (52 + 3 * sinf(t * 0.3f + k))); hy = YY(12 + 7 * sinf(t * 0.35f + (k > 0 ? 3.1f : 0.0f))); }
+                else if (mood == 2) { hx = XX(k * 38); hy = YY(84); }
+                else                { hx = XX(k * 42); hy = YY(66); }
+                beam(XX(k * 27), YY(42), hx, hy, ZZ(11), blk);
+                discN(hx, hy, ZZ(5.8f), blk, 8);
+            }
+        }
+        disc(cx, cy, ZZ(26), blk);
+        ell(cx, YY(5), ZZ(19), ZZ(16), wh);
+        for (k = -1; k <= 1; k += 2) {
+            if (mood == 1) {
+                beam(XX(k * 8 - 3.6f), YY(0.8f), XX(k * 8), YY(-2.4f), ZZ(2.2f), ink);
+                beam(XX(k * 8), YY(-2.4f), XX(k * 8 + 3.6f), YY(0.8f), ZZ(2.2f), ink);
+            } else {
+                discN(XX(k * 8), YY(mood == 2 ? 0 : -1), ZZ(mood == 2 ? 4.6f : 3.8f), ink, 8);
+                discN(XX(k * 8 - 1.2f), YY(mood == 2 ? -1.2f : -2.2f), ZZ(1.3f), wh, 6);
+            }
+            if (mood == 2) beam(XX(k * 8 - k * 4.5f), YY(-9), XX(k * 8 + k * 4.5f), YY(-5.5f), ZZ(2.0f), ink);
+        }
+        if (mood == 1) {
+            tri(XX(-6), YY(6.5f), XX(6), YY(6.5f), cx, YY(18), COL(140, 20, 30));
+            tri(XX(-7), YY(3), XX(7), YY(3), cx, YY(9), org);
+            tri(XX(-4), YY(16), XX(4), YY(16), cx, YY(12.5f), org);
+        } else if (mood == 2) {
+            tri(XX(-7), YY(5), XX(7), YY(5), cx, YY(12), org);
+            tears(cx, cy, s, t, 8, -1);
+        } else tri(XX(-7), YY(4), XX(7), YY(4), cx, YY(13), org);
+        if (full) {
+            beam(XX(-21), YY(27), XX(21), YY(27), ZZ(8), red);
+            beam(XX(13), YY(30), XX(18), YY(50), ZZ(6.5f), COL(180, 30, 45));
+        }
+        break; }
+
+    case 1: {   /* ROBO */
+        u64 st = COL(172, 184, 200), sd = COL(104, 114, 132), dk = COL(22, 28, 42), cn = COL(80, 232, 255), gr = COL(100, 255, 150);
+        if (full) {
+            legsC(cx, cy, s, sd, COL(60, 66, 80));
+            rect(XX(-30), YY(34), XX(30), YY(87), sd);
+            rect(XX(-28), YY(36), XX(28), YY(85), st);
+            rect(XX(-18), YY(46), XX(18), YY(72), dk);
+            discN(XX(-9), YY(54), ZZ(3.2f), COL(255, 80, 80), 8);
+            discN(cx, YY(54), ZZ(3.2f), ((t / 12) & 1) ? gr : COL(40, 120, 70), 8);
+            discN(XX(9), YY(54), ZZ(3.2f), COL(255, 220, 70), 8);
+            rect(XX(-14), YY(62), XX(14), YY(65), cn);
+            armsC(cx, cy, s, mood, t, sd, COL(210, 218, 230), 8.5f);
+        }
+        rect(XX(-27), YY(-24), XX(27), YY(25), sd);
+        rect(XX(-25), YY(-22), XX(25), YY(23), st);
+        rect(XX(-25), YY(-22), XX(25), YY(-17), COL(208, 218, 232));
+        rect(XX(-31), YY(-6), XX(-27), YY(8), sd); rect(XX(27), YY(-6), XX(31), YY(8), sd);
+        beam(cx, YY(-24), cx, YY(-38), ZZ(3), sd);
+        discN(cx, YY(-41), ZZ(4.6f), ((t / 12) & 1) ? COL(255, 70, 70) : COL(150, 30, 30), 8);
+        rect(XX(-21), YY(-11), XX(21), YY(5), dk);
+        if (mood == 1) {
+            for (k = -1; k <= 1; k += 2) arcL(XX(k * 11), YY(3), ZZ(6), ZZ(5.5f), 1.1f * CPI, 1.9f * CPI, ZZ(2.8f), cn);
+        } else if (mood == 2) {
+            for (k = -1; k <= 1; k += 2) beam(XX(k * 5), YY(-5), XX(k * 17), YY(1), ZZ(4), cn);
+            tears(cx, cy, s, t, 11, 1);
+        } else {
+            rect(XX(-17), YY(-8), XX(-6), YY(2), cn); rect(XX(6), YY(-8), XX(17), YY(2), cn);
+        }
+        rect(XX(-14), YY(11), XX(14), YY(20), dk);
+        if (mood == 1) {
+            rect(XX(-12), YY(13), XX(12), YY(18), gr);
+            for (k = -2; k <= 2; k++) rect(XX(k * 5 - 0.6f), YY(13), XX(k * 5 + 0.6f), YY(18), dk);
+        } else if (mood == 2) arcL(cx, YY(22), ZZ(9), ZZ(5), 1.15f * CPI, 1.85f * CPI, ZZ(1.8f), st);
+        else for (k = -2; k <= 2; k++) rect(XX(k * 5.5f - 0.8f), YY(12), XX(k * 5.5f + 0.8f), YY(19), st);
+        break; }
+
+    case 2: {   /* PIRATA */
+        u64 red = COL(205, 40, 52), blk = COL(26, 24, 30);
+        if (full) {
+            legsC(cx, cy, s, COL(44, 54, 112), blk);
+            torsoC(cx, cy, s, COL(238, 238, 244), COL(200, 200, 210));
+            for (k = 0; k < 4; k++) rect(XX(-28), YY(50 + k * 9), XX(28), YY(54 + k * 9), red);
+            rect(XX(-28), YY(77), XX(28), YY(83), blk); rect(XX(-4.5f), YY(77), XX(4.5f), YY(83), gold);
+            armsC(cx, cy, s, mood, t, COL(238, 238, 244), skin, 8.5f);
+        }
+        disc(cx, cy, ZZ(25), skin);
+        ringN(XX(-25.5f), YY(8), ZZ(3.4f), ZZ(1.6f), 10, gold);
+        faceStd(cx, cy, s, mood, t, 9, -3, 15, COL(46, 28, 22), 3);
+        ell(XX(-7.5f), YY(8.5f), ZZ(8.5f), ZZ(3.6f), COL(62, 40, 30)); ell(XX(7.5f), YY(8.5f), ZZ(8.5f), ZZ(3.6f), COL(62, 40, 30));
+        beam(XX(-22), YY(-9), XX(24), YY(-13), ZZ(2.0f), blk);
+        discN(XX(-9), YY(-3), ZZ(6.0f), blk, 10);
+        beam(XX(-9), YY(-3), XX(-25), YY(1), ZZ(1.8f), blk);
+        ell(cx, YY(-20), ZZ(34), ZZ(7.5f), blk);
+        quad(XX(-22), YY(-20), XX(22), YY(-20), XX(16), YY(-42), XX(-16), YY(-42), blk);
+        ell(cx, YY(-42), ZZ(16), ZZ(5), blk);
+        beam(XX(-24), YY(-20), XX(24), YY(-20), ZZ(2.2f), gold);
+        beam(XX(-10), YY(-26), XX(10), YY(-37), ZZ(2.6f), wh); beam(XX(-10), YY(-37), XX(10), YY(-26), ZZ(2.6f), wh);
+        discN(cx, YY(-31.5f), ZZ(5.6f), wh, 10); rect(XX(-3), YY(-29), XX(3), YY(-25.5f), wh);
+        discN(XX(-2.2f), YY(-32), ZZ(1.4f), blk, 6); discN(XX(2.2f), YY(-32), ZZ(1.4f), blk, 6);
+        break; }
+
+    case 3: {   /* NINJA */
+        u64 nv = COL(54, 60, 98), nd = COL(34, 38, 64), red = COL(215, 40, 52), mk = COL(122, 128, 172);
+        if (full) {
+            beam(XX(22), YY(26), XX(36), YY(4), ZZ(4.5f), COL(70, 50, 34));
+            beam(XX(28), YY(14), XX(35), YY(18), ZZ(3), gold);
+            legsC(cx, cy, s, nd, COL(14, 14, 24));
+            torsoC(cx, cy, s, nv, nd);
+            rect(XX(-28), YY(70), XX(28), YY(77), red);
+            armsC(cx, cy, s, mood, t, nv, COL(70, 76, 112), 8.5f);
+        }
+        disc(cx, cy, ZZ(25), nv);
+        ell(cx, YY(-2), ZZ(20), ZZ(8.5f), skin);
+        faceStd(cx, cy, s, mood, t, 8.5f, -2, 15, 0, 1);
+        if (mood == 1)      arcL(cx, YY(9), ZZ(10), ZZ(6), 0.15f * CPI, 0.85f * CPI, ZZ(2.0f), mk);
+        else if (mood == 2) arcL(cx, YY(17), ZZ(8), ZZ(4.5f), 1.15f * CPI, 1.85f * CPI, ZZ(2.0f), mk);
+        else                beam(XX(-6), YY(13), XX(6), YY(13), ZZ(1.6f), mk);
+        beam(XX(-26), YY(-12), XX(26), YY(-12), ZZ(7), red);
+        rect(XX(-9), YY(-15.5f), XX(9), YY(-8.5f), COL(190, 196, 208)); rect(XX(-2), YY(-14), XX(2), YY(-10), nd);
+        beam(XX(25), YY(-12), XX(43), YY(-6 + 3 * sinf(t * 0.2f)), ZZ(5), red);
+        beam(XX(25), YY(-12), XX(41), YY(-19 + 3 * sinf(t * 0.2f + 1.5f)), ZZ(5), COL(165, 30, 42));
+        break; }
+
+    case 4: {   /* ALIEN */
+        u64 gr = COL(122, 216, 96), gd = COL(70, 150, 62), su = COL(112, 82, 202), sd = COL(70, 50, 150);
+        if (full) {
+            legsC(cx, cy, s, su, sd);
+            torsoC(cx, cy, s, su, sd);
+            beam(XX(-14), YY(32), XX(14), YY(32), ZZ(6), COL(205, 210, 225));
+            discN(cx, YY(60), ZZ(5), COL(255, 230, 80), 8);
+            armsC(cx, cy, s, mood, t, su, gr, 8.5f);
+        }
+        for (k = -1; k <= 1; k += 2) {
+            beam(XX(k * 10), YY(-26), XX(k * 18), YY(-45 + 2 * sinf(t * 0.2f + k)), ZZ(3), gd);
+            discN(XX(k * 18), YY(-47 + 2 * sinf(t * 0.2f + k)), ZZ(5), (k < 0) ? COL(255, 230, 80) : COL(255, 120, 190), 10);
+        }
+        ell(cx, YY(0), ZZ(28), ZZ(31), gr);
+        for (k = -1; k <= 1; k += 2) {
+            float ry = mood == 1 ? 6.5f : (mood == 2 ? 13.0f : 12.0f);
+            ell(XX(k * 11), YY(mood == 1 ? 3 : 2), ZZ(9), ZZ(ry), COL(14, 18, 26));
+            discN(XX(k * 13.5f), YY(mood == 1 ? 1 : -3), ZZ(mood == 2 ? 3.4f : 2.6f), wh, 8);
+        }
+        discN(XX(-2), YY(13), ZZ(0.9f), gd, 6); discN(XX(2), YY(13), ZZ(0.9f), gd, 6);
+        if (mood == 1) slice(cx, YY(18), ZZ(8.5f), ZZ(8.5f), 0, CPI, COL(124, 22, 44));
+        else if (mood == 2) { arcL(cx, YY(25), ZZ(5.5f), ZZ(3.5f), 1.15f * CPI, 1.85f * CPI, ZZ(1.8f), COL(40, 100, 40)); tears(cx, cy, s, t, 11, 8); }
+        else beam(XX(-5), YY(22), XX(5), YY(22), ZZ(1.8f), COL(40, 100, 40));
+        break; }
+
+    case 5: {   /* COWBOY */
+        u64 hat = COL(156, 100, 50), hd = COL(112, 70, 36), vest = COL(124, 80, 42), shirt = COL(238, 228, 204), red = COL(212, 44, 52);
+        if (full) {
+            legsC(cx, cy, s, COL(62, 92, 162), COL(92, 56, 30));
+            torsoC(cx, cy, s, shirt, COL(205, 195, 170));
+            quad(XX(-29), YY(44), XX(-8), YY(44), XX(-9), YY(86), XX(-27), YY(86), vest);
+            quad(XX(29), YY(44), XX(8), YY(44), XX(9), YY(86), XX(27), YY(86), vest);
+            tri(XX(-24), YY(50), XX(-12), YY(50), XX(-18), YY(62), gold);
+            rect(XX(-27), YY(79), XX(27), YY(84), COL(72, 42, 22)); rect(XX(-5), YY(78), XX(5), YY(85), gold);
+            tri(XX(-17), YY(21), XX(17), YY(21), cx, YY(46), red);
+            armsC(cx, cy, s, mood, t, shirt, skin, 8.5f);
+        }
+        disc(cx, cy, ZZ(25), skin);
+        discN(cx, YY(4), ZZ(3.6f), COL(218, 152, 112), 8);
+        faceStd(cx, cy, s, mood, t, 9, -3, 16, COL(80, 50, 25), 3);
+        ell(XX(-8.5f), YY(9.5f), ZZ(9.5f), ZZ(3.8f), COL(72, 46, 26)); ell(XX(8.5f), YY(9.5f), ZZ(9.5f), ZZ(3.8f), COL(72, 46, 26));
+        discN(XX(-18), YY(8), ZZ(3), COL(72, 46, 26), 6); discN(XX(18), YY(8), ZZ(3), COL(72, 46, 26), 6);
+        ell(cx, YY(-20), ZZ(40), ZZ(8.5f), hat);
+        tri(XX(-40), YY(-20), XX(-33), YY(-19), XX(-43), YY(-28), hat); tri(XX(40), YY(-20), XX(33), YY(-19), XX(43), YY(-28), hat);
+        quad(XX(-19), YY(-20), XX(19), YY(-20), XX(15), YY(-40), XX(-15), YY(-40), hat);
+        ell(cx, YY(-40), ZZ(15), ZZ(4.5f), COL(176, 120, 64));
+        beam(XX(-19), YY(-24), XX(19), YY(-24), ZZ(4.2f), hd);
+        discN(cx, YY(-24), ZZ(3), gold, 8);
+        break; }
+
+    case 6: {   /* VAMPIRO */
+        u64 pale = COL(232, 232, 244), blk = COL(26, 22, 32), red = COL(176, 26, 50);
+        if (full) {
+            quad(XX(-38), YY(30), XX(38), YY(30), XX(52), YY(98), XX(-52), YY(98), COL(124, 18, 38));
+            tri(XX(-40), YY(-6), XX(-17), YY(34), XX(-42), YY(36), blk); tri(XX(40), YY(-6), XX(17), YY(34), XX(42), YY(36), blk);
+            tri(XX(-37), YY(2), XX(-20), YY(31), XX(-40), YY(32), red); tri(XX(37), YY(2), XX(20), YY(31), XX(40), YY(32), red);
+            legsC(cx, cy, s, blk, COL(10, 10, 16));
+            torsoC(cx, cy, s, blk, COL(10, 10, 16));
+            tri(XX(-11), YY(30), XX(11), YY(30), cx, YY(68), COL(244, 244, 250));
+            tri(cx, YY(36), XX(-11), YY(30), XX(-11), YY(42), red); tri(cx, YY(36), XX(11), YY(30), XX(11), YY(42), red);
+            discN(cx, YY(36), ZZ(3), COL(150, 20, 40), 8);
+            armsC(cx, cy, s, mood, t, blk, pale, 8.5f);
+        }
+        tri(XX(-24), YY(-4), XX(-23), YY(9), XX(-36), YY(-11), pale); tri(XX(24), YY(-4), XX(23), YY(9), XX(36), YY(-11), pale);
+        disc(cx, cy, ZZ(25), pale);
+        slice(cx, YY(-8), ZZ(26.5f), ZZ(18), CPI, 2 * CPI, blk);
+        tri(XX(-12), YY(-8), XX(12), YY(-8), cx, YY(-1), blk);
+        faceStd(cx, cy, s, mood, t, 9, 2, 16, blk, 3);
+        if (mood != 1) for (k = -1; k <= 1; k += 2) discN(XX(k * 9), YY(2 + (mood == 2 ? 1.6f : 0)), ZZ(2.6f), COL(224, 30, 52), 8);
+        {
+            float fy = (mood == 1) ? 11.5f : 12.8f, fl = (mood == 1) ? 7.5f : (mood == 2 ? 3.5f : 5.0f);
+            tri(XX(-5.5f), YY(fy), XX(-2), YY(fy), XX(-3.8f), YY(fy + fl), wh);
+            tri(XX(5.5f), YY(fy), XX(2), YY(fy), XX(3.8f), YY(fy + fl), wh);
+        }
+        break; }
+
+    case 7: {   /* MAGO */
+        u64 robe = COL(56, 76, 188), rd = COL(36, 50, 132), hat = COL(72, 60, 176), wb = COL(247, 247, 252);
+        if (full) {
+            ell(XX(-12), YY(101), ZZ(10), ZZ(4.6f), COL(100, 64, 34)); ell(XX(12), YY(101), ZZ(10), ZZ(4.6f), COL(100, 64, 34));
+            quad(XX(-29), YY(44), XX(29), YY(44), XX(38), YY(100), XX(-38), YY(100), robe);
+            ell(cx, YY(40), ZZ(29), ZZ(17), robe);
+            rect(XX(-38), YY(95), XX(38), YY(100), rd);
+            beam(XX(-29), YY(66), XX(29), YY(66), ZZ(5), gold); rect(XX(-4), YY(63), XX(4), YY(69), COL(255, 235, 140));
+            star4(XX(-15), YY(80), ZZ(5), COL(255, 230, 100)); star4(XX(14), YY(54), ZZ(4), COL(255, 230, 100));
+            armsC(cx, cy, s, mood, t, robe, skin, 10.5f);
+        }
+        disc(cx, cy, ZZ(25), skin);
+        discN(cx, YY(3), ZZ(4), COL(224, 160, 124), 8);
+        slice(cx, YY(6), ZZ(22), ZZ(20), 0, CPI, wb);
+        tri(XX(-20), YY(7), XX(20), YY(7), cx, YY(64), wb);
+        faceStd(cx, cy, s, mood, t, 9, -4, 14, wb, 3);
+        ell(cx, YY(-19), ZZ(34), ZZ(7.5f), hat);
+        tri(XX(-24), YY(-19), XX(24), YY(-19), XX(6), YY(-68), hat);
+        beam(XX(-25), YY(-20), XX(25), YY(-20), ZZ(5), gold);
+        discN(XX(6), YY(-68), ZZ(4), gold, 8);
+        star4(XX(-7), YY(-38), ZZ(4.5f), COL(255, 230, 100)); star4(XX(5), YY(-52), ZZ(3.5f), COL(255, 230, 100));
+        if (mood == 1) for (k = 0; k < 4; k++) {
+            float a = t * 0.09f + k * 1.571f;
+            star4(cx + cosf(a) * ZZ(46), cy - ZZ(10) + sinf(a) * ZZ(22), ZZ(3.5f + 1.5f * sinf(t * 0.3f + k)), COL(255, 245, 160));
+        }
+        break; }
+
+    case 8: {   /* VIKING */
+        u64 steel = COL(152, 158, 172), horn = COL(246, 238, 208), bd = COL(224, 130, 50), fur = COL(124, 86, 52);
+        if (full) {
+            legsC(cx, cy, s, COL(100, 106, 122), COL(80, 52, 30));
+            torsoC(cx, cy, s, fur, COL(72, 46, 26));
+            for (k = -4; k <= 4; k++) discN(XX(k * 6.5f), YY(33 + (k & 1) * 2), ZZ(6), COL(196, 166, 124), 8);
+            rect(XX(-27), YY(78), XX(27), YY(84), COL(70, 44, 24)); rect(XX(-5), YY(77), XX(5), YY(85), gold);
+            armsC(cx, cy, s, mood, t, skin, skin, 9.5f);
+        }
+        for (k = -1; k <= 1; k += 2) {
+            beam(XX(k * 22), YY(-15), XX(k * 34), YY(-19), ZZ(8), horn);
+            beam(XX(k * 34), YY(-19), XX(k * 39), YY(-38), ZZ(6), horn);
+            discN(XX(k * 39), YY(-39), ZZ(3), horn, 6);
+        }
+        disc(cx, cy, ZZ(25), skin);
+        slice(cx, YY(3), ZZ(26), ZZ(30), 0, CPI, bd);
+        for (k = -1; k <= 1; k += 2) { beam(XX(k * 14), YY(24), XX(k * 14), YY(42), ZZ(5.5f), bd); discN(XX(k * 14), YY(43), ZZ(3), COL(200, 40, 40), 6); }
+        ell(XX(-9.5f), YY(7), ZZ(10), ZZ(4), COL(244, 170, 80)); ell(XX(9.5f), YY(7), ZZ(10), ZZ(4), COL(244, 170, 80));
+        faceStd(cx, cy, s, mood, t, 9, 1, 18, COL(120, 70, 30), 3);
+        slice(cx, YY(-8), ZZ(26.5f), ZZ(18), CPI, 2 * CPI, steel);
+        rect(XX(-26), YY(-13), XX(26), YY(-8), COL(112, 118, 134));
+        rect(XX(-2), YY(-8), XX(2), YY(5), COL(112, 118, 134));
+        for (k = -2; k <= 2; k++) discN(XX(k * 9), YY(-10.5f), ZZ(1.5f), gold, 6);
+        break; }
+
+    default: {  /* GATO */
+        u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
+        if (full) {
+            float wob = 4.0f * sinf(t * 0.15f);
+            beam(XX(26), YY(82), XX(44), YY(78), ZZ(8), og);
+            beam(XX(44), YY(78), XX(53), YY(62 + wob), ZZ(8), og);
+            beam(XX(53), YY(62 + wob), XX(47), YY(46 + wob), ZZ(8), og);
+            discN(XX(47), YY(45 + wob), ZZ(4.6f), cr, 8);
+            legsC(cx, cy, s, og, cr);
+            torsoC(cx, cy, s, og, od);
+            ell(cx, YY(64), ZZ(15), ZZ(19), cr);
+            armsC(cx, cy, s, mood, t, og, cr, 9);
+        }
+        tri(XX(-28), YY(-2), XX(-25), YY(-34), XX(-6), YY(-20), og); tri(XX(28), YY(-2), XX(25), YY(-34), XX(6), YY(-20), og);
+        tri(XX(-24), YY(-8), XX(-22.5f), YY(-27), XX(-11), YY(-19), pk); tri(XX(24), YY(-8), XX(22.5f), YY(-27), XX(11), YY(-19), pk);
+        ell(cx, YY(2), ZZ(29), ZZ(24), og);
+        beam(cx, YY(-21), cx, YY(-11), ZZ(2.6f), od); beam(XX(-7), YY(-20), XX(-5), YY(-12), ZZ(2.6f), od); beam(XX(7), YY(-20), XX(5), YY(-12), ZZ(2.6f), od);
+        for (k = -1; k <= 1; k += 2) {
+            if (mood == 1) {
+                beam(XX(k * 11 - 4.5f), YY(-0.5f), XX(k * 11), YY(-4.5f), ZZ(2.4f), ink);
+                beam(XX(k * 11), YY(-4.5f), XX(k * 11 + 4.5f), YY(-0.5f), ZZ(2.4f), ink);
+            } else {
+                ell(XX(k * 11), YY(-2), ZZ(mood == 2 ? 7.4f : 6.4f), ZZ(mood == 2 ? 8 : 7), COL(124, 222, 112));
+                ell(XX(k * 11), YY(-2), ZZ(mood == 2 ? 2.4f : 1.8f), ZZ(mood == 2 ? 6.5f : 5.6f), ink);
+                discN(XX(k * 11 - 2), YY(-5), ZZ(1.4f), wh, 6);
+            }
+        }
+        if (mood == 2) tears(cx, cy, s, t, 11, 1);
+        ell(cx, YY(11), ZZ(13), ZZ(9), cr);
+        tri(XX(-3.6f), YY(5), XX(3.6f), YY(5), cx, YY(9.5f), pk);
+        if (mood == 1) {
+            slice(cx, YY(10), ZZ(6), ZZ(7), 0, CPI, COL(130, 22, 40));
+            ell(cx, YY(15), ZZ(3), ZZ(2), pk);
+        } else if (mood == 2) {
+            arcL(XX(-3.2f), YY(14), ZZ(3.2f), ZZ(2.6f), 1.1f * CPI, 1.9f * CPI, ZZ(1.4f), ink);
+            arcL(XX(3.2f), YY(14), ZZ(3.2f), ZZ(2.6f), 1.1f * CPI, 1.9f * CPI, ZZ(1.4f), ink);
+        } else {
+            arcL(XX(-3.2f), YY(10.5f), ZZ(3.2f), ZZ(2.6f), 0.1f * CPI, 0.9f * CPI, ZZ(1.4f), ink);
+            arcL(XX(3.2f), YY(10.5f), ZZ(3.2f), ZZ(2.6f), 0.1f * CPI, 0.9f * CPI, ZZ(1.4f), ink);
+        }
+        for (k = -1; k <= 1; k += 2) {
+            int q;
+            for (q = -1; q <= 1; q++)
+                beam(XX(k * 12), YY(9.5f + q * 2.2f), XX(k * 33), YY(8 + q * 5.5f), ZZ(1.2f), CA(255, 255, 255, 0x70));
+        }
+        if (full) {
+            beam(XX(-19), YY(30), XX(19), YY(30), ZZ(6), COL(210, 40, 50));
+            discN(cx, YY(37), ZZ(4.8f), gold, 8);
+        }
+        break; }
+    }
+    #undef XX
+    #undef YY
+    #undef ZZ
+}
 
 /* menu de tacos: foto do taco, nome e estatisticas */
 static void drawCueMenu(void)
@@ -2092,8 +2615,134 @@ static void panel(float x1, float y1, float x2, float y2)
     rect(x1, y1, x2, y2, GS_SETREG_RGBAQ(4, 10, 18, 0x60, 0x00));
 }
 
+/* ---------- tela de fim de jogo: animacao de vitoria e de derrota ---------- */
+static void drawTrophy(float cx, float cy, float s, int t)
+{
+    u64 gd = COL(255, 208, 52), dk = COL(206, 142, 22), lt = COL(255, 240, 160);
+    int k;
+    rect(cx - 24 * s, cy + 46 * s, cx + 24 * s, cy + 55 * s, dk);
+    rect(cx - 18 * s, cy + 40 * s, cx + 18 * s, cy + 46 * s, gd);
+    rect(cx - 5 * s, cy + 22 * s, cx + 5 * s, cy + 40 * s, gd);
+    for (k = -1; k <= 1; k += 2) ringN(cx + k * 30 * s, cy - 14 * s, 11 * s, 3.4f * s, 16, gd);
+    rect(cx - 26 * s, cy - 34 * s, cx + 26 * s, cy + 2 * s, gd);
+    slice(cx, cy + 2 * s, 26 * s, 22 * s, 0.0f, CPI, gd);
+    rect(cx - 29 * s, cy - 38 * s, cx + 29 * s, cy - 32 * s, lt);
+    rect(cx - 20 * s, cy - 28 * s, cx - 14 * s, cy + 4 * s, lt);
+    star4(cx, cy - 12 * s, 11 * s, lt);
+    {   /* brilho que passa */
+        float sh = fmodf(t * 0.04f, 2.0f);
+        if (sh < 1.0f) beam(cx - 28 * s + sh * 56 * s, cy - 34 * s, cx - 38 * s + sh * 56 * s, cy + 4 * s, 4 * s, CA(255, 255, 255, 0x50));
+    }
+}
+
+static void drawOverScreen(void)
+{
+    int w = winner, l = 1 - winner, k;
+    int youLost = (mode == 0 && w == 1);                 /* contra o bot e o bot venceu */
+    float tt = (float)overT, ent = tt < 36.0f ? tt / 36.0f : 1.0f;
+    float sc = 1.2f, base = 222.0f;
+    float wx = w == 0 ? 150.0f : 490.0f, lx = w == 0 ? 490.0f : 150.0f;
+    float up = (1.0f - ent) * 170.0f, jump = fabsf(sinf(tt * 0.115f)) * 20.0f * ent;
+    float ts;
+    char buf[64];
+    int *ws = mode == 0 ? winsBot : winsVs;
+    const char *hint = "X: REVANCHE   START: MENU";
+
+    /* fundo */
+    for (k = 0; k < 14; k++)
+        rect(0, k * 32.0f, 640, k * 32.0f + 32.0f, youLost ? COL(18 + k, 20 + k, 34 + k * 2) : COL(30 + k * 2, 14 + k, 70 + k * 3));
+    for (k = 0; k < 12; k += 2) {                        /* raios girando atras de quem venceu */
+        float a0 = tt * 0.012f + k * CPI / 6.0f, a1 = a0 + CPI / 6.0f, cyr = base + 30.0f;
+        tri(wx, cyr, wx + cosf(a0) * 380.0f, cyr + sinf(a0) * 380.0f, wx + cosf(a1) * 380.0f, cyr + sinf(a1) * 380.0f,
+            youLost ? CA(255, 120, 100, 0x12) : CA(255, 225, 100, 0x1c));
+    }
+
+    if (!youLost) {                                      /* fogos de artificio */
+        for (k = 0; k < 3; k++) {
+            float cyc = fmodf(tt + k * 37.0f, 110.0f);
+            int bi = (int)((tt + k * 37.0f) / 110.0f), q;
+            float fx = 80.0f + fmodf(bi * 173.0f + k * 211.0f, 480.0f), fy = 60.0f + fmodf(bi * 89.0f + k * 53.0f, 110.0f);
+            int al = 0x70 - (int)(cyc * 0.62f);
+            for (q = 0; q < 14; q++) {
+                float a = q * 6.2831853f / 14.0f, r = cyc * 1.7f, g = cyc * cyc * 0.004f;
+                float px = fx + cosf(a) * r, py = fy + sinf(a) * r + g;
+                int r8, g8, b8;
+                hue3(k * 0.3f + bi * 0.17f, &r8, &g8, &b8);
+                beam(fx + cosf(a) * (r - 9.0f), fy + sinf(a) * (r - 9.0f) + g * 0.8f, px, py, 1.6f, CA(r8, g8, b8, al));
+                discN(px, py, 2.2f, CA(255, 255, 255, al), 6);
+            }
+        }
+        for (k = 0; k < 64; k++) {                       /* confete */
+            float px = fmodf(k * 61.0f + 14.0f * sinf(tt * 0.04f + k), 660.0f) - 10.0f;
+            float py = fmodf(tt * (1.3f + (k % 5) * 0.45f) + k * 47.0f, 470.0f) - 14.0f;
+            float a = tt * 0.15f + k, ux = cosf(a) * 4.0f, uy = sinf(a) * 4.0f, vx = -sinf(a) * 2.0f, vy = cosf(a) * 2.0f;
+            quad(px - ux - vx, py - uy - vy, px + ux - vx, py + uy - vy, px + ux + vx, py + uy + vy, px - ux + vx, py - uy + vy,
+                 hueCol(k * 0.071f, 0x78));
+        }
+    }
+
+    /* titulo e legendas */
+    if (youLost) strcpy(buf, "DERROTA");
+    else if (mode == 0) strcpy(buf, "VITORIA!");
+    else sprintf(buf, "%s VENCEU!", pname(w));
+    ts = (mode == 1 ? 0.7f : 0.95f) + 0.03f * sinf(tt * 0.15f);
+    {
+        float tx = 320.0f - tw(ts, buf) * 0.5f, ty = 22.0f - (1.0f - ent) * 60.0f;
+        u64 gl = youLost ? CA(90, 20, 20, 0x50) : CA(150, 80, 0, 0x50);
+        text(tx - 2, ty - 2, ts, gl, buf); text(tx + 2, ty - 2, ts, gl, buf);
+        text(tx - 2, ty + 2, ts, gl, buf); text(tx + 2, ty + 3, ts, gl, buf);
+        text(tx, ty, ts, youLost ? COL(255,110,100) : COL(255,230,70), buf);
+    }
+    if (mode == 0) strcpy(buf, youLost ? "O BOT VENCEU... TENTE DE NOVO!" : "VOCE VENCEU O BOT!");
+    else sprintf(buf, "PARABENS, %s!", pname(w));
+    textC(62, 0.4f, youLost ? COL(255,190,180) : COL(255,245,190), buf);
+    if (overNote[0]) textC(82, 0.32f, COL(255,150,130), overNote);
+
+    /* sombras no chao */
+    ell(wx, base + 108 * sc, 36 * sc * (1.0f - jump * 0.012f), 6 * sc, CA(0, 0, 0, 0x38));
+    ell(lx, base + 108 * sc, 36 * sc, 6 * sc, CA(0, 0, 0, 0x38));
+
+    /* quem perdeu: cabisbaixo, chorando, com nuvem de chuva */
+    drawChar(charSel[l], lx, base + 8.0f + up * 0.6f + sinf(tt * 0.35f) * 1.5f, sc, 2, overT, 1);
+    {
+        float cyl = 112.0f + 3.0f * sinf(tt * 0.05f);
+        for (k = 0; k < 5; k++) {
+            float ox = (k - 2) * 20.0f, oy = (k == 1 || k == 3) ? -8.0f : 0.0f;
+            discN(lx + ox, cyl + oy, 20.0f + (k == 2 ? 4.0f : 0.0f), COL(110, 116, 136), 12);
+        }
+        rect(lx - 46, cyl, lx + 46, cyl + 12, COL(110, 116, 136));
+        for (k = 0; k < 5; k++) discN(lx + (k - 2) * 20.0f, cyl + 12, 10.0f, COL(110, 116, 136), 8);
+        for (k = 0; k < 32; k++) {
+            float rx = lx - 46.0f + fmodf(k * 23.0f, 92.0f), ry = cyl + 24.0f + fmodf(tt * 4.5f + k * 31.0f, 220.0f);
+            line(rx, ry, rx - 2.0f, ry + 9.0f, CA(150, 190, 255, 0x78));
+        }
+    }
+
+    /* quem venceu: pula, braços pro alto */
+    drawChar(charSel[w], wx, base - jump + up, sc, 1, overT, 1);
+
+    /* trofeu no centro com brilhos */
+    drawTrophy(320.0f, 206.0f + 4.0f * sinf(tt * 0.08f) + up * 0.5f, 1.0f, overT);
+    for (k = 0; k < 6; k++) {
+        float a = tt * 0.05f + k * 1.047f;
+        star4(320.0f + cosf(a) * 54.0f, 206.0f + sinf(a) * 46.0f, 3.0f + 2.0f * sinf(tt * 0.2f + k),
+              youLost ? CA(200, 210, 230, 0x50) : COL(255, 245, 170));
+    }
+
+    /* nomes, placar e dica */
+    sprintf(buf, "%s", pname(w));
+    text(wx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(255,235,110), buf);
+    sprintf(buf, "%s", pname(l));
+    text(lx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(150,158,175), buf);
+    sprintf(buf, "%s %d X %d %s", pname(0), ws[0], ws[1], pname(1));
+    textC(380, 0.5f, COL(255,255,255), buf);
+    textC(410, 0.36f, ((overT / 25) & 1) ? COL(255,255,255) : COL(200,205,215), hint);
+
+    if (tt < 36.0f) rect(0, 0, 640, 448, CA(255, 255, 255, (int)(0x50 * (1.0f - ent))));   /* flash de entrada */
+}
+
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_GO, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_GO, NSR };
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
 static char nameBuf[12];
 static int nameLen, nameCur, nameWho;      /* nameWho: 0 = jogador 1, 1 = jogador 2 */
@@ -2109,6 +2758,7 @@ static int setRows(int *v)                 /* linhas visiveis na tela de configu
     v[n++] = SR_TABLE;
     if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
     else                { v[n++] = SR_BALLS; }
+    v[n++] = SR_CH0; v[n++] = SR_CH1;                 /* personagens (caricaturas) */
     v[n++] = SR_GO;
     return n;
 }
@@ -2117,6 +2767,12 @@ static void cycleColor(int pl, int d)      /* cada jogador usa uma cor diferente
 {
     int o = colSel[1 - pl];
     do { colSel[pl] = (colSel[pl] + d + NBRC) % NBRC; } while (colSel[pl] == o);
+}
+
+static void cycleChar(int pl, int d)       /* cada jogador usa um personagem diferente */
+{
+    int o = charSel[1 - pl];
+    do { charSel[pl] = (charSel[pl] + d + NCHARS) % NCHARS; } while (charSel[pl] == o);
 }
 
 static void startMatch(void)
@@ -2168,6 +2824,8 @@ static void setupInput(u32 pr)
     case SR_BALLS: ballTheme = (ballTheme + d + NTHEMES) % NTHEMES; break;
     case SR_C0:    cycleColor(0, d); break;
     case SR_C1:    cycleColor(1, d); break;
+    case SR_CH0:   cycleChar(0, d); break;
+    case SR_CH1:   cycleChar(1, d); break;
     default: break;
     }
     n = setRows(v);
@@ -2196,11 +2854,11 @@ static void nameInput(u32 pr)
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
-                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "INICIAR PARTIDA" };
+                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "INICIAR PARTIDA" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
     int v[NSR], n = setRows(v), i;
-    float rh = (n >= 8) ? 27.0f : 31.0f;
+    float rh = (n >= 9) ? 24.0f : ((n >= 8) ? 27.0f : 31.0f);
     float y2 = 90.0f + n * rh + 6.0f;
     const char *hint;
     char buf[40];
@@ -2225,7 +2883,9 @@ static void drawSetupScreen(void)
                 text(556 - tw(0.34f, "PROXIMO: NOME"), y + 3, 0.34f, COL(150,160,175), "PROXIMO: NOME");
             continue;
         }
-        text(98, y, 0.5f, tc, LBL[row]);
+        if (row == SR_CH0)      text(98, y, 0.5f, tc, oppSel ? "PERSONAGEM JOGADOR 1" : "SEU PERSONAGEM");
+        else if (row == SR_CH1) text(98, y, 0.5f, tc, oppSel ? "PERSONAGEM JOGADOR 2" : "PERSONAGEM DO BOT");
+        else                    text(98, y, 0.5f, tc, LBL[row]);
         switch (row) {
         case SR_OPP:   strcpy(buf, oppSel ? "< JOGADOR 2 >" : "< BOT >"); break;
         case SR_LVL:   sprintf(buf, "< %s >", LVL_NAME[botLevel]);
@@ -2237,6 +2897,8 @@ static void drawSetupScreen(void)
         case SR_TABLE: sprintf(buf, "< %s >", TABLES[tableSel].name); break;
         case SR_BALLS: sprintf(buf, "< %s >", THEME_NAME[ballTheme]); break;
         case SR_C0:    sprintf(buf, "< %s >", BRC_NAME[colSel[0]]); break;
+        case SR_CH0:   sprintf(buf, "< %s >", CHAR_NAME[charSel[0]]); break;
+        case SR_CH1:   sprintf(buf, "< %s >", CHAR_NAME[charSel[1]]); break;
         default:       sprintf(buf, "< %s >", BRC_NAME[colSel[1]]); break;
         }
         vx = 556 - tw(0.5f, buf);
@@ -2275,6 +2937,15 @@ static void drawSetupScreen(void)
         hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
     drawTablePreview(320.0f, 392.0f, 176.0f, &TABLES[tableSel]);
+    for (i = 0; i < 2; i++) {                         /* os dois personagens escolhidos (o da linha selecionada comemora) */
+        float px = i == 0 ? 112.0f : 528.0f;
+        int hot = (v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
+        float bob = hot ? -3.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
+        const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
+        drawChar(charSel[i], px, 388.0f + bob, 0.9f, hot ? 1 : 0, menuT, 0);
+        text(px - tw(0.34f, CHAR_NAME[charSel[i]]) * 0.5f, 418, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), CHAR_NAME[charSel[i]]);
+        text(px - tw(0.28f, nm) * 0.5f, 432, 0.28f, COL(130,140,155), nm);
+    }
 }
 
 static void drawNameScreen(void)
@@ -2552,12 +3223,13 @@ static void drawPause(void)
         return;
     }
     if (pauseView == 1) {
-        static const char *K[] = { "ESQ/DIR", "L1/R1", "X", "O", "L2/R2", "QUADRADO", "SELECT", "BOLA NA MAO", "START" };
+        static const char *K[] = { "ESQ/DIR", "L1/R1", "X", "O", "L2/R2", "CIMA/BAIXO", "TRIANGULO", "QUADRADO", "SELECT", "BOLA NA MAO", "START" };
         static const char *V[] = {
             "GIRAR A MIRA", "AJUSTE FINO DA MIRA", "BARRA DE FORCA; X DE NOVO DISPARA", "CANCELAR A TACADA",
-            "EFEITO NA BOLA BRANCA", "PASSAR GIZ NO TACO", "TROCAR DE TACO", "SETAS MOVEM A BRANCA, X CONFIRMA", "PAUSAR O JOGO"
+            "EFEITO LATERAL NA BRANCA", "ROLA (CIMA) / PUXA (BAIXO)", "PULO: A BRANCA SOBE E PASSA POR CIMA", "PASSAR GIZ NO TACO", "TROCAR DE TACO", "SETAS MOVEM A BRANCA, X CONFIRMA", "PAUSAR O JOGO"
         };
         static const char *T[] = {
+            "PULO: MAIS FORCA E TACO COM EFEITO ALTO = PULO MAIS ALTO",
             "BARRA DE FORCA: APERTE X QUANDO ELA ESTIVER NO ALTO",
             "TACO SNIPER: LASER MOSTRA A TACADA INTEIRA, MAS BATE FRACO",
             "BRASILEIRA: SE VOCE ERRAR, O ADVERSARIO TIRA UMA BOLA DELE",
@@ -2566,15 +3238,15 @@ static void drawPause(void)
         hbox(40, 20, 600, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
         textC(30, 0.7f, COL(255,215,70), "CONTROLES");
         rect(160, 62, 480, 64, CA(255,215,60,0x50));
-        for (i = 0; i < 9; i++) {
-            float y = 74.0f + i * 20.0f;
-            if (i & 1) rect(52, y - 4, 588, y + 17, CA(255,255,255,0x0c));
+        for (i = 0; i < 11; i++) {
+            float y = 72.0f + i * 17.5f;
+            if (i & 1) rect(52, y - 3, 588, y + 14, CA(255,255,255,0x0c));
             text(64, y, 0.38f, COL(255,230,110), K[i]);
             text(200, y, 0.38f, COL(225,230,240), V[i]);
         }
-        textC(262, 0.55f, COL(255,215,70), "DICAS");
-        rect(220, 290, 420, 291, CA(255,215,60,0x50));
-        for (i = 0; i < 4; i++) text(64, 304.0f + i * 22.0f, 0.34f, COL(190,200,215), T[i]);
+        textC(268, 0.55f, COL(255,215,70), "DICAS");
+        rect(220, 294, 420, 295, CA(255,215,60,0x50));
+        for (i = 0; i < 5; i++) text(64, 304.0f + i * 18.0f, 0.34f, COL(190,200,215), T[i]);
         textC(398, 0.34f, COL(150,160,175), "X / O / START: VOLTAR");
         return;
     }
@@ -2632,9 +3304,17 @@ static void drawChalkFx(float bx, float by, float d0)
 static void draw(void)
 {
     int i;
-    char buf[64];
     if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
     if (state == S_PLAYER) { drawBackdrop(); pauseView = 2; drawPause(); return; }
+    if (state == S_OVER) {
+        drawOverScreen();
+        if (musicToast()) {
+            char tb[80];
+            snprintf(tb, sizeof tb, "MUSICA: %s", musicToast());
+            textC(436, 0.28f, COL(190,220,255), tb);
+        }
+        return;
+    }
     drawTable();
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
     else for (i = 1; i < 16; i++) drawShadow(i);
@@ -2643,6 +3323,10 @@ static void draw(void)
         if (state == S_PLACE) {
             if (validPlace(b[0].x, b[0].y)) drawBallAt(0, b[0].x, b[0].y, R);
             else disc(b[0].x, b[0].y, R, COL(230,60,60));
+        } else if (b[0].z > 0.0f) {                         /* pulo: a bola cresce e sobe na tela */
+            float z = b[0].z, r = R * (1.0f + z * 0.022f), yy = b[0].y - z * 0.55f;
+            drawBallAt(0, b[0].x, yy, r);
+            ringN(b[0].x, yy, r + 1.2f, 1.2f, 18, CA(255, 255, 255, 0x2c));
         } else drawBallAt(0, b[0].x, b[0].y, R);
     }
     for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
@@ -2650,7 +3334,7 @@ static void draw(void)
     if (state == S_AIM) {
         float cd0 = R + 4 + pwr * 70;
         if (chalkAnim > 0) cd0 += 16.0f + 4.0f * sinf(chalkAnim * 0.7f);
-        if (!isBot()) drawGuide();
+        if (!isBot()) { drawGuide(); if (jumpArm) drawJumpMark(); }
         drawCue(b[0].x, b[0].y, cd0, 0x80, ang, curCue());
         if (chalkAnim > 0) drawChalkFx(b[0].x, b[0].y, cd0);
     } else if (state == S_STRIKE) {
@@ -2675,19 +3359,6 @@ static void draw(void)
         textC(14, 0.32f, COL(190,220,255), tb);
     }
     if (paused) drawPause();
-    if (state == S_OVER) {
-        int *w = mode == 0 ? winsBot : winsVs;
-        const char *hint = "X: REVANCHE   START: MENU";
-        rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x40, 0x00));
-        hbox(120, 150, 520, 290, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x78));
-        sprintf(buf, "%s VENCEU!", pname(winner));
-        text(320 - tw(0.7f, buf) * 0.5f, 170, 0.7f, COL(255,230,60), buf);
-        if (overNote[0]) text(320 - tw(0.32f, overNote) * 0.5f, 190, 0.32f, COL(255,150,130), overNote);
-        rect(160, 204, 480, 206, CA(255, 215, 60, 0x50));
-        sprintf(buf, "%s %d X %d %s", pname(0), w[0], w[1], pname(1));
-        text(320 - tw(0.5f, buf) * 0.5f, 218, 0.5f, COL(255,255,255), buf);
-        text(320 - tw(0.36f, hint) * 0.5f, 258, 0.36f, COL(200,205,215), hint);
-    }
 }
 
 /* ---------- main ---------- */
@@ -2738,6 +3409,7 @@ int main(int argc, char *argv[])
         pressed = in & ~prev;
         prev = in;
         menuT++;
+        if (state == S_OVER) overT++;
         if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) menuUpdate();
 
         if (paused) pauseInput(pressed);
@@ -2788,9 +3460,15 @@ int main(int argc, char *argv[])
                 if (in & PAD_R1)    ang += 0.005f;
                 if (in & PAD_L2) { spinSel -= 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; }
                 if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
+                if (in & PAD_UP)   { spinV += 0.03f; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */
+                if (in & PAD_DOWN) { spinV -= 0.03f; if (spinV < -1.0f) spinV = -1.0f; }   /* puxa */
                 if (!charging) {
                     if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
                     else if (pressed & PAD_SELECT) openCueMenu();
+                    else if (pressed & PAD_TRIANGLE) {
+                        jumpArm = !jumpArm;
+                        setmsg(jumpArm ? "PULO ATIVADO: A BRANCA VAI PULAR" : "PULO DESLIGADO");
+                    }
                     else if (pressed & PAD_SQUARE) {
                         if (chalk[cur] < 0.97f) chalkAnim = 50;
                         else setmsg("O TACO JA ESTA COM GIZ");
@@ -2846,7 +3524,7 @@ int main(int argc, char *argv[])
             {
                 int mv = 0, fl = 0;
                 for (i = 0; i < 16; i++) {
-                    if (b[i].in && (b[i].vx != 0 || b[i].vy != 0)) mv = 1;
+                    if (b[i].in && (b[i].vx != 0 || b[i].vy != 0 || b[i].z > 0.0f)) mv = 1;
                     if (fallT[i] > 0) fl = 1;
                 }
                 if (!mv && !fl) resolve();
@@ -2916,7 +3594,7 @@ int main(int argc, char *argv[])
                         }
                     }
                     sprintf(tb, "TEMPO ESGOTADO! %s PERDE A VEZ", pname(cur));
-                    charging = 0; pwr = 0; spinSel = 0; chalkAnim = 0;
+                    charging = 0; pwr = 0; spinSel = 0; spinV = 0; jumpArm = 0; chalkAnim = 0;
                     cur = 1 - cur; state = S_AIM; botTimer = 0; botPlanned = 0;
                     turnCur = cur; turnT = TIME_SEC[timeSel] * 60;
                     setmsg(tb);

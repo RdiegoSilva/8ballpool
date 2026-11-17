@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.5.0
+- Versão: 1.6.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -31,6 +31,18 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
 
+## Personagens (caricaturas)
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 10 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking e Gato. Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+- Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
+- O rosto do personagem fica no canto do painel de cada jogador durante a partida
+
+## Animações de vitória e derrota
+Quando a partida termina:
+- **Quem venceu**: o personagem pula de alegria com os braços pro alto, com raios de luz girando, fogos de artifício, chuva de confete e um troféu brilhando no centro
+- **Quem perdeu**: o personagem fica cabisbaixo, chorando, debaixo de uma nuvem de chuva
+- Contra o BOT: se você ganha aparece **VITORIA!**; se o bot ganha aparece **DERROTA**. No versus aparece "NOME VENCEU!"
+- X = revanche (mantém o placar), START = voltar ao menu
+
 ## Modos de jogo
 - **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)
 - **Sinuca Brasileira**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, como numa mesa de verdade: 2 bolas juntas no centro da cabeceira de cada jogador e 1 bola em cada tabela comprida
@@ -51,10 +63,19 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - X: a barra de força (lado esquerdo) sobe e desce sozinha; X de novo dispara a tacada
 - O: cancelar a tacada
 - QUADRADO: passar giz no taco (veja abaixo)
-- L2/R2: efeito na bola branca (esquerda/direita), indicador no canto inferior esquerdo
+- L2/R2: efeito lateral na bola branca (esquerda/direita), indicador no canto inferior esquerdo
+- CIMA/BAIXO (na mira): efeito vertical, **rola** (cima) ou **puxa** (baixo). O ponto vermelho do indicador mostra os dois efeitos
+- TRIÂNGULO: liga/desliga o **PULO** da bola branca (veja abaixo). A palavra PULO no canto inferior esquerdo acende quando está ligado
 - START: pausa o jogo (veja abaixo)
 - SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta)
 - Bola na mão: direcional move a bola branca, X confirma
+
+## Efeito e pulo (novo na 1.6)
+- **Efeito lateral (L2/R2)**: a bola branca curva no caminho e, quando bate na tabela, o efeito também muda o ângulo do rebote
+- **Rola / Puxa (CIMA/BAIXO)**: depois de bater em outra bola, a branca **segue em frente** (rola) ou **volta** (puxa). Dá para parar a branca, mandá-la para frente ou trazê-la de volta. O efeito de cada taco aumenta a força do rola/puxa
+- **Pulo (TRIÂNGULO)**: a branca sobe, **passa por cima das outras bolas** e cai mais adiante. Quanto mais força na barra, mais alto e mais longe ela vai. O taco com mais **Efeito** pula mais alto (o **Efeito** do taco também conta). No ar ela não cai na caçapa e não bate em ninguém; ao pousar quica de leve. Com o pulo ligado aparece uma **marca verde** mostrando onde a bola deve cair (muda com a força da barra)
+- Pular e usar efeito gastam mais giz. O BOT não usa pulo nem efeito vertical
+- A barra de dicas alterna sozinha entre duas páginas de teclas
 
 ## Tacos
 | Taco       | Força | Efeito | Mira | Controle |
@@ -88,7 +109,7 @@ O taco começa com a ponta cheia de giz (ponta azul no taco e barrinha **GIZ** n
 - Quando o giz está abaixo da metade a barra de dicas mostra a tecla do giz
 
 ## Pausa (START)
-Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas, Reiniciar partida e Menu principal.
+Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
 Obs.: os sons dos efeitos (tacadas, caçapas) ainda não existem; a opção **Som** já fica salva no menu.
 
 ## Música durante a partida
