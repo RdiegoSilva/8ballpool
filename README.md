@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.0.0
+- Versão: 2.1.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -19,7 +19,9 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA (18 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - **MESA DO PERSONAGEM** (SIM/NÃO): usa automaticamente a mesa do personagem do Jogador 1 (veja a tabela de kits abaixo). Escolher uma mesa na mão desliga essa opção
+  - **HABILIDADES** (só no versus): LIGADAS ou DESLIGADAS. Contra o BOT as habilidades ficam sempre ligadas para você
+  - MESA (21 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -30,6 +32,9 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Noite Lua**: céu escuro com lua crescente, estrelas piscando, nuvens passando devagar, estrela cadente e caçapas com brilho azulado
     - **Faroeste**: feltro cor de areia, moldura de tábuas com pregos e corda, estrela de xerife no centro, cactos nos cantos, poeira soprando e uma bola de mato rolando pela mesa
     - **Halloween**: feltro roxo, moldura preta com luzes laranja e verdes piscando, aboboras de Halloween nos cantos, teias de aranha, aranha descendo da tabela, fantasma flutuando, morcegos voando, neblina, lua alaranjada e caçapas com brilho verde de poção
+    - **Vampiro**: feltro vinho, espinhos góticos, velas nos cantos, lua pálida, morcegos e sangue escorrendo da tabela
+    - **Natal**: feltro verde com moldura vermelha, pisca-pisca colorido, bolas de Natal nos cantos, neve, estrelas e o **trenó do Papai Noel** cruzando a mesa
+    - **Hack**: grade e varredura ciano, chuva de bits ciano/magenta, pacotes de dados correndo na moldura, falhas (glitch), "HACK" piscando e mira nas caçapas
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
@@ -37,7 +42,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
-Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 11 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato e **Chapolin** (capuz vermelho com duas antenas e coração amarelo no peito). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 13 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
@@ -75,7 +80,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 ## Controles
 - Esquerda/Direita: girar a mira | L1/R1: **ajuste de precisão**: ao apertar a mira anda bem devagar (um toque move só um pouquinho) e, se você segurar, acelera aos poucos até um limite baixo
 - X: a barra de força (lado esquerdo) sobe e desce sozinha; X de novo dispara a tacada
-- O: cancelar a tacada
+- O: cancelar a tacada | **O (na mira): usar a habilidade do taco de personagem**
 - QUADRADO: passar giz no taco (veja abaixo)
 - L2/R2: efeito lateral na bola branca (esquerda/direita), indicador no canto inferior esquerdo
 - CIMA/BAIXO (na mira): efeito vertical, **rola** (cima) ou **puxa** (baixo). O ponto vermelho do indicador mostra os dois efeitos
@@ -90,6 +95,29 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - **Pulo (TRIÂNGULO)**: a branca sobe, **passa por cima das outras bolas** e cai mais adiante. Quanto mais força na barra, mais alto e mais longe ela vai. O taco com mais **Efeito** pula mais alto (o **Efeito** do taco também conta). No ar ela não cai na caçapa e não bate em ninguém; ao pousar quica de leve. Com o pulo ligado aparece uma **marca verde** mostrando onde a bola deve cair (muda com a força da barra)
 - Pular e usar efeito gastam mais giz. O BOT não usa pulo nem efeito vertical
 - A barra de dicas alterna sozinha entre duas páginas de teclas
+
+## Kits dos personagens (taco + habilidade + mesa)
+Cada personagem tem o seu taco especial e a sua mesa (base para o modo história). Os personagens sem taco usam os tacos padrão.
+
+| Personagem | Taco | Habilidade | Mesa |
+|------------|------|------------|------|
+| Pinguim    | Gelo       | **CONGELAR**: o gelo cobre a mesa e as bolas deslizam muito mais longe (quase sem atrito) | Gelo |
+| Cowboy     | Pistoleiro | **TIRO**: a branca sai como uma bala (+50% de velocidade, sem efeito) com clarão de disparo | Faroeste |
+| Vampiro    | Vampiro    | **SUGAR**: depois da batida, a bola alvo é puxada para a caçapa mais próxima | Vampiro |
+| Papai Noel | Noel       | **PRESENTE**: perdoa uma falta (a vez passa sem bola na mão) | Natal |
+| Hacker     | Hack       | **HACK**: a mira trava sozinha na melhor tacada, mostra o caminho todo e marca a **força ideal** na barra | Hack |
+| Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
+| Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
+| Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
+
+Pinguim, Robô, Alien, Mago, Gato e Chapolin: só mesa (Robô: Neon, Alien: Galáxia, Mago: Noite Lua, Gato: Rosa) ou nada.
+- **Usar a habilidade: O na mira.** Na maioria, o primeiro toque arma a habilidade (aparece "ARMADO!" no canto) e vale para a próxima tacada; tocar de novo cancela. O **HACK** age na hora
+- Depois de usar, a habilidade **recarrega em 3 tacadas** (o contador aparece ao lado do nome do taco)
+- O BOT não usa habilidades. No torneio ninguém usa (só taco Clássico)
+- No **versus** você escolhe na configuração se a partida é **com ou sem habilidades** (HABILIDADES: LIGADAS/DESLIGADAS). Desligadas, os tacos valem só pelos atributos
+
+## Catálogo de tacos (SELECT na mira)
+Tela reorganizada: lista à esquerda separada em **PADRÃO** e **PERSONAGENS**; à direita, a foto do taco sobre o feltro da mesa do personagem, os atributos, a **caricatura do dono do taco**, a **habilidade** (com descrição e recarga) e a **mesa do personagem**. Cima/Baixo escolhe, X equipa, O ou SELECT volta.
 
 ## Tacos
 | Taco       | Força | Efeito | Mira | Controle |
@@ -108,9 +136,13 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 | Oceano     | 50    | 70     | 45   | 55       |
 | Pistoleiro | 70    | 35     | 60   | 55       |
 | Brasileiro | 60    | 50     | 60   | 60       |
+| Vampiro    | 65    | 60     | 55   | 50       |
+| Noel       | 55    | 60     | 55   | 65       |
+| Hack       | 50    | 50     | 80   | 80       |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
 - **Pistoleiro** (cowboy): taco de couro e latão com brilho de bala correndo pelo taco e estrela de xerife piscando; bate forte e tem boa mira
+- **Vampiro**: ponta vermelha pulsando e gotas de sangue; **Noel**: listras de bengala doce e brilhos de neve; **Hack**: pacotes de dados ciano e magenta correndo pelo taco, com falhas
 - **Brasileiro**: verde, amarelo e azul da bandeira, com faixas que mudam de cor e estrelinhas correndo pelo taco; equilibrado, com um pouco mais de efeito
 - Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
 - Força: velocidade da bola na tacada
