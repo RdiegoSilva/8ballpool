@@ -107,7 +107,7 @@ Quando a partida termina:
 
 ## Giz no taco
 O taco começa com a ponta cheia de giz (ponta azul no taco e barrinha **GIZ** no canto inferior direito da tela).
-- Cada tacada gasta giz (mais ainda quando você usa muito efeito). Quanto menos giz, mais a tacada **sai torta**: a mira desvia um pouco e o efeito fica mais fraco
+- Cada tacada gasta pouco giz (cerca de 28 tacadas normais até acabar; mais rápido quando você usa muito efeito ou pulo). Quanto menos giz, mais a tacada **sai torta**: a mira desvia um pouco e o efeito fica mais fraco
 - Com pouquíssimo giz e muito efeito lateral o taco **escorrega**: desvio dobrado e tacada mais fraca
 - Aperte **QUADRADO** na hora da mira para passar giz (animação rápida); o giz volta a 100% e a tacada fica certeira de novo
 - Cada jogador tem o seu giz. O BOT não gasta giz

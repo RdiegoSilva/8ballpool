@@ -660,7 +660,7 @@ static void shoot(float p)
         if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
         else if (ch < 0.25f) setmsg("POUCO GIZ! PASSE GIZ NO TACO");
         a += dev * miss;
-        chalk[cur] -= 0.12f + 0.08f * fabsf(spinSel) + 0.05f * fabsf(spinV) + (jumpArm ? 0.08f : 0.0f);
+        chalk[cur] -= 0.035f + 0.03f * fabsf(spinSel) + 0.02f * fabsf(spinV) + (jumpArm ? 0.03f : 0.0f);   /* gasta devagar: ~28 tacadas normais */
         if (chalk[cur] < 0.0f) chalk[cur] = 0.0f;
     }
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(hitCue) * pm;
