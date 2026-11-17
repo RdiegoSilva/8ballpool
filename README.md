@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.7.0
+- Versão: 1.8.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -30,6 +30,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
+  - **BOLA BRANCA** (12 cores: Branca, Marfim, Vermelha, Azul, Verde, Amarela, Rosa, Ciano, Laranja, Roxa, Dourada e Prata) e **LINHA GUIA** (10 cores: Branca, Vermelha, Verde, Azul, Amarela, Rosa, Ciano, Laranja, Roxa e Arco-íris, que muda de cor sozinha). Na tela de configurar valem como cor inicial dos dois jogadores
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo e as animações da mesa Neon)
 
 ## Personagens (caricaturas)
@@ -111,8 +112,11 @@ O taco começa com a ponta cheia de giz (ponta azul no taco e barrinha **GIZ** n
 - Cada jogador tem o seu giz. O BOT não gasta giz
 - Quando o giz está abaixo da metade a barra de dicas mostra a tecla do giz
 
+## Cor da bola branca e da linha guia
+Cada jogador tem a sua. Aperte **START** durante a partida e mude em **BOLA BRANCA** e **LINHA GUIA** (Esquerda/Direita ou X). Contra o BOT aparecem as opções do jogador 1; no versus aparecem **BRANCA J1 / GUIA J1** e **BRANCA J2 / GUIA J2**, e cada um muda a sua a qualquer momento. A cor muda na hora e a bola branca assume a cor de quem está na vez. A linha guia colorida vale para a linha de mira, a bola fantasma e o caminho da bola alvo (o laser do taco Sniper continua vermelho enquanto a guia estiver em Branca).
+
 ## Pausa (START)
-Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
+Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da bola branca e da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
 Obs.: os sons dos efeitos (tacadas, caçapas) ainda não existem; a opção **Som** já fica salva no menu.
 
 ## Música durante a partida

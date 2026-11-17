@@ -1,6 +1,6 @@
 /* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
- * Criador: Diego Reis | Versao 1.7.0
+ * Criador: Diego Reis | Versao 1.8.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
  *                         X de novo = tacada | O = cancelar a tacada
@@ -125,6 +125,18 @@ static const u8 THEME[NTHEMES][8][3] = {
 };
 static int ballTheme;
 
+/* cor da bola branca e da linha guia: cada jogador escolhe a sua (contra o bot vale a do jogador 1) */
+#define NWB 12
+static const char *WB_NAME[NWB] = { "BRANCA", "MARFIM", "VERMELHA", "AZUL", "VERDE", "AMARELA", "ROSA", "CIANO", "LARANJA", "ROXA", "DOURADA", "PRATA" };
+static const u8 WB_COL[NWB][3] = { {250,250,250}, {255,242,208}, {240,70,70}, {80,130,255}, {80,215,110}, {255,228,70},
+                                   {255,130,195}, {90,230,240}, {255,155,60}, {180,110,245}, {238,198,86}, {190,196,208} };
+#define NGD 10
+static const char *GD_NAME[NGD] = { "BRANCA", "VERMELHA", "VERDE", "AZUL", "AMARELA", "ROSA", "CIANO", "LARANJA", "ROXA", "ARCO-IRIS" };
+static const u8 GD_COL[NGD][3] = { {255,255,255}, {255,80,80}, {90,255,120}, {90,150,255}, {255,230,70},
+                                   {255,120,200}, {80,235,245}, {255,160,60}, {190,120,255}, {255,255,255} };
+static int wbSel[2], gdSel[2];
+static int optWho(void) { return mode == 0 ? 0 : cur; }       /* de quem e a cor usada agora */
+
 /* cores escolhaveis no modo brasileiro (indice em BC) */
 #define NBRC 32
 static const int   BRC[NBRC]      = { 2, 3, 1, 6, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
@@ -172,7 +184,7 @@ static CueDef CUES[NCUES] = {
     { "PISTOLEIRO", 70,  35,  60,  55, {205,165, 72}, {122, 74, 36}, { 52, 30, 16}, {255,215, 80}, {150, 98, 48}, 4 },
 };
 
-#define GAME_VERSION "1.7.0"
+#define GAME_VERSION "1.8.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -287,7 +299,7 @@ static void drawBallVec(int i, float x, float y, float r)
 {
     static const u8 WHITE[3] = {250,250,250};
     int id = skinCol[i];
-    const u8 *c = (i == 0 || skinStripe[i]) ? WHITE : BC[id];
+    const u8 *c = i == 0 ? WB_COL[wbSel[optWho()]] : (skinStripe[i] ? WHITE : BC[id]);
     float r2 = r * 0.93f;
 
     discN(x, y, r, shade(c, 0.55f, 0), 12);          /* borda escura */
@@ -486,6 +498,7 @@ static void drawBallMesh(int id, float x, float y, float r)
     u64 colr[NLAT + 1][NLON + 1];
     float uo = (float)((id % 4) * SKW), vo = (float)((id / 4) * SKH);
     int a, c;
+    const u8 *tn = (id == 0) ? WB_COL[wbSel[optWho()]] : NULL;      /* bola branca colorida: tinge pelo vertice */
 
     discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 12);  /* borda suave */
 
@@ -502,7 +515,8 @@ static void drawBallMesh(int id, float x, float y, float r)
             if (cv > 255) cv = 255;
             sxp[a][c] = x + OX + vx * r;
             syp[a][c] = y + OY - vy * r;
-            colr[a][c] = GS_SETREG_RGBAQ(cv, cv, cv, 0x80, 0x00);
+            colr[a][c] = tn ? GS_SETREG_RGBAQ(cv * tn[0] / 255, cv * tn[1] / 255, cv * tn[2] / 255, 0x80, 0x00)
+                            : GS_SETREG_RGBAQ(cv, cv, cv, 0x80, 0x00);
         }
 
     for (a = 0; a < NLAT; a++)
@@ -1759,6 +1773,11 @@ static void drawGuide(void)
     int sn = (curCue() == CUE_SNIPER);
     int lg = sn ? 70 : 255;                                /* sniper: laser vermelho */
     int seg, maxSeg = sn ? 4 : (CUES[curCue()].aim >= 100 ? 2 : 1);   /* MIRA LONGA: 1 rebote | SNIPER: 3 */
+    int gr = 255, gg = lg, gb = lg, gsel = gdSel[optWho()];           /* cor escolhida da linha guia */
+    if (gsel > 0) {
+        if (gsel == NGD - 1) hue3(menuT * 0.008f, &gr, &gg, &gb);
+        else { gr = GD_COL[gsel][0]; gg = GD_COL[gsel][1]; gb = GD_COL[gsel][2]; }
+    }
 
     for (seg = 0; seg < maxSeg; seg++) {
         int hit, wall, al = seg == 0 ? 0x7c : (sn ? 0x64 - seg * 0x14 : 0x50);
@@ -1767,10 +1786,10 @@ static void drawGuide(void)
         float sx = cx + (seg == 0 ? dx*R : 0), sy = cy + (seg == 0 ? dy*R : 0);
         float ex = gx - dx*R, ey = gy - dy*R;
 
-        if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, 255, lg, lg);
-        discN(gx, gy, R, CA(255, lg, lg, 0x12), 20);
-        ringN(gx, gy, R,        1.6f, 28, CA(255, lg, lg, al));
-        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(255, lg, lg, al / 2));
+        if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, gr, gg, gb);
+        discN(gx, gy, R, CA(gr, gg, gb, 0x12), 20);
+        ringN(gx, gy, R,        1.6f, 28, CA(gr, gg, gb, al));
+        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(gr, gg, gb, al / 2));
 
         if (hit > 0 && !tipsOn) return;                  /* dicas desligadas: so a linha ate a bola */
         if (hit > 0) {
@@ -1796,7 +1815,8 @@ static void drawGuide(void)
                 }
             }
             if (L > R) glowFade(b[hit].x + nx*R, b[hit].y + ny*R,
-                                b[hit].x + nx*L,  b[hit].y + ny*L, 0x7c, L >= tmax - 0.5f ? 0x50 : 0x10, 255, 255, 255);
+                                b[hit].x + nx*L,  b[hit].y + ny*L, 0x7c, L >= tmax - 0.5f ? 0x50 : 0x10,
+                                gsel > 0 ? gr : 255, gsel > 0 ? gg : 255, gsel > 0 ? gb : 255);
 
             /* desvio da bola branca */
             tx = dx - dot*nx; ty = dy - dot*ny; tl = sqrtf(tx*tx + ty*ty);
@@ -1806,7 +1826,8 @@ static void drawGuide(void)
                 if (sn) L = 1.0e6f;
                 tmax = castRay(gx, gy, tx, ty, hit, &h2, &w2);
                 if (L > tmax) L = tmax;
-                if (L > R) glowFade(gx + tx*R, gy + ty*R, gx + tx*L, gy + ty*L, 0x60, 0x10, 190, 215, 255);
+                if (L > R) glowFade(gx + tx*R, gy + ty*R, gx + tx*L, gy + ty*L, 0x60, 0x10,
+                                gsel > 0 ? gr : 190, gsel > 0 ? gg : 215, gsel > 0 ? gb : 255);
             }
             return;
         }
@@ -2702,6 +2723,23 @@ static void panel(float x1, float y1, float x2, float y2)
     rect(x1, y1, x2, y2, GS_SETREG_RGBAQ(4, 10, 18, 0x60, 0x00));
 }
 
+/* amostra de cor: kind 0 = bola branca, 1 = linha guia */
+static void drawSwatch(int kind, int idx, float x, float y)
+{
+    if (kind == 0) {
+        const u8 *c = WB_COL[idx];
+        discN(x, y, 7.6f, shade(c, 0.55f, 0), 12);
+        discN(x, y, 6.8f, shade(c, 1.0f, 0), 12);
+        discN(x - 2.2f, y - 2.4f, 1.8f, COL(255,255,255), 6);
+    } else {
+        int r, gg, bb;
+        if (idx == NGD - 1) hue3(menuT * 0.01f, &r, &gg, &bb);
+        else { r = GD_COL[idx][0]; gg = GD_COL[idx][1]; bb = GD_COL[idx][2]; }
+        rect(x - 10, y - 2.0f, x + 10, y + 2.0f, CA(r, gg, bb, 0x30));
+        rect(x - 10, y - 0.7f, x + 10, y + 0.7f, COL(r, gg, bb));
+    }
+}
+
 /* ---------- tela de fim de jogo: animacao de vitoria e de derrota ---------- */
 static void drawTrophy(float cx, float cy, float s, int t)
 {
@@ -2829,7 +2867,7 @@ static void drawOverScreen(void)
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_GO, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, NSR };
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
 static char nameBuf[12];
 static int nameLen, nameCur, nameWho;      /* nameWho: 0 = jogador 1, 1 = jogador 2 */
@@ -2846,6 +2884,7 @@ static int setRows(int *v)                 /* linhas visiveis na tela de configu
     if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
     else                { v[n++] = SR_BALLS; }
     v[n++] = SR_CH0; v[n++] = SR_CH1;                 /* personagens (caricaturas) */
+    v[n++] = SR_WB;  v[n++] = SR_GD;                  /* cor da bola branca e da linha guia */
     v[n++] = SR_GO;
     return n;
 }
@@ -2913,6 +2952,8 @@ static void setupInput(u32 pr)
     case SR_C1:    cycleColor(1, d); break;
     case SR_CH0:   cycleChar(0, d); break;
     case SR_CH1:   cycleChar(1, d); break;
+    case SR_WB:    wbSel[0] = wbSel[1] = (wbSel[0] + d + NWB) % NWB; break;
+    case SR_GD:    gdSel[0] = gdSel[1] = (gdSel[0] + d + NGD) % NGD; break;
     default: break;
     }
     n = setRows(v);
@@ -2941,11 +2982,11 @@ static void nameInput(u32 pr)
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
-                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "INICIAR PARTIDA" };
+                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
     int v[NSR], n = setRows(v), i;
-    float rh = (n >= 9) ? 24.0f : ((n >= 8) ? 27.0f : 31.0f);
+    float rh = (n >= 10) ? 21.0f : ((n >= 9) ? 24.0f : ((n >= 8) ? 27.0f : 31.0f));
     float y2 = 90.0f + n * rh + 6.0f;
     const char *hint;
     char buf[40];
@@ -2972,6 +3013,8 @@ static void drawSetupScreen(void)
         }
         if (row == SR_CH0)      text(98, y, 0.5f, tc, oppSel ? "PERSONAGEM JOGADOR 1" : "SEU PERSONAGEM");
         else if (row == SR_CH1) text(98, y, 0.5f, tc, oppSel ? "PERSONAGEM JOGADOR 2" : "PERSONAGEM DO BOT");
+        else if (row == SR_WB && oppSel) text(98, y, 0.5f, tc, "BOLA BRANCA (OS DOIS)");
+        else if (row == SR_GD && oppSel) text(98, y, 0.5f, tc, "LINHA GUIA (OS DOIS)");
         else                    text(98, y, 0.5f, tc, LBL[row]);
         switch (row) {
         case SR_OPP:   strcpy(buf, oppSel ? "< JOGADOR 2 >" : "< BOT >"); break;
@@ -2986,10 +3029,14 @@ static void drawSetupScreen(void)
         case SR_C0:    sprintf(buf, "< %s >", BRC_NAME[colSel[0]]); break;
         case SR_CH0:   sprintf(buf, "< %s >", CHAR_NAME[charSel[0]]); break;
         case SR_CH1:   sprintf(buf, "< %s >", CHAR_NAME[charSel[1]]); break;
+        case SR_WB:    sprintf(buf, "< %s >", WB_NAME[wbSel[0]]); break;
+        case SR_GD:    sprintf(buf, "< %s >", GD_NAME[gdSel[0]]); break;
         default:       sprintf(buf, "< %s >", BRC_NAME[colSel[1]]); break;
         }
         vx = 556 - tw(0.5f, buf);
         text(vx, y, 0.5f, vc, buf);
+        if (row == SR_WB) drawSwatch(0, wbSel[0], vx - 18, y + 7);
+        else if (row == SR_GD) drawSwatch(1, gdSel[0], vx - 24, y + 7);
         if (row == SR_TABLE) {                          /* mini mesa */
             const TableDef *T = &TABLES[tableSel];
             rect(vx - 46, y - 1, vx - 12, y + 16, shade(T->wood, 0.9f, 0));
@@ -3018,6 +3065,8 @@ static void drawSetupScreen(void)
         hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
+    else if (v[setSel] == SR_WB || v[setSel] == SR_GD)
+        hint = "DURANTE O JOGO, START MUDA A COR (CADA JOGADOR A SUA)";
     else if (v[setSel] == SR_BALLS)
         hint = "MUDA AS CORES DAS BOLAS LISAS E LISTRADAS (BOLA 8)";
     else
@@ -3212,7 +3261,16 @@ static void drawMenuScreen(void)
 
 /* ---------- pausa (START) ---------- */
 static int paused, pauseSel, pauseView;          /* pauseView: 0 = lista, 1 = controles e dicas */
-enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_WB0, PI_GD0, PI_WB1, PI_GD1, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+
+/* linhas visiveis do menu de pausa: as cores do jogador 2 so aparecem no versus */
+static int pauseRows(int *v)
+{
+    int n = 0, k;
+    for (k = 0; k < NPI; k++)
+        if (mode == 1 || (k != PI_WB1 && k != PI_GD1)) v[n++] = k;
+    return n;
+}
 static int plSel;                                /* cursor da lista de musicas */
 
 static void pauseOpen(void) { paused = 1; pauseSel = 0; pauseView = 0; plSel = musicCur() > 0 ? musicCur() : 0; }
@@ -3249,10 +3307,15 @@ static void pauseInput(u32 pr)
         if (playerInput(pr)) pauseView = 0;
         return;
     }
-    if (pr & PAD_UP)   pauseSel = (pauseSel + NPI - 1) % NPI;
-    if (pr & PAD_DOWN) pauseSel = (pauseSel + 1) % NPI;
+    int pv[NPI], pn = pauseRows(pv), row;
+    if (pauseSel >= pn) pauseSel = 0;
+    if (pr & PAD_UP)   pauseSel = (pauseSel + pn - 1) % pn;
+    if (pr & PAD_DOWN) pauseSel = (pauseSel + 1) % pn;
     if (pr & (PAD_START | PAD_CIRCLE)) { paused = 0; return; }
-    switch (pauseSel) {
+    row = pv[pauseSel];
+    switch (row) {
+    case PI_WB0: case PI_WB1: if (tog) { int w = row == PI_WB0 ? 0 : 1, dd = d ? d : 1; wbSel[w] = (wbSel[w] + dd + NWB) % NWB; } break;
+    case PI_GD0: case PI_GD1: if (tog) { int w = row == PI_GD0 ? 0 : 1, dd = d ? d : 1; gdSel[w] = (gdSel[w] + dd + NGD) % NGD; } break;
     case PI_SND:     if (tog) sndOn = !sndOn; break;
     case PI_MUS:     if (tog) { musOn = !musOn; musicSetEnabled(musOn); } break;
     case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
@@ -3268,7 +3331,7 @@ static void pauseInput(u32 pr)
 
 static void drawPause(void)
 {
-    static const char *LB[NPI] = { "CONTINUAR", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA",
+    static const char *LB[NPI] = { "CONTINUAR", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "", "", "", "",
                                    "PLAYER DE MUSICAS", "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
     char buf[32];
     int i;
@@ -3341,29 +3404,53 @@ static void drawPause(void)
     hbox(130, 20, 510, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
     textC(30, 0.7f, COL(255,215,70), "PAUSADO");
     rect(180, 62, 460, 64, CA(255,215,60,0x50));
-    for (i = 0; i < NPI; i++) {
-        float y = 74.0f + i * 29.5f, bob = 4.0f * sinf(menuT * 0.2f);
-        int sel = (i == pauseSel), hasVal = 1;
-        u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
-        if (sel) {
-            rect(138, y - 5, 502, y + 22, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-            tri(144 + bob, y + 1, 144 + bob, y + 15, 155 + bob, y + 8, COL(255,230,60));
+    {
+        int pv[NPI], pn = pauseRows(pv), row;
+        float sp = pn > 12 ? 22.0f : (pn > 10 ? 25.0f : 29.5f);
+        if (pauseSel >= pn) pauseSel = 0;
+        for (i = 0; i < pn; i++) {
+            float y = 74.0f + i * sp, bob = 4.0f * sinf(menuT * 0.2f);
+            int sel = (i == pauseSel), hasVal = 1;
+            u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
+            char lb[24];
+            row = pv[i];
+            if (sel) {
+                rect(138, y - 4, 502, y + 19, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
+                tri(144 + bob, y + 1, 144 + bob, y + 15, 155 + bob, y + 8, COL(255,230,60));
+            }
+            if (row == PI_WB0 || row == PI_WB1) sprintf(lb, mode == 0 ? "BOLA BRANCA" : "BRANCA J%d", row == PI_WB0 ? 1 : 2);
+            else if (row == PI_GD0 || row == PI_GD1) sprintf(lb, mode == 0 ? "LINHA GUIA" : "GUIA J%d", row == PI_GD0 ? 1 : 2);
+            else strcpy(lb, LB[row]);
+            text(166, y, 0.5f, tc, lb);
+            switch (row) {
+            case PI_SND:  strcpy(buf, sndOn ? "< LIGADO >" : "< DESLIGADO >"); break;
+            case PI_MUS:  strcpy(buf, musOn ? "< LIGADA >" : "< DESLIGADA >"); break;
+            case PI_VOL:  sprintf(buf, "< %d%% >", volLvl * 10); break;
+            case PI_FX:   strcpy(buf, fxOn ? "< LIGADOS >" : "< DESLIGADOS >"); break;
+            case PI_TIPS: strcpy(buf, tipsOn ? "< LIGADAS >" : "< DESLIGADAS >"); break;
+            case PI_WB0:  sprintf(buf, "< %s >", WB_NAME[wbSel[0]]); break;
+            case PI_WB1:  sprintf(buf, "< %s >", WB_NAME[wbSel[1]]); break;
+            case PI_GD0:  sprintf(buf, "< %s >", GD_NAME[gdSel[0]]); break;
+            case PI_GD1:  sprintf(buf, "< %s >", GD_NAME[gdSel[1]]); break;
+            default:      hasVal = 0; buf[0] = 0; break;
+            }
+            if (hasVal) text(494 - tw(0.5f, buf), y, 0.5f, COL(255,255,255), buf);
+            if (hasVal && (row == PI_WB0 || row == PI_WB1)) drawSwatch(0, wbSel[row == PI_WB0 ? 0 : 1], 494 - tw(0.5f, buf) - 14, y + 7);
+            if (hasVal && (row == PI_GD0 || row == PI_GD1)) drawSwatch(1, gdSel[row == PI_GD0 ? 0 : 1], 494 - tw(0.5f, buf) - 20, y + 7);
         }
-        text(166, y, 0.5f, tc, LB[i]);
-        switch (i) {
-        case PI_SND:  strcpy(buf, sndOn ? "< LIGADO >" : "< DESLIGADO >"); break;
-        case PI_MUS:  strcpy(buf, musOn ? "< LIGADA >" : "< DESLIGADA >"); break;
-        case PI_VOL:  sprintf(buf, "< %d%% >", volLvl * 10); break;
-        case PI_FX:   strcpy(buf, fxOn ? "< LIGADOS >" : "< DESLIGADOS >"); break;
-        case PI_TIPS: strcpy(buf, tipsOn ? "< LIGADAS >" : "< DESLIGADAS >"); break;
-        default:      hasVal = 0; buf[0] = 0; break;
+        row = pv[pauseSel];
+        if (row == PI_SND)
+            textC(388, 0.3f, COL(255,190,120), "SONS DOS EFEITOS EM BREVE: A OPCAO JA FICA SALVA");
+        else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
+            textC(388, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
+        else if (row == PI_WB0 || row == PI_WB1 || row == PI_GD0 || row == PI_GD1) {
+            int w = (row == PI_WB0 || row == PI_GD0) ? 0 : 1;
+            char hb[64];
+            if (mode == 0) strcpy(hb, "A COR MUDA NA HORA. VALE PARA VOCE NA SUA VEZ");
+            else sprintf(hb, "COR DE %s: VALE QUANDO E A VEZ DELE", pnames[w]);
+            textC(388, 0.3f, COL(150,220,255), hb);
         }
-        if (hasVal) text(494 - tw(0.5f, buf), y, 0.5f, COL(255,255,255), buf);
     }
-    if (pauseSel == PI_SND)
-        textC(376, 0.3f, COL(255,190,120), "SONS DOS EFEITOS EM BREVE: A OPCAO JA FICA SALVA");
-    else if (pauseSel == PI_MUS || pauseSel == PI_VOL || pauseSel == PI_PLAYER)
-        textC(376, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
     textC(404, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   START/O: CONTINUAR");
 }
 
