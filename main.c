@@ -3011,25 +3011,37 @@ static void drawOverScreen(void)
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, NSR };
+#define NSTEPS 4                          /* configurar partida em etapas: 0 partida, 1 mesa e bolas, 2 bola branca e guia, 3 personagens */
+static int setStep;
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
 static char nameBuf[12];
 static int nameLen, nameCur, nameWho;      /* nameWho: 0 = jogador 1, 1 = jogador 2 */
 static const char KBCH[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-static int setRows(int *v)                 /* linhas visiveis na tela de configuracao */
+static int setRows(int *v)                 /* linhas visiveis da etapa atual */
 {
     int n = 0;
-    v[n++] = SR_OPP;
-    if (oppSel == 0) v[n++] = SR_LVL;
-    else             v[n++] = SR_TIME;       /* tempo por jogada so contra outro jogador */
-    v[n++] = SR_MODE;
-    v[n++] = SR_TABLE;
-    if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
-    else                { v[n++] = SR_BALLS; }
-    v[n++] = SR_CH0; v[n++] = SR_CH1;                 /* personagens (caricaturas) */
-    v[n++] = SR_WB;  v[n++] = SR_GD;                  /* cor da bola branca e da linha guia */
-    v[n++] = SR_GO;
+    switch (setStep) {
+    case 0:
+        v[n++] = SR_OPP;
+        v[n++] = (oppSel == 0) ? SR_LVL : SR_TIME;      /* tempo por jogada so contra outro jogador */
+        v[n++] = SR_MODE;
+        v[n++] = SR_NEXT;
+        break;
+    case 1:
+        v[n++] = SR_TABLE;
+        if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
+        else                { v[n++] = SR_BALLS; }
+        v[n++] = SR_NEXT;
+        break;
+    case 2:
+        v[n++] = SR_WB; v[n++] = SR_GD; v[n++] = SR_NEXT;
+        break;
+    default:
+        v[n++] = SR_CH0; v[n++] = SR_CH1; v[n++] = SR_GO;
+        break;
+    }
     return n;
 }
 
@@ -3079,10 +3091,17 @@ static void setupInput(u32 pr)
     if (pr & PAD_LEFT)  d = -1;
     if (pr & PAD_RIGHT) d = 1;
     if (pr & PAD_CROSS) d = 1;
-    if (pr & PAD_CIRCLE) { state = S_MENU; return; }
+    if (pr & PAD_CIRCLE) {                                       /* O: etapa anterior (na primeira, volta ao menu) */
+        if (setStep > 0) { setStep--; setSel = 0; } else state = S_MENU;
+        return;
+    }
+    if (pr & PAD_R1) { if (setStep < NSTEPS - 1) { setStep++; setSel = 0; } return; }
+    if (pr & PAD_L1) { if (setStep > 0) { setStep--; setSel = 0; } return; }
     row = v[setSel];
-    if ((pr & PAD_START) || ((pr & PAD_CROSS) && row == SR_GO)) {
-        nameOpen(0);                                             /* abre a tela para digitar o nome */
+    if (row == SR_NEXT && (pr & (PAD_CROSS | PAD_START))) { setStep++; setSel = 0; return; }
+    if (row == SR_GO && (pr & (PAD_CROSS | PAD_START))) { nameOpen(0); return; }   /* abre a tela para digitar o nome */
+    if (pr & PAD_START) {
+        if (setStep < NSTEPS - 1) { setStep++; setSel = 0; } else nameOpen(0);
         return;
     }
     if (d == 0) return;
@@ -3124,31 +3143,46 @@ static void nameInput(u32 pr)
     }
 }
 
+static void selBar(float x1, float x2, float y, float h);
+
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
-                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA" };
+                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA" };
+    static const char *STEPN[NSTEPS] = { "PARTIDA", "MESA E BOLAS", "BRANCA E GUIA", "PERSONAGENS" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
     int v[NSR], n = setRows(v), i;
-    float rh = (n >= 10) ? 21.0f : ((n >= 9) ? 24.0f : ((n >= 8) ? 27.0f : 31.0f));
-    float y2 = 90.0f + n * rh + 6.0f;
+    const float rh = 38.0f;
+    float y2 = 86.0f + n * rh - 4.0f;
     const char *hint;
     char buf[40];
 
-    textC(24, 0.7f, COL(255,215,70), "CONFIGURAR PARTIDA");
-    rect(120, 62, 520, 64, COL(50,90,70));
-    panel(60, 76, 580, y2);
+    textC(12, 0.6f, COL(255,215,70), "CONFIGURAR PARTIDA");
+    for (i = 0; i < NSTEPS; i++) {                        /* barra de etapas */
+        float x1 = 52.0f + i * 136.0f, x2 = x1 + 128.0f;
+        int cur = (i == setStep), done = (i < setStep);
+        char lb[24];
+        rect(x1, 40, x2, 58, cur ? CA(255, 215, 60, 0x50) : CA(20, 30, 44, 0x58));
+        rect(x1, 56, x2, 58, cur ? COL(255,215,60) : (done ? COL(90,200,120) : COL(60,70,88)));
+        sprintf(lb, "%d %s", i + 1, STEPN[i]);
+        text((x1 + x2) * 0.5f - tw(0.28f, lb) * 0.5f, 44, 0.28f,
+             cur ? COL(255,240,150) : (done ? COL(150,225,170) : COL(120,130,148)), lb);
+    }
+    panel(60, 72, 580, y2);
 
     for (i = 0; i < n; i++) {
         int row = v[i], sel = (i == setSel);
-        float y = 90.0f + i * rh, bob = 4.0f * sinf(menuT * 0.2f), vx;
+        float y = 86.0f + i * rh, vx;
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
 
-        if (sel) {
-            rect(68, y - 6, 572, y + 21,
-                 GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-            tri(74 + bob, y, 74 + bob, y + 14, 85 + bob, y + 7, COL(255,230,60));
+        if (sel) selBar(68, 572, y, 24);
+        if (row == SR_NEXT) {
+            char nx[32];
+            text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
+            sprintf(nx, "%d: %s", setStep + 2, STEPN[setStep + 1]);
+            text(556 - tw(0.34f, nx), y + 3, 0.34f, COL(150,160,175), nx);
+            continue;
         }
         if (row == SR_GO) {
             text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
@@ -3210,22 +3244,51 @@ static void drawSetupScreen(void)
         hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
-    else if (v[setSel] == SR_WB || v[setSel] == SR_GD)
-        hint = "DURANTE O JOGO, START MUDA A COR (CADA JOGADOR A SUA)";
+    else if (v[setSel] == SR_WB)
+        hint = "A COR DA BOLA BRANCA VALE PARA A PARTIDA TODA";
+    else if (v[setSel] == SR_GD)
+        hint = "DURANTE O JOGO, START MUDA A COR DA LINHA GUIA";
     else if (v[setSel] == SR_BALLS)
         hint = "MUDA AS CORES DAS BOLAS LISAS E LISTRADAS (BOLA 8)";
+    else if (v[setSel] == SR_NEXT)
+        hint = "X OU START: PROXIMA ETAPA   O: VOLTAR";
+    else if (v[setSel] == SR_GO)
+        hint = "X OU START: INICIAR   O: ETAPA ANTERIOR";
     else
-        hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR";
+        hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   L1/R1: ETAPA   O: VOLTAR";
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
-    drawTablePreview(320.0f, 392.0f, 176.0f, &TABLES[tableSel]);
-    for (i = 0; i < 2; i++) {                         /* os dois personagens escolhidos (o da linha selecionada comemora) */
-        float px = i == 0 ? 112.0f : 528.0f;
-        int hot = (v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
-        float bob = hot ? -3.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
-        const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
-        drawChar(charSel[i], px, 388.0f + bob, 0.9f, hot ? 1 : 0, menuT, 0);
-        text(px - tw(0.34f, CHAR_NAME[charSel[i]]) * 0.5f, 418, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), CHAR_NAME[charSel[i]]);
-        text(px - tw(0.28f, nm) * 0.5f, 432, 0.28f, COL(130,140,155), nm);
+
+    if (setStep == 1) {                                   /* previa grande da mesa */
+        drawTablePreview(320.0f, 362.0f, 250.0f, &TABLES[tableSel]);
+    } else if (setStep == 2) {                            /* bola branca e linha guia em destaque */
+        const u8 *c = WB_COL[wbSel[0]];
+        float bx = 118.0f, by = 358.0f;
+        int r, gg, bb;
+        if (gdSel[0] == NGD - 1) hue3(menuT * 0.01f, &r, &gg, &bb);
+        else { r = GD_COL[gdSel[0]][0]; gg = GD_COL[gdSel[0]][1]; bb = GD_COL[gdSel[0]][2]; }
+        discN(bx + 5, by + 8, 30.0f, CA(0, 0, 0, 0x30), 18);
+        discN(bx, by, 30.0f, shade(c, 0.55f, 0), 20);
+        discN(bx - 1.0f, by - 1.0f, 27.5f, shade(c, 1.0f, 0), 20);
+        discN(bx - 10.0f, by - 11.0f, 7.0f, CA(255, 255, 255, 0x58), 10);
+        text(bx - tw(0.3f, "BOLA BRANCA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "BOLA BRANCA");
+        drawTablePreview(320.0f, 360.0f, 200.0f, &TABLES[tableSel]);
+        beam(432.0f, by, 560.0f, by, 8.0f, CA(r, gg, bb, 0x18));
+        beam(432.0f, by, 560.0f, by, 4.0f, CA(r, gg, bb, 0x34));
+        beam(432.0f, by, 560.0f, by, 1.8f, COL(r, gg, bb));
+        ringN(574.0f, by, 9.0f, 1.4f, 18, COL(r, gg, bb));
+        text(500.0f - tw(0.3f, "LINHA GUIA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "LINHA GUIA");
+    } else {                                              /* etapas 0 e 3: os dois personagens */
+        float sc = setStep == 3 ? 1.35f : 0.85f, cy = setStep == 3 ? 345.0f : 372.0f, px0 = setStep == 3 ? 170.0f : 150.0f;
+        for (i = 0; i < 2; i++) {
+            float px = i == 0 ? px0 : 640.0f - px0;
+            int hot = (setStep == 3 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
+            float bob = hot ? -4.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
+            const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
+            drawChar(charSel[i], px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
+            text(px - tw(0.34f, CHAR_NAME[charSel[i]]) * 0.5f, 420, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), CHAR_NAME[charSel[i]]);
+            text(px - tw(0.28f, nm) * 0.5f, 434, 0.28f, COL(130,140,155), nm);
+        }
+        if (setStep == 0) textC(358, 0.9f, COL(255,215,70), "VS");
     }
 }
 
@@ -3818,7 +3881,7 @@ int main(int argc, char *argv[])
             if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 4;
             if (pressed & (PAD_CROSS | PAD_START)) {
                 if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
-                else if (menuSel == 1) { state = S_SETUP; setSel = 0; }
+                else if (menuSel == 1) { state = S_SETUP; setSel = 0; setStep = 0; }
                 else if (menuSel == 2) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
                 else { state = S_OPTS; optSel = 0; }
             }
