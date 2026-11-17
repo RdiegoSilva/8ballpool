@@ -1,6 +1,6 @@
 /* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
- * Criador: Diego Reis | Versao 1.6.0
+ * Criador: Diego Reis | Versao 1.7.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
  *                         X de novo = tacada | O = cancelar a tacada
@@ -75,6 +75,7 @@ static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da 
 static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
 static float chalk[2] = { 1.0f, 1.0f }, cueChalk;      /* giz no taco (1 = cheio) e giz mostrado na ponta */
 static int   chalkAnim;                                /* animacao de passar giz (frames) */
+static int   fineHold;                                 /* tempo segurando L1/R1 (ajuste fino acelera devagar) */
 
 /* pulo e efeito vertical (v1.6) */
 #define JUMP_G     900.0f                          /* gravidade da bola no ar */
@@ -150,7 +151,7 @@ typedef struct {
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
     int fx;                               /* animacao: 0 nenhuma, 1 brilho, 2 arco-iris, 3 faiscas */
 } CueDef;
-#define NCUES 12
+#define NCUES 13
 #define CUE_SNIPER 5
 static CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
@@ -167,9 +168,11 @@ static CueDef CUES[NCUES] = {
     { "NEON",       55,  55,  55,  55, {255, 60,200}, { 40, 40, 56}, { 18, 18, 28}, {  0,255,200}, {255, 60,200}, 2 },
     { "SAMURAI",    75,  30,  50,  45, {235,235,235}, { 60, 36, 30}, { 20, 16, 18}, {200, 30, 40}, {200, 30, 40}, 0 },
     { "OCEANO",     50,  70,  45,  55, {120,230,255}, { 70,150,190}, { 16, 70,130}, { 90,220,230}, { 10, 40, 80}, 3 },
+    /* PISTOLEIRO (cowboy): couro e latao, brilho de bala correndo pelo taco e estrela de xerife */
+    { "PISTOLEIRO", 70,  35,  60,  55, {205,165, 72}, {122, 74, 36}, { 52, 30, 16}, {255,215, 80}, {150, 98, 48}, 4 },
 };
 
-#define GAME_VERSION "1.6.0"
+#define GAME_VERSION "1.7.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -675,11 +678,26 @@ static float cushionE(float v)
     return e < 0.62f ? 0.62f : e;
 }
 
+/* quina da cacapa: mantem a bola dentro da largura do buraco e rebate (alongX: 1 = trava o x, 0 = trava o y) */
+static void jawHit(Ball *q, int alongX, float pc, float rr)
+{
+    if (alongX) {
+        float sg = q->x > pc ? 1.0f : -1.0f;
+        q->x = pc + sg * (rr - 0.05f);
+        if (q->vx * sg > 0.0f) q->vx = -q->vx * 0.6f;
+    } else {
+        float sg = q->y > pc ? 1.0f : -1.0f;
+        q->y = pc + sg * (rr - 0.05f);
+        if (q->vy * sg > 0.0f) q->vy = -q->vy * 0.6f;
+    }
+}
+
 static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     for (i = 0; i < 16; i++) {
         int inMouth = 0, air, wl = 0;
+        float mdx = 0.0f, mdy = 0.0f, mpr = 0.0f, mpx = 0.0f, mpy = 0.0f;
         if (!b[i].in) continue;
         if (b[i].z > 0.0f) {                       /* pulo: sobe e desce sem atrito */
             b[i].vz -= JUMP_G * dt; b[i].z += b[i].vz * dt;
@@ -706,7 +724,7 @@ static int stepPhysics(float dt)
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
-                inMouth = 1;
+                inMouth = 1; mdx = fabsf(dx); mdy = fabsf(dy); mpr = PR[p]; mpx = PX[p]; mpy = PY[p];
                 if (d > 0.001f && toward > 0.0f && POCK_PULL > 0.0f) {   /* so ajuda quem vai em direcao ao buraco */
                     b[i].vx -= dx / d * POCK_PULL * dt;
                     b[i].vy -= dy / d * POCK_PULL * dt;
@@ -714,11 +732,24 @@ static int stepPhysics(float dt)
             }
         }
         if (!b[i].in) continue;
-        if (inMouth) continue;                            /* sem rebote enquanto esta na boca */
-        if (b[i].x < TX0+R) { b[i].x = TX0+R; if (b[i].vx < 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
-        if (b[i].x > TX1-R) { b[i].x = TX1-R; if (b[i].vx > 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
-        if (b[i].y < TY0+R) { b[i].y = TY0+R; if (b[i].vy < 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
-        if (b[i].y > TY1-R) { b[i].y = TY1-R; if (b[i].vy > 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        /* a tabela so abre na largura do buraco. Fora dela a bola bate na tabela; se ela ja entrou
+           fundo na boca e tenta sair pelo lado, bate na "quina" (jaw) em vez de ser jogada de volta */
+        if (b[i].x < TX0+R && !(inMouth && mdy < mpr)) {
+            if (inMouth && TX0+R - b[i].x > 2.0f) jawHit(&b[i], 0, mpy, mpr);
+            else { b[i].x = TX0+R; if (b[i].vx < 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        }
+        if (b[i].x > TX1-R && !(inMouth && mdy < mpr)) {
+            if (inMouth && b[i].x - (TX1-R) > 2.0f) jawHit(&b[i], 0, mpy, mpr);
+            else { b[i].x = TX1-R; if (b[i].vx > 0) { wl = 1; b[i].vx = -b[i].vx * cushionE(b[i].vx); b[i].vy *= 0.985f; } }
+        }
+        if (b[i].y < TY0+R && !(inMouth && mdx < mpr)) {
+            if (inMouth && TY0+R - b[i].y > 2.0f) jawHit(&b[i], 1, mpx, mpr);
+            else { b[i].y = TY0+R; if (b[i].vy < 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        }
+        if (b[i].y > TY1-R && !(inMouth && mdx < mpr)) {
+            if (inMouth && b[i].y - (TY1-R) > 2.0f) jawHit(&b[i], 1, mpx, mpr);
+            else { b[i].y = TY1-R; if (b[i].vy > 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
+        }
         if (wl && i == 0 && spinCur != 0.0f) {          /* efeito lateral muda o angulo do rebote na tabela */
             float kx = -b[0].vy, ky = b[0].vx;
             b[0].vx += kx * spinCur * 0.12f; b[0].vy += ky * spinCur * 0.12f;
@@ -1033,7 +1064,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 15
+#define NTABLES 16
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1050,6 +1081,7 @@ static const TableDef TABLES[NTABLES] = {
     { "ARCO-IRIS",{ 44, 44, 70}, {236,236,242}, {255,255,255}, 8 },
     { "ROSA",     {198, 72,132}, { 92, 32, 62}, {255,226,236} },
     { "TURQUESA", { 12,138,150}, { 22, 52, 62}, {230,250,250} },
+    { "FAROESTE", {176,130, 74}, { 74, 42, 22}, {244,210,140}, 9 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -1283,6 +1315,48 @@ static void tableDecoFx(int stage, int style, int mt)
         } else {
             for (k = 0; k < 6; k++) ring(PX[k], PY[k], PR[k] + 4.5f, hueCol(k / 6.0f + mt * 0.006f, 0x80));
         }
+    } else if (style == 9) {                                   /* FAROESTE */
+        float W = TX1 - TX0;
+        if (stage == 0) {
+            outlineRect(TX0 - 12.0f, TY0 - 12.0f, TX1 + 12.0f, TY1 + 12.0f, CA(222, 176, 100, 0x50));   /* corda */
+            outlineRect(TX0 - 13.5f, TY0 - 13.5f, TX1 + 13.5f, TY1 + 13.5f, CA(120, 80, 40, 0x50));
+            for (k = 0; k < 72; k++) {                         /* pregos nas tabuas */
+                float px, py, nx, ny;
+                perim(k, 72, 24.0f, &px, &py, &nx, &ny);
+                discN(px, py, 2.0f, CA(28, 20, 14, 0x70), 6);
+                rect(px - 0.8f, py - 1.2f, px + 0.4f, py - 0.2f, CA(235, 205, 150, 0x70));
+            }
+        } else if (stage == 1) {
+            float tx = TX0 - 20.0f + fmodf(mt * 1.1f, W + 40.0f), ty = TY1 - 30.0f - fabsf(sinf(mt * 0.06f)) * 22.0f, a = mt * 0.12f;
+            for (k = 0; k < 10; k++) {                         /* estrela de xerife no centro */
+                float a0 = -1.5708f + k * 0.62832f, a1 = a0 + 0.62832f;
+                float r0 = (k & 1) ? 14.0f : 34.0f, r1 = (k & 1) ? 34.0f : 14.0f;
+                tri(TCX, TCY, TCX + cosf(a0) * r0, TCY + sinf(a0) * r0, TCX + cosf(a1) * r1, TCY + sinf(a1) * r1, CA(96, 54, 22, 0x24));
+            }
+            ring(TCX, TCY, 42.0f, CA(96, 54, 22, 0x30));
+            for (k = 0; k < 2; k++) {                          /* cactos nos cantos */
+                float cx0 = k ? TX1 - 30.0f : TX0 + 26.0f, cy0 = k ? TY0 + 44.0f : TY1 - 6.0f;
+                u64 cg = CA(46, 96, 44, 0x58);
+                rect(cx0 - 3, cy0 - 30, cx0 + 3, cy0, cg);
+                rect(cx0 - 11, cy0 - 20, cx0 - 3, cy0 - 15, cg); rect(cx0 - 11, cy0 - 28, cx0 - 7, cy0 - 20, cg);
+                rect(cx0 + 3, cy0 - 14, cx0 + 11, cy0 - 9, cg);  rect(cx0 + 7, cy0 - 23, cx0 + 11, cy0 - 14, cg);
+            }
+            for (k = 0; k < 4; k++) {                          /* poeira soprando */
+                float dxp = TX0 - 50.0f + fmodf(mt * (1.5f + k * 0.4f) + k * 160.0f, W + 100.0f), dyp = TY0 + 30.0f + k * 60.0f;
+                line(dxp, dyp, dxp + 24.0f, dyp, CA(240, 215, 165, 0x1c));
+                line(dxp + 6.0f, dyp + 3.0f, dxp + 20.0f, dyp + 3.0f, CA(240, 215, 165, 0x12));
+            }
+            ringN(tx, ty, 11.0f, 1.6f, 14, CA(112, 76, 38, 0x70));                  /* bola de mato rolando */
+            for (k = 0; k < 3; k++) {
+                float ca = a + k * 1.0472f;
+                line(tx - cosf(ca) * 10.0f, ty - sinf(ca) * 10.0f, tx + cosf(ca) * 10.0f, ty + sinf(ca) * 10.0f, CA(112, 76, 38, 0x60));
+            }
+        } else {
+            for (k = 0; k < 6; k++) {
+                ring(PX[k], PY[k], PR[k] + 4.5f, CA(190, 130, 66, 0x80));
+                ring(PX[k], PY[k], PR[k] + 6.0f, CA(110, 70, 34, 0x60));
+            }
+        }
     }
 }
 
@@ -1402,6 +1476,10 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
                  CA(255, 225, 100, (((i + mt / 7) % 3) == 0) ? 0x78 : 0x30));
             rect(px - 1.2f, y1 + f * 0.75f - 1.2f, px + 1.2f, y1 + f * 0.75f + 1.2f,
                  CA(255, 225, 100, (((i + mt / 7) % 3) == 0) ? 0x78 : 0x30));
+            break;
+        case 9:                                              /* faroeste: bola de mato e poeira */
+            if (i == 0) ring(x0 + fmodf(mt * 0.5f, w), y1 - 6.0f - fabsf(sinf(mt * 0.06f)) * 6.0f, 2.6f, CA(112, 76, 38, 0x90));
+            if ((i & 3) == 0) { float dx2 = x0 + fmodf(mt * (0.6f + i * 0.05f) + i * 17.0f, w); line(dx2, y0 + h * 0.3f + i * 1.4f, dx2 + 5.0f, y0 + h * 0.3f + i * 1.4f, CA(240, 215, 165, 0x28)); }
             break;
         default:                                             /* arco-iris: faixas */
             if (i < 6) rect(x0, y0 + h * i / 6.0f, x1, y0 + h * (i + 1) / 6.0f, hueCol(mt * 0.003f + i / 6.0f, 0x28));
@@ -1828,6 +1906,15 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
             hue3(mt * 0.006f + 0.5f, &r, &gg, &bb);   c2[0] = r; c2[1] = gg; c2[2] = bb;
             cueSeg(200.0f, 214.0f, c1);
             cueSeg(232.0f, 237.0f, c2);
+        } else if (cd->fx == 4) {                                 /* pistoleiro: brilho de bala + estrela de xerife */
+            float u = fmodf(mt * 2.2f, 300.0f), p = 0.5f + 0.5f * sinf(mt * 0.15f);
+            cuePt(u, 0.0f, &ax, &ay);
+            discN(ax, ay, 2.4f, CA(255, 240, 180, (al * 0x60) / 128), 8);
+            cuePt(u - 12.0f, 0.0f, &bx, &by);
+            line(ax, ay, bx, by, CA(255, 225, 140, (al * 0x40) / 128));
+            cuePt(234.0f, 0.0f, &ax, &ay);
+            line(ax - 3.0f - 2.0f * p, ay, ax + 3.0f + 2.0f * p, ay, CA(255, 235, 150, (al * 0x70) / 128));
+            line(ax, ay - 3.0f - 2.0f * p, ax, ay + 3.0f + 2.0f * p, CA(255, 235, 150, (al * 0x70) / 128));
         } else {                                                  /* faiscas correndo pelo taco */
             for (k = 0; k < 5; k++) {
                 float u = fmodf(mt * 1.6f + k * 58.0f, 290.0f), tw2 = sinf(mt * 0.2f + k * 2.1f);
@@ -3225,7 +3312,7 @@ static void drawPause(void)
     if (pauseView == 1) {
         static const char *K[] = { "ESQ/DIR", "L1/R1", "X", "O", "L2/R2", "CIMA/BAIXO", "TRIANGULO", "QUADRADO", "SELECT", "BOLA NA MAO", "START" };
         static const char *V[] = {
-            "GIRAR A MIRA", "AJUSTE FINO DA MIRA", "BARRA DE FORCA; X DE NOVO DISPARA", "CANCELAR A TACADA",
+            "GIRAR A MIRA", "AJUSTE FINO LENTO (PRECISAO)", "BARRA DE FORCA; X DE NOVO DISPARA", "CANCELAR A TACADA",
             "EFEITO LATERAL NA BRANCA", "ROLA (CIMA) / PUXA (BAIXO)", "PULO: A BRANCA SOBE E PASSA POR CIMA", "PASSAR GIZ NO TACO", "TROCAR DE TACO", "SETAS MOVEM A BRANCA, X CONFIRMA", "PAUSAR O JOGO"
         };
         static const char *T[] = {
@@ -3456,8 +3543,13 @@ int main(int argc, char *argv[])
                 }
                 if (in & PAD_LEFT)  ang -= 0.025f;
                 if (in & PAD_RIGHT) ang += 0.025f;
-                if (in & PAD_L1)    ang -= 0.005f;
-                if (in & PAD_R1)    ang += 0.005f;
+                if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
+                    float st;                                   /* ajuste fino: comeca bem devagar e so acelera um pouco segurando */
+                    if (fineHold < 600) fineHold++;
+                    st = 0.0007f + (fineHold > 20 ? (fineHold - 20) * 0.00002f : 0.0f);
+                    if (st > 0.0028f) st = 0.0028f;
+                    ang += (in & PAD_R1) ? st : -st;
+                } else fineHold = 0;
                 if (in & PAD_L2) { spinSel -= 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; }
                 if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
                 if (in & PAD_UP)   { spinV += 0.03f; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */

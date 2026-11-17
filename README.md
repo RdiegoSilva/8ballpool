@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.6.0
+- Versão: 1.7.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -18,7 +18,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA (15 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (16 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -26,6 +26,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Vegas**: lâmpadas piscando em volta da mesa, feltro vermelho com detalhes dourados
     - **Arco-íris**: faixas de cor que mudam no feltro e moldura em cores correndo
     - **Rosa** e **Turquesa**: mesas coloridas (sem animação)
+    - **Faroeste**: feltro cor de areia, moldura de tábuas com pregos e corda, estrela de xerife no centro, cactos nos cantos, poeira soprando e uma bola de mato rolando pela mesa
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
@@ -59,7 +60,7 @@ Quando a partida termina:
 - O placar zera ao desligar o jogo
 
 ## Controles
-- Esquerda/Direita: girar a mira | L1/R1: ajuste fino
+- Esquerda/Direita: girar a mira | L1/R1: **ajuste de precisão**: ao apertar a mira anda bem devagar (um toque move só um pouquinho) e, se você segurar, acelera aos poucos até um limite baixo
 - X: a barra de força (lado esquerdo) sobe e desce sozinha; X de novo dispara a tacada
 - O: cancelar a tacada
 - QUADRADO: passar giz no taco (veja abaixo)
@@ -92,8 +93,10 @@ Quando a partida termina:
 | Neon       | 55    | 55     | 55   | 55       |
 | Samurai    | 75    | 30     | 50   | 45       |
 | Oceano     | 50    | 70     | 45   | 55       |
+| Pistoleiro | 70    | 35     | 60   | 55       |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
+- **Pistoleiro** (cowboy): taco de couro e latão com brilho de bala correndo pelo taco e estrela de xerife piscando; bate forte e tem boa mira
 - Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
