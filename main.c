@@ -1,6 +1,6 @@
 /* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
- * Criador: Diego Reis | Versao 1.8.0
+ * Criador: Diego Reis | Versao 2.0.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
  *                         X de novo = tacada | O = cancelar a tacada
@@ -32,7 +32,7 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; float z, vz; } Ball;   /* z/vz: altura no pulo */
@@ -62,6 +62,12 @@ static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / ve
 static float botAng, botPow;
 static char msg[64];
 static int msgTimer;
+
+/* torneio mata-mata: 8 jogadores (quartas, semifinal, final); perdeu, esta fora */
+static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da partida, 1 avancou, 2 eliminado, 3 campeao */
+static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
+static char tName[8][12];
+static const char *tRoundName(int r) { return r == 0 ? "QUARTAS DE FINAL" : (r == 1 ? "SEMIFINAL" : "FINAL"); }
 
 /* animacoes: tacada, barra de forca e bolas caindo na cacapa */
 #define STRIKEN 6             /* frames da tacada (taco indo ate a bola) */
@@ -165,7 +171,7 @@ typedef struct {
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
     int fx;                               /* animacao: 0 nenhuma, 1 brilho, 2 arco-iris, 3 faiscas */
 } CueDef;
-#define NCUES 13
+#define NCUES 14
 #define CUE_SNIPER 5
 static CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
@@ -184,9 +190,11 @@ static CueDef CUES[NCUES] = {
     { "OCEANO",     50,  70,  45,  55, {120,230,255}, { 70,150,190}, { 16, 70,130}, { 90,220,230}, { 10, 40, 80}, 3 },
     /* PISTOLEIRO (cowboy): couro e latao, brilho de bala correndo pelo taco e estrela de xerife */
     { "PISTOLEIRO", 70,  35,  60,  55, {205,165, 72}, {122, 74, 36}, { 52, 30, 16}, {255,215, 80}, {150, 98, 48}, 4 },
+    /* BRASILEIRO: verde, amarelo e azul da bandeira; faixas e brilho alternando as cores */
+    { "BRASILEIRO", 60,  50,  60,  60, {  0,156, 59}, {255,223,  0}, {  0,122, 52}, {  0, 60,170}, {  0, 60,170}, 5 },
 };
 
-#define GAME_VERSION "1.9.0"
+#define GAME_VERSION "2.0.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -576,8 +584,8 @@ static int countGroup(int gr)
 
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
-static const char *pname(int pl) { return (pl == 1 && mode == 0) ? "BOT" : pnames[pl]; }
-static int curCue(void) { return isBot() ? 0 : cueSel[cur]; }
+static const char *pname(int pl) { return (pl == 1 && mode == 0) ? (tourney ? tName[tOpp] : "BOT") : pnames[pl]; }
+static int curCue(void) { return (isBot() || tourney) ? 0 : cueSel[cur]; }   /* torneio: todos usam o taco CLASSICO */
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
@@ -678,6 +686,7 @@ static void shoot(float p)
 /* menu de tacos (SELECT) */
 static void openCueMenu(void)
 {
+    if (tourney) { setmsg("TORNEIO: TODOS USAM O TACO CLASSICO"); return; }
     cueMenuSel = cueSel[cur]; cueRet = state; charging = 0; state = S_CUES;
 }
 
@@ -851,7 +860,7 @@ static void endTurn(int foul, int ownPocket)
 static void endGame(int w)
 {
     winner = w; overT = 0;
-    (mode == 0 ? winsBot : winsVs)[w]++;
+    if (!tourney) (mode == 0 ? winsBot : winsVs)[w]++;
     state = S_OVER;
 }
 
@@ -1080,7 +1089,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 17
+#define NTABLES 18
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1099,6 +1108,7 @@ static const TableDef TABLES[NTABLES] = {
     { "TURQUESA", { 12,138,150}, { 22, 52, 62}, {230,250,250} },
     { "FAROESTE", {176,130, 74}, { 74, 42, 22}, {244,210,140}, 9 },
     { "NOITE LUA",{ 10, 16, 44}, { 12, 14, 30}, {190,205,255}, 10 },
+    { "HALLOWEEN",{ 74, 30, 98}, { 22, 12, 10}, {255,140, 24}, 11 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -1447,6 +1457,123 @@ static void tableDecoNight(int stage, int mt)
     }
 }
 
+
+/* ---------- mesa HALLOWEEN (style 11): abobora, morcegos, fantasma, aranha, teias e luzes laranja/verde ---------- */
+static void batShape(float x, float y, float sc, float fl, int a)
+{
+    float w = 13.0f * sc, h = (3.0f + 7.0f * fl) * sc;           /* fl: -1..1 (asa batendo) */
+    u64 c = CA(12, 5, 20, a);
+    tri(x, y - 2.0f * sc, x - w, y - h, x - w * 0.45f, y + 3.0f * sc, c);
+    tri(x, y - 2.0f * sc, x + w, y - h, x + w * 0.45f, y + 3.0f * sc, c);
+    discN(x, y + 0.5f * sc, 3.2f * sc, c, 8);
+    tri(x - 2.4f * sc, y - 2.0f * sc, x - 1.2f * sc, y - 6.0f * sc, x, y - 2.0f * sc, c);
+    tri(x + 2.4f * sc, y - 2.0f * sc, x + 1.2f * sc, y - 6.0f * sc, x, y - 2.0f * sc, c);
+}
+
+static void pumpkinJ(float x, float y, float r, float flick)
+{
+    u64 og = COL(246, 128, 18), od = COL(214, 90, 8), ink = COL(46, 14, 4);
+    discN(x, y, r * 2.0f, CA(255, 120, 20, (int)(0x14 * flick)), 14);       /* brilho da vela */
+    discN(x - r * 0.5f, y, r * 0.85f, od, 12);
+    discN(x + r * 0.5f, y, r * 0.85f, od, 12);
+    discN(x, y, r * 0.92f, og, 12);
+    rect(x - r * 0.13f, y - r * 1.2f, x + r * 0.13f, y - r * 0.8f, COL(44, 96, 24));
+    tri(x - r * 0.55f, y - r * 0.05f, x - r * 0.15f, y - r * 0.05f, x - r * 0.35f, y - r * 0.5f, ink);
+    tri(x + r * 0.15f, y - r * 0.05f, x + r * 0.55f, y - r * 0.05f, x + r * 0.35f, y - r * 0.5f, ink);
+    tri(x - r * 0.55f, y + r * 0.25f, x + r * 0.55f, y + r * 0.25f, x, y + r * 0.62f, ink);
+    tri(x - r * 0.2f, y + r * 0.25f, x + r * 0.05f, y + r * 0.25f, x - r * 0.08f, y + r * 0.1f, og);
+}
+
+static void webCorner(float x, float y, float dx, float dy, float len, int a)
+{
+    int k, j;
+    for (k = 0; k < 4; k++) {
+        float an = k * 0.5236f;
+        line(x, y, x + dx * len * cosf(an), y + dy * len * sinf(an), CA(225, 225, 240, a));
+    }
+    for (j = 1; j <= 3; j++)
+        for (k = 0; k < 3; k++) {
+            float r = len * j / 3.0f, a0 = k * 0.5236f, a1 = (k + 1) * 0.5236f, m = r * 0.93f, am = (a0 + a1) * 0.5f;
+            line(x + dx * r * cosf(a0), y + dy * r * sinf(a0), x + dx * m * cosf(am), y + dy * m * sinf(am), CA(225, 225, 240, a));
+            line(x + dx * m * cosf(am), y + dy * m * sinf(am), x + dx * r * cosf(a1), y + dy * r * sinf(a1), CA(225, 225, 240, a));
+        }
+}
+
+static void tableDecoHalloween(int stage, int mt)
+{
+    int k;
+    float W = TX1 - TX0;
+    if (stage == 0) {
+        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, COL(255, 130, 20));
+        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(120, 255, 70, 0x50));
+        for (k = 0; k < 30; k++) {                                   /* luzes laranja e verdes piscando */
+            float px, py, nx, ny, pu = 0.5f + 0.5f * sinf(mt * 0.1f + k * 0.9f);
+            perim(k, 30, 19.0f, &px, &py, &nx, &ny);
+            if (k & 1) { discN(px, py, 4.5f, CA(255, 130, 20, 0x14), 8);  rect(px - 1.5f, py - 1.5f, px + 1.5f, py + 1.5f, CA(255, 170, 50, 0x40 + (int)(0x40 * pu))); }
+            else       { discN(px, py, 4.5f, CA(110, 255, 70, 0x14), 8);  rect(px - 1.5f, py - 1.5f, px + 1.5f, py + 1.5f, CA(140, 255, 100, 0x40 + (int)(0x40 * pu))); }
+        }
+        for (k = 0; k < 4; k++)                                      /* aboboras nos cantos */
+            pumpkinJ((k & 1) ? TX1 + 22.0f : TX0 - 22.0f, (k & 2) ? TY1 + 22.0f : TY0 - 22.0f, 7.5f, 0.7f + 0.3f * sinf(mt * 0.13f + k * 1.9f));
+    } else if (stage == 1) {
+        float ph = fmodf((float)mt, 600.0f);
+        discN(TCX, TCY, 64.0f, CA(255, 150, 30, 0x06), 28);            /* lua alaranjada enorme */
+        discN(TCX, TCY, 44.0f, CA(255, 170, 50, 0x0a), 28);
+        discN(TCX, TCY, 30.0f, CA(255, 190, 80, 0x10), 24);
+        for (k = 0; k < 5; k++) {                                      /* neblina passando */
+            float fx = TX0 - 60.0f + fmodf(mt * (0.25f + k * 0.07f) + k * 170.0f, W + 120.0f), fy = TY0 + 30.0f + k * 52.0f;
+            discN(fx, fy, 34.0f, CA(190, 160, 240, 0x07), 14);
+            discN(fx + 30.0f, fy + 6.0f, 26.0f, CA(190, 160, 240, 0x07), 14);
+        }
+        webCorner(TX0, TY0,  1.0f,  1.0f, 52.0f, 0x34);
+        webCorner(TX1, TY0, -1.0f,  1.0f, 52.0f, 0x34);
+        webCorner(TX0, TY1,  1.0f, -1.0f, 52.0f, 0x34);
+        webCorner(TX1, TY1, -1.0f, -1.0f, 52.0f, 0x34);
+        {                                                              /* aranha descendo da tabela */
+            float sx = TX1 - 120.0f, len = 26.0f + 24.0f * (0.5f + 0.5f * sinf(mt * 0.03f)), sy = TY0 + len;
+            line(sx, TY0, sx, sy, CA(235, 235, 245, 0x60));
+            for (k = -1; k <= 1; k += 2) {
+                line(sx, sy, sx + k * 9.0f, sy - 5.0f, CA(30, 14, 40, 0x90)); line(sx + k * 9.0f, sy - 5.0f, sx + k * 12.0f, sy + 2.0f, CA(30, 14, 40, 0x90));
+                line(sx, sy, sx + k * 8.0f, sy + 1.0f, CA(30, 14, 40, 0x90)); line(sx + k * 8.0f, sy + 1.0f, sx + k * 10.0f, sy + 7.0f, CA(30, 14, 40, 0x90));
+            }
+            discN(sx, sy, 4.6f, COL(24, 10, 32), 10);
+            discN(sx - 1.6f, sy - 1.2f, 0.9f, COL(255, 60, 60), 6); discN(sx + 1.6f, sy - 1.2f, 0.9f, COL(255, 60, 60), 6);
+        }
+        {                                                              /* fantasma flutuando */
+            float gx = TX0 + 60.0f + fmodf(mt * 0.22f, W - 120.0f), gy = TCY + 22.0f * sinf(mt * 0.035f), wv = sinf(mt * 0.2f);
+            u64 gc = CA(236, 240, 255, 0x1e);
+            discN(gx, gy - 8.0f, 12.0f, gc, 14);
+            rect(gx - 12.0f, gy - 8.0f, gx + 12.0f, gy + 10.0f, gc);
+            for (k = 0; k < 3; k++)
+                tri(gx - 12.0f + k * 8.0f, gy + 10.0f, gx - 4.0f + k * 8.0f, gy + 10.0f, gx - 8.0f + k * 8.0f + wv * 2.0f, gy + 16.0f, gc);
+            discN(gx - 4.5f, gy - 8.0f, 2.2f, CA(20, 16, 40, 0x70), 8); discN(gx + 4.5f, gy - 8.0f, 2.2f, CA(20, 16, 40, 0x70), 8);
+            discN(gx, gy - 2.0f, 2.4f, CA(20, 16, 40, 0x60), 8);
+        }
+        for (k = 0; k < 3; k++) {                                      /* morcegos */
+            float bx = TX0 - 30.0f + fmodf(mt * (0.7f + k * 0.35f) + k * 190.0f, W + 60.0f);
+            float by = TY0 + 36.0f + k * 78.0f + 14.0f * sinf(mt * 0.05f + k * 2.0f);
+            batShape(bx, by, 1.0f, sinf(mt * 0.4f + k), 0xa0);
+        }
+        if (ph < 90.0f) {                                              /* morcego grande cruzando a lua */
+            float u = ph / 90.0f;
+            batShape(TX0 + u * W, TCY - 40.0f + 20.0f * sinf(u * 6.0f), 1.7f, sinf(mt * 0.45f), 0x90);
+        }
+        for (k = 0; k < 20; k++) {                                     /* pontinhos de luz (vagalumes) */
+            float fx = TX0 + 8.0f + fmodf(k * 137.5f, 512.0f), fy = TY0 + 8.0f + fmodf(k * 71.3f, 248.0f) + 4.0f * sinf(mt * 0.05f + k);
+            float tw2 = sinf(mt * 0.06f + k * 1.7f);
+            if (tw2 < 0) tw2 = 0;
+            disc(fx, fy, 1.2f, (k & 1) ? CA(150, 255, 110, 0x10 + (int)(0x50 * tw2)) : CA(255, 190, 80, 0x10 + (int)(0x50 * tw2)));
+        }
+    } else {
+        for (k = 0; k < 6; k++) {                                      /* cacapas com brilho verde de pocao */
+            float pulse = 0.5f + 0.5f * sinf(mt * 0.09f + k * 1.2f);
+            discN(PX[k], PY[k], PR[k] + 8.0f, CA(110, 255, 70, 0x0e + (int)(0x0a * pulse)), 12);
+            ring(PX[k], PY[k], PR[k] + 4.5f, CA(255, 130, 20, 0x90));
+            ring(PX[k], PY[k], PR[k] + 6.2f + pulse * 1.6f, CA(130, 255, 90, 0x50));
+        }
+        line(HEADX, TY0, HEADX, TY1, CA(255, 140, 30, 0x30));
+    }
+}
+
 /* stage 0: moldura (antes do feltro) | 1: feltro (antes das tabelas) | 2: por cima das cacapas */
 static void tableDeco(int stage, const TableDef *T)
 {
@@ -1523,6 +1650,8 @@ static void tableDeco(int stage, const TableDef *T)
         }
     } else if (T->style == 10) {
         tableDecoNight(stage, mt);
+    } else if (T->style == 11) {
+        tableDecoHalloween(stage, mt);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
@@ -1570,6 +1699,12 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
             if (i == 0) moonCrescent((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, h * 0.30f, 0x48, 236, 236, 214);
             rect(x0 + fmodf(i * 41.3f, w) - 0.7f, y0 + fmodf(i * 19.9f, h) - 0.7f,
                  x0 + fmodf(i * 41.3f, w) + 0.7f, y0 + fmodf(i * 19.9f, h) + 0.7f, CA(210, 222, 255, 0x20 + (int)(0x50 * s)));
+            break;
+        case 11:                                             /* halloween: lua, morcegos e luzes */
+            if (i == 0) discN((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, h * 0.30f, CA(255, 150, 30, 0x2a), 16);
+            if (i < 3) batShape(x0 + fmodf(mt * 0.6f * (1.0f + i * 0.4f) + i * 60.0f, w), y0 + h * (0.22f + 0.26f * i), 0.5f, sinf(mt * 0.4f + i), 0xa0);
+            rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, (i & 1) ? CA(255, 140, 20, 0x78) : CA(120, 255, 60, 0x78));
+            rect(px - 1.2f, y1 + f * 0.75f - 1.2f, px + 1.2f, y1 + f * 0.75f + 1.2f, (i & 1) ? CA(120, 255, 60, 0x78) : CA(255, 140, 20, 0x78));
             break;
         case 9:                                              /* faroeste: bola de mato e poeira */
             if (i == 0) ring(x0 + fmodf(mt * 0.5f, w), y1 - 6.0f - fabsf(sinf(mt * 0.06f)) * 6.0f, 2.6f, CA(112, 76, 38, 0x90));
@@ -2029,6 +2164,17 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
             hue3(mt * 0.006f + 0.5f, &r, &gg, &bb);   c2[0] = r; c2[1] = gg; c2[2] = bb;
             cueSeg(200.0f, 214.0f, c1);
             cueSeg(232.0f, 237.0f, c2);
+        } else if (cd->fx == 5) {                                 /* brasileiro: faixas verde/amarelo/azul e estrelinhas */
+            static const u8 BAZ[3] = {  0,  60, 170 }, BAM[3] = { 255, 223, 0 }, BVE[3] = { 0, 156, 59 }, BBR[3] = { 255, 255, 255 };
+            int ph = (mt / 18) % 3;
+            cueSeg(200.0f, 214.0f, ph == 0 ? BAM : (ph == 1 ? BVE : BAZ));
+            cueSeg(232.0f, 237.0f, ph == 0 ? BBR : (ph == 1 ? BAM : BBR));
+            for (k = 0; k < 4; k++) {
+                float u = fmodf(mt * 1.5f + k * 72.0f, 290.0f), tw2 = 0.5f + 0.5f * sinf(mt * 0.2f + k * 1.7f);
+                cuePt(u, 0.0f, &ax, &ay);
+                if (k & 1) disc(ax, ay, 1.2f + tw2, CA(255, 223, 0, (al * (0x30 + (int)(0x40 * tw2))) / 128));
+                else       disc(ax, ay, 1.2f + tw2, CA(60, 230, 110, (al * (0x30 + (int)(0x40 * tw2))) / 128));
+            }
         } else if (cd->fx == 4) {                                 /* pistoleiro: brilho de bala + estrela de xerife */
             float u = fmodf(mt * 2.2f, 300.0f), p = 0.5f + 0.5f * sinf(mt * 0.15f);
             cuePt(u, 0.0f, &ax, &ay);
@@ -2195,6 +2341,14 @@ static void drawScoreBoard(void)
     int *w = mode == 0 ? winsBot : winsVs;
     char buf[16];
     float s;
+    if (tourney) {                                       /* torneio: mostra a fase em vez do placar */
+        const char *rn = tRound == 0 ? "QUARTAS" : (tRound == 1 ? "SEMI" : "FINAL");
+        hbox(296, 6, 372, 64, CA(255, 215, 60, 0x60), CA(8, 12, 22, 0x68));
+        text(334 - tw(0.28f, "TORNEIO") * 0.5f, 13, 0.28f, COL(255,215,70), "TORNEIO");
+        rect(304, 28, 364, 29, CA(255, 215, 60, 0x30));
+        text(334 - tw(0.36f, rn) * 0.5f, 38, 0.36f, COL(255,235,110), rn);
+        return;
+    }
     hbox(296, 6, 372, 64, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x68));
     text(334 - tw(0.28f, "PLACAR") * 0.5f, 13, 0.28f, COL(150,158,175), "PLACAR");
     rect(304, 28, 364, 29, CA(120, 128, 146, 0x30));
@@ -2269,10 +2423,10 @@ static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
-#define NCHARS 10
+#define NCHARS 11
 #define CPI 3.14159265f
 static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "ALIEN",
-                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO" };
+                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN" };
 
 static void ell(float cx, float cy, float rx, float ry, u64 c)
 {
@@ -2659,6 +2813,32 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
         for (k = -2; k <= 2; k++) discN(XX(k * 9), YY(-10.5f), ZZ(1.5f), gold, 6);
         break; }
 
+    case 10: {  /* CHAPOLIN COLORADO: capuz vermelho com duas antenas, coracao amarelo no peito */
+        u64 rd = COL(214, 36, 40), rdD = COL(158, 22, 28), yl = COL(255, 214, 40), yd = COL(206, 154, 18), nose = COL(224, 160, 120);
+        float wob = 2.5f * sinf(t * 0.2f) + (mood == 1 ? 3.0f * sinf(t * 0.5f) : 0.0f), drop = (mood == 2) ? 5.0f : 0.0f;
+        if (full) {
+            legsC(cx, cy, s, rd, yl);
+            torsoC(cx, cy, s, rd, yd);
+            rect(XX(-27), YY(76), XX(27), YY(88), yl);                                  /* calcao amarelo */
+            rect(XX(-27), YY(76), XX(27), YY(79), yd);
+            discN(XX(-6.5f), YY(55), ZZ(7.4f), yl, 10); discN(XX(6.5f), YY(55), ZZ(7.4f), yl, 10);   /* coracao */
+            tri(XX(-13.5f), YY(58), XX(13.5f), YY(58), cx, YY(73), yl);
+            discN(XX(-9), YY(53), ZZ(2), COL(255, 245, 190), 6);
+            armsC(cx, cy, s, mood, t, rd, yl, 8.5f);
+        }
+        for (k = -1; k <= 1; k += 2) {                                                  /* antenas */
+            float bx = XX(k * 21 + k * wob), by = YY(-47 + drop);
+            beam(XX(k * 10), YY(-20), bx, by, ZZ(2.4f), ink);
+            discN(bx, by, ZZ(5.2f), yl, 10);
+            discN(bx - ZZ(1.4f), by - ZZ(1.6f), ZZ(1.6f), COL(255, 245, 190), 6);
+        }
+        disc(cx, cy, ZZ(25), rd);                                                       /* capuz */
+        arcL(cx, cy, ZZ(24), ZZ(24), 1.1f * CPI, 1.9f * CPI, ZZ(2.2f), rdD);
+        ell(cx, YY(5), ZZ(17.5f), ZZ(19), skin);                                        /* rosto */
+        discN(cx, YY(5), ZZ(3.4f), nose, 8);
+        faceStd(cx, cy, s, mood, t, 8.5f, -3, 14, COL(60, 30, 20), 3);
+        break; }
+
     default: {  /* GATO */
         u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
         if (full) {
@@ -2915,7 +3095,7 @@ static void drawOverScreen(void)
     float ts;
     char buf[64];
     int *ws = mode == 0 ? winsBot : winsVs;
-    const char *hint = "X: REVANCHE   START: MENU";
+    const char *hint = tourney ? "X: CONTINUAR" : "X: REVANCHE   START: MENU";
 
     /* fundo */
     for (k = 0; k < 14; k++)
@@ -2952,6 +3132,7 @@ static void drawOverScreen(void)
 
     /* titulo e legendas */
     if (youLost) strcpy(buf, "DERROTA");
+    else if (tourney && tRound == 2) strcpy(buf, "CAMPEAO!");
     else if (mode == 0) strcpy(buf, "VITORIA!");
     else sprintf(buf, "%s VENCEU!", pname(w));
     ts = (mode == 1 ? 0.7f : 0.95f) + 0.03f * sinf(tt * 0.15f);
@@ -2962,7 +3143,8 @@ static void drawOverScreen(void)
         text(tx - 2, ty + 2, ts, gl, buf); text(tx + 2, ty + 3, ts, gl, buf);
         text(tx, ty, ts, youLost ? COL(255,110,100) : COL(255,230,70), buf);
     }
-    if (mode == 0) strcpy(buf, youLost ? "O BOT VENCEU... TENTE DE NOVO!" : "VOCE VENCEU O BOT!");
+    if (tourney) { if (youLost) sprintf(buf, "%s VENCEU... VOCE ESTA ELIMINADO!", tName[tOpp]); else sprintf(buf, "VOCE VENCEU %s!", tName[tOpp]); }
+    else if (mode == 0) strcpy(buf, youLost ? "O BOT VENCEU... TENTE DE NOVO!" : "VOCE VENCEU O BOT!");
     else sprintf(buf, "PARABENS, %s!", pname(w));
     textC(62, 0.4f, youLost ? COL(255,190,180) : COL(255,245,190), buf);
     if (overNote[0]) textC(82, 0.32f, COL(255,150,130), overNote);
@@ -3003,7 +3185,8 @@ static void drawOverScreen(void)
     text(wx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(255,235,110), buf);
     sprintf(buf, "%s", pname(l));
     text(lx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(150,158,175), buf);
-    sprintf(buf, "%s %d X %d %s", pname(0), ws[0], ws[1], pname(1));
+    if (tourney) sprintf(buf, "TORNEIO - %s", tRoundName(tRound));
+    else sprintf(buf, "%s %d X %d %s", pname(0), ws[0], ws[1], pname(1));
     textC(380, 0.5f, COL(255,255,255), buf);
     textC(410, 0.36f, ((overT / 25) & 1) ? COL(255,255,255) : COL(200,205,215), hint);
 
@@ -3024,7 +3207,7 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
     int n = 0;
     switch (setStep) {
     case 0:
-        v[n++] = SR_OPP;
+        if (!tourney) v[n++] = SR_OPP;
         v[n++] = (oppSel == 0) ? SR_LVL : SR_TIME;      /* tempo por jogada so contra outro jogador */
         v[n++] = SR_MODE;
         v[n++] = SR_NEXT;
@@ -3039,7 +3222,7 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
         v[n++] = SR_WB; v[n++] = SR_GD; v[n++] = SR_NEXT;
         break;
     default:
-        v[n++] = SR_CH0; v[n++] = SR_CH1; v[n++] = SR_GO;
+        v[n++] = SR_CH0; if (!tourney) v[n++] = SR_CH1; v[n++] = SR_GO;
         break;
     }
     return n;
@@ -3057,11 +3240,77 @@ static void cycleChar(int pl, int d)       /* cada jogador usa um personagem dif
     do { charSel[pl] = (charSel[pl] + d + NCHARS) % NCHARS; } while (charSel[pl] == o);
 }
 
+/* ---------- torneio mata-mata ---------- */
+static const char *TBOT[12] = { "BRUNO", "LUCAO", "TONHO", "DUDU", "MARCOS", "PEDRAO", "ZECA", "CARLAO", "NANDO", "TIAGO", "JUNIOR", "RAFA" };
+
+static void tourneyPrepare(void)                 /* simula as outras partidas da rodada e acha o rival do jogador */
+{
+    int n = 8 >> tRound, m;
+    for (m = 0; m < n / 2; m++) {
+        int a = tSlot[tRound][2 * m], c = tSlot[tRound][2 * m + 1];
+        if (a == 0 || c == 0) { tOpp = (a == 0) ? c : a; tPM = m; }
+        else tSlot[tRound + 1][m] = (rnd() & 1) ? a : c;
+    }
+}
+
+static void tourneyBegin(void)                   /* sorteia rivais, personagens e chaves */
+{
+    int i, j, t, n = 0, ids[NCHARS], nm[12], ord[8];
+    for (i = 0; i < 4; i++) for (j = 0; j < 8; j++) tSlot[i][j] = -1;
+    for (i = 0; i < NCHARS; i++) if (i != charSel[0]) ids[n++] = i;
+    for (i = n - 1; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = ids[i]; ids[i] = ids[j]; ids[j] = t; }
+    for (i = 0; i < 12; i++) nm[i] = i;
+    for (i = 11; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = nm[i]; nm[i] = nm[j]; nm[j] = t; }
+    tChar[0] = charSel[0]; strcpy(tName[0], pnames[0]);
+    for (i = 1; i < 8; i++) { tChar[i] = ids[i - 1]; strcpy(tName[i], TBOT[nm[i - 1]]); }
+    for (i = 0; i < 8; i++) ord[i] = i;
+    for (i = 7; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
+    for (i = 0; i < 8; i++) tSlot[0][i] = ord[i];
+    tRound = 0; tRes = 0; tChamp = -1; mode = 0;
+    cueSel[0] = cueSel[1] = 0;                   /* regra: so o taco CLASSICO */
+    tourneyPrepare();
+    state = S_BRACKET;
+}
+
+static void tourneyPlay(void)                    /* comeca a partida da rodada atual */
+{
+    charSel[1] = tChar[tOpp];
+    cueSel[0] = cueSel[1] = 0;
+    rs += 7919 + menuT;
+    newGame(0);
+}
+
+static void tourneyAfter(void)                   /* chamado ao sair da tela de fim de partida */
+{
+    if (winner == 0) {
+        tSlot[tRound + 1][tPM] = 0;
+        if (tRound == 2) { tChamp = 0; tRes = 3; }
+        else { tRound++; tourneyPrepare(); tRes = 1; }
+    } else {
+        int r, m;
+        tSlot[tRound + 1][tPM] = tOpp;
+        for (r = tRound + 1; r < 3; r++)         /* eliminado: o resto do torneio e simulado */
+            for (m = 0; m < (8 >> r) / 2; m++)
+                tSlot[r + 1][m] = (rnd() & 1) ? tSlot[r][2 * m] : tSlot[r][2 * m + 1];
+        tChamp = tSlot[3][0]; tRes = 2;
+    }
+    state = S_BRACKET;
+}
+
+static void bracketInput(u32 pr)
+{
+    if (pr & (PAD_CROSS | PAD_START)) {
+        if (tRes <= 1) tourneyPlay();
+        else { tourney = 0; menuInit(); state = S_MENU; }
+    } else if (pr & PAD_SELECT) { tourney = 0; menuInit(); state = S_MENU; }
+}
+
 static void startMatch(void)
 {
     rs += 7919 + menuT;
     wbSel[1] = wbSel[0];                         /* a cor da bola branca vale para a partida toda */
     setSkins(gmode == GM_BR);
+    if (tourney) { tourneyBegin(); return; }
     newGame(oppSel);
 }
 
@@ -3158,7 +3407,7 @@ static void drawSetupScreen(void)
     const char *hint;
     char buf[40];
 
-    textC(12, 0.6f, COL(255,215,70), "CONFIGURAR PARTIDA");
+    textC(12, 0.6f, COL(255,215,70), tourney ? "CONFIGURAR TORNEIO" : "CONFIGURAR PARTIDA");
     for (i = 0; i < NSTEPS; i++) {                        /* barra de etapas */
         float x1 = 52.0f + i * 136.0f, x2 = x1 + 128.0f;
         int cur = (i == setStep), done = (i < setStep);
@@ -3253,7 +3502,7 @@ static void drawSetupScreen(void)
     else if (v[setSel] == SR_NEXT)
         hint = "X OU START: PROXIMA ETAPA   O: VOLTAR";
     else if (v[setSel] == SR_GO)
-        hint = "X OU START: INICIAR   O: ETAPA ANTERIOR";
+        hint = tourney ? "X OU START: ESCOLHER O NOME E COMECAR O TORNEIO   O: ETAPA ANTERIOR" : "X OU START: INICIAR   O: ETAPA ANTERIOR";
     else
         hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   L1/R1: ETAPA   O: VOLTAR";
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
@@ -3280,15 +3529,18 @@ static void drawSetupScreen(void)
     } else {                                              /* etapas 0 e 3: os dois personagens */
         float sc = setStep == 3 ? 1.35f : 0.85f, cy = setStep == 3 ? 345.0f : 372.0f, px0 = setStep == 3 ? 170.0f : 150.0f;
         for (i = 0; i < 2; i++) {
-            float px = i == 0 ? px0 : 640.0f - px0;
-            int hot = (setStep == 3 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
+            float px = tourney ? 320.0f : (i == 0 ? px0 : 640.0f - px0);
+            int hot;
+            if (tourney && i == 1) continue;                     /* torneio: os rivais sao sorteados */
+            hot = (setStep == 3 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
             float bob = hot ? -4.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
             const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
             drawChar(charSel[i], px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
             text(px - tw(0.34f, CHAR_NAME[charSel[i]]) * 0.5f, 420, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), CHAR_NAME[charSel[i]]);
             text(px - tw(0.28f, nm) * 0.5f, 434, 0.28f, COL(130,140,155), nm);
         }
-        if (setStep == 0) textC(358, 0.9f, COL(255,215,70), "VS");
+        if (setStep == 0 && !tourney) textC(358, 0.9f, COL(255,215,70), "VS");
+        else if (setStep == 0) textC(330, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
     }
 }
 
@@ -3402,11 +3654,62 @@ static void drawOptionsScreen(void)
     textC(412, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR");
 }
 
+/* ---------- chaveamento do torneio ---------- */
+static float tCx(int c) { return 14.0f + c * 152.0f; }
+static float tCy(int c, int i) { return 71.0f + 43.0f * ((float)(i << c) + 0.5f * (float)((1 << c) - 1)); }
+
+static void drawBracketScreen(void)
+{
+    static const char *CN[4] = { "QUARTAS", "SEMIFINAL", "FINAL", "CAMPEAO" };
+    char buf[96];
+    int c, i, n;
+    float pulse = 0.5f + 0.5f * sinf(menuT * 0.12f);
+
+    textC(6, 0.55f, COL(255,215,70), "TORNEIO");
+    for (c = 0; c < 4; c++)
+        text(tCx(c) + 62.0f - tw(0.26f, CN[c]) * 0.5f, 38, 0.26f, c == tRound && tRes <= 1 ? COL(255,240,150) : COL(140,150,168), CN[c]);
+
+    for (c = 0; c < 3; c++)                                       /* ligacoes */
+        for (i = 0; i < (8 >> c) / 2; i++) {
+            float ya = tCy(c, 2 * i), yb = tCy(c, 2 * i + 1), ym = tCy(c + 1, i);
+            float xr = tCx(c) + 124.0f, xm = xr + 13.0f;
+            u64 lc = CA(120, 170, 150, 0x78);
+            line(xr, ya, xm, ya, lc); line(xr, yb, xm, yb, lc);
+            line(xm, ya, xm, yb, lc); line(xm, ym, tCx(c + 1), ym, lc);
+        }
+
+    for (c = 0; c < 4; c++) {                                     /* caixas */
+        n = (c == 3) ? 1 : (8 >> c);
+        for (i = 0; i < n; i++) {
+            int comp = tSlot[c][i], me = (comp == 0), lost = 0, now;
+            float x = tCx(c), y = tCy(c, i) - 17.0f;
+            if (c < 3 && comp >= 0) { int nx = tSlot[c + 1][i / 2]; lost = (nx >= 0 && nx != comp); }
+            now = (c == tRound && tRes <= 1 && comp >= 0 && (me || comp == tOpp));
+            rect(x - 1, y - 1, x + 125, y + 35, me ? COL(255,215,70) : COL(70,84,100));
+            rect(x, y, x + 124, y + 34, me ? COL(58,46,10) : COL(10,18,30));
+            if (comp < 0) { text(x + 56, y + 6, 0.5f, COL(80,92,112), "?"); continue; }
+            drawChar(tChar[comp], x + 19, y + 19, 0.3f, 0, menuT, 0);
+            text(x + 40, y + 10, 0.3f, lost ? COL(105,110,122) : (me ? COL(255,240,150) : COL(220,228,240)), tName[comp]);
+            if (lost) rect(x, y, x + 124, y + 34, CA(0, 0, 0, 0x48));
+            if (now) frameR(x - 3, y - 3, x + 127, y + 37, 1.6f, me ? CA(255, 230, 90, 0x50 + (int)(0x30 * pulse)) : CA(255, 255, 255, 0x40));
+        }
+    }
+    if (tRes == 3) drawTrophy(tCx(3) + 62.0f, 126.0f, 0.7f, menuT);
+
+    if (tRes == 0)      sprintf(buf, "%s: %s X %s", tRoundName(tRound), pname(0), tName[tOpp]);
+    else if (tRes == 1) sprintf(buf, "VOCE AVANCOU! %s CONTRA %s", tRoundName(tRound), tName[tOpp]);
+    else if (tRes == 2) sprintf(buf, "VOCE FOI ELIMINADO! CAMPEAO: %s", tName[tChamp]);
+    else                sprintf(buf, "PARABENS, %s! VOCE E O CAMPEAO!", pname(0));
+    textC(398, 0.38f, tRes == 2 ? COL(255,160,140) : COL(255,240,170), buf);
+    textC(420, 0.3f, COL(170,180,195), tRes <= 1 ? "X: JOGAR   SELECT: SAIR DO TORNEIO   TODOS USAM O TACO CLASSICO" : "X: VOLTAR AO MENU");
+}
+
 static void drawMenuScreen(void)
 {
-    static const char *ITEM[4] = { "MODO HISTORIA", "JOGAR", "PLAYER DE MUSICAS", "OPCOES" };
-    static const char *DESC[4] = { "A HISTORIA DO JOGO CHEGA EM BREVE",
+    static const char *ITEM[5] = { "MODO HISTORIA", "JOGAR", "TORNEIO", "PLAYER DE MUSICAS", "OPCOES" };
+    static const char *DESC[5] = { "A HISTORIA DO JOGO CHEGA EM BREVE",
                                    "BOLA 8 OU SINUCA BRASILEIRA, CONTRA O BOT OU UM AMIGO",
+                                   "MATA-MATA COM 8 JOGADORES - SO TACO CLASSICO",
                                    "OUCA AS MUSICAS DO SEU PEN DRIVE",
                                    "SOM, MUSICA, VOLUME, EFEITOS E CREDITOS" };
     char buf[48];
@@ -3418,6 +3721,7 @@ static void drawMenuScreen(void)
     if (state == S_SETUP) { drawSetupScreen(); return; }
     if (state == S_NAME)  { drawNameScreen();  return; }
     if (state == S_OPTS)  { drawOptionsScreen(); return; }
+    if (state == S_BRACKET) { drawBracketScreen(); return; }
 
     if (state == S_CREDITS) {
         u64 pc = COL(255, 200 + (int)(40 * s1), 50 + (int)(30 * s2));
@@ -3462,8 +3766,8 @@ static void drawMenuScreen(void)
     rect(180 + fmodf(menuT * 3.0f, 240.0f), 103, 220 + fmodf(menuT * 3.0f, 240.0f), 107, COL(240,240,200));
 
     /* opcoes */
-    panel(100, 122, 540, 300);
-    for (i = 0; i < 4; i++) {
+    panel(100, 122, 540, 332);
+    for (i = 0; i < 5; i++) {
         float y = 138.0f + i * 40.0f;
         int sel = (i == menuSel);
         u64 tc = i == 0 ? (sel ? COL(170,175,190) : COL(105,112,128))
@@ -3473,9 +3777,9 @@ static void drawMenuScreen(void)
         text(150, y, 0.65f, tc, ITEM[i]);
         if (i == 0) text(520 - tw(0.36f, "EM BREVE"), y + 4, 0.36f, COL(150,130,70), "EM BREVE");
     }
-    if (menuNote > 0) { menuNote--; textC(318, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
-    else textC(318, 0.34f, COL(150,220,255), DESC[menuSel]);
-    textC(344, 0.34f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
+    if (menuNote > 0) { menuNote--; textC(348, 0.38f, COL(255,230,60), "MODO HISTORIA EM BREVE!"); }
+    else textC(348, 0.34f, COL(150,220,255), DESC[menuSel]);
+    textC(374, 0.34f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: CONFIRMAR");
 
     rect(14, 416, 626, 417, COL(40,70,62));
     text(14, 424, 0.34f, COL(150,160,175), "CRIADOR: " GAME_AUTHOR);
@@ -3492,7 +3796,8 @@ static int pauseRows(int *v)
 {
     int n = 0, k;
     for (k = 0; k < NPI; k++) {
-        if (k == PI_WB0 || k == PI_WB1) continue;            /* cor da bola branca: so no menu Configurar partida */
+        if (k == PI_WB0 || k == PI_WB1) continue;
+        if (tourney && k == PI_RESTART) continue;           /* torneio: nao da para reiniciar a partida */            /* cor da bola branca: so no menu Configurar partida */
         if (mode == 1 || k != PI_GD1) v[n++] = k;
     }
     return n;
@@ -3550,7 +3855,7 @@ static void pauseInput(u32 pr)
     case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
     case PI_CTRL:    if (pr & PAD_CROSS) pauseView = 1; break;
     case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; newGame(mode); } break;
-    case PI_MENU:    if (pr & PAD_CROSS) { paused = 0; menuInit(); state = S_MENU; } break;
+    case PI_MENU:    if (pr & PAD_CROSS) { paused = 0; tourney = 0; menuInit(); state = S_MENU; } break;
     }
 }
 
@@ -3703,7 +4008,7 @@ static void drawChalkFx(float bx, float by, float d0)
 static void drawScene(void)
 {
     int i;
-    if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME) { drawMenuScreen(); return; }
+    if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_BRACKET) { drawMenuScreen(); return; }
     if (state == S_PLAYER) { drawBackdrop(); pauseView = 2; drawPause(); return; }
     if (state == S_OVER) {
         drawOverScreen();
@@ -3764,7 +4069,7 @@ static void drawScene(void)
 static int stCat(int st)
 {
     if (st == S_OVER) return 2;
-    if (st == S_MENU || st == S_CREDITS || st == S_OPTS || st == S_SETUP || st == S_NAME || st == S_PLAYER) return 1;
+    if (st == S_MENU || st == S_CREDITS || st == S_OPTS || st == S_SETUP || st == S_NAME || st == S_PLAYER || st == S_BRACKET) return 1;
     return 3;
 }
 
@@ -3859,8 +4164,8 @@ int main(int argc, char *argv[])
     for (;;) {
         musicUpdate();
         p0 = readpad(0);
-        p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) in = p0 | p1;
+        p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET) ? readpad(1) : 0;
+        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         if (paused) in = p0 | p1;
@@ -3870,19 +4175,20 @@ int main(int argc, char *argv[])
         prev = in;
         menuT++;
         if (state == S_OVER) overT++;
-        if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER) menuUpdate();
+        if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET) menuUpdate();
 
         if (paused) pauseInput(pressed);
         else if ((pressed & PAD_START) && (state == S_AIM || state == S_ROLL || state == S_PLACE ||
                                            state == S_TAKE || state == S_STRIKE)) pauseOpen();
         else switch (state) {
         case S_MENU:
-            if (pressed & PAD_UP)   menuSel = (menuSel + 3) % 4;
-            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 4;
+            if (pressed & PAD_UP)   menuSel = (menuSel + 4) % 5;
+            if (pressed & PAD_DOWN) menuSel = (menuSel + 1) % 5;
             if (pressed & (PAD_CROSS | PAD_START)) {
                 if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
-                else if (menuSel == 1) { state = S_SETUP; setSel = 0; setStep = 0; }
-                else if (menuSel == 2) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
+                else if (menuSel == 1) { tourney = 0; state = S_SETUP; setSel = 0; setStep = 0; }
+                else if (menuSel == 2) { tourney = 1; oppSel = 0; state = S_SETUP; setSel = 0; setStep = 0; }   /* torneio */
+                else if (menuSel == 3) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
                 else { state = S_OPTS; optSel = 0; }
             }
             break;
@@ -3901,6 +4207,10 @@ int main(int argc, char *argv[])
 
         case S_NAME:
             nameInput(pressed);
+            break;
+
+        case S_BRACKET:
+            bracketInput(pressed);
             break;
 
         case S_CREDITS:
@@ -3939,7 +4249,7 @@ int main(int argc, char *argv[])
                         else setmsg("O TACO JA ESTA COM GIZ");
                     }
                 } else {
-                    pwr += barDir * cueBarSpeed(cueSel[cur]);        /* sobe e desce sozinha */
+                    pwr += barDir * cueBarSpeed(curCue());        /* sobe e desce sozinha */
                     if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
                     if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
                     if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
@@ -4037,7 +4347,8 @@ int main(int argc, char *argv[])
             break;
 
         case S_OVER:
-            if (pressed & PAD_CROSS) { rs += 7919 + menuT; newGame(mode); }
+            if (tourney) { if (pressed & (PAD_CROSS | PAD_START)) tourneyAfter(); }
+            else if (pressed & PAD_CROSS) { rs += 7919 + menuT; newGame(mode); }
             else if (pressed & PAD_START) { menuInit(); state = S_MENU; }
             break;
         }

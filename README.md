@@ -3,10 +3,10 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 1.9.0
+- Versão: 2.0.0
 
 ## Menu inicial (animado)
-- MODO HISTÓRIA (em breve), JOGAR, PLAYER DE MÚSICAS e **OPÇÕES**
+- MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida**, agora em **4 etapas** (barra no topo): **1 Partida** (adversário, tempo ou dificuldade, modo), **2 Mesa e bolas**, **3 Bola branca e guia** e **4 Personagens**. Cima/Baixo escolhe, Esq/Dir muda, **X ou START em "PROXIMA ETAPA"** avança, **O** volta uma etapa (na primeira, volta ao menu) e **L1/R1** trocam de etapa. A última etapa tem **INICIAR PARTIDA**. Cada etapa mostra uma prévia (mesa, bola branca e linha guia, personagens). Detalhes de cada opção:
@@ -19,7 +19,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
-  - MESA (17 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (18 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -29,6 +29,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Rosa** e **Turquesa**: mesas coloridas (sem animação)
     - **Noite Lua**: céu escuro com lua crescente, estrelas piscando, nuvens passando devagar, estrela cadente e caçapas com brilho azulado
     - **Faroeste**: feltro cor de areia, moldura de tábuas com pregos e corda, estrela de xerife no centro, cactos nos cantos, poeira soprando e uma bola de mato rolando pela mesa
+    - **Halloween**: feltro roxo, moldura preta com luzes laranja e verdes piscando, aboboras de Halloween nos cantos, teias de aranha, aranha descendo da tabela, fantasma flutuando, morcegos voando, neblina, lua alaranjada e caçapas com brilho verde de poção
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
@@ -36,7 +37,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
-Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 10 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking e Gato. Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 11 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato e **Chapolin** (capuz vermelho com duas antenas e coração amarelo no peito). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
@@ -46,6 +47,15 @@ Quando a partida termina:
 - **Quem perdeu**: o personagem fica cabisbaixo, chorando, debaixo de uma nuvem de chuva
 - Contra o BOT: se você ganha aparece **VITORIA!**; se o bot ganha aparece **DERROTA**. No versus aparece "NOME VENCEU!"
 - X = revanche (mantém o placar), START = voltar ao menu
+
+## Torneio (novo na 2.0)
+No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Quartas de final, Semifinal e Final.
+- **Perdeu, está fora!** Se o BOT vencer a sua partida, você é eliminado e vê quem ficou com o título
+- Configuração em etapas: dificuldade do BOT e modo (Bola 8 ou Sinuca Brasileira), mesa e bolas, bola branca e guia, e o seu personagem. Os 7 rivais (nomes e personagens) são sorteados
+- **Regra: todos jogam com o taco CLASSICO.** A troca de taco (SELECT) fica bloqueada durante o torneio
+- Entre as partidas aparece o **chaveamento**: X joga a próxima partida, SELECT sai do torneio. As partidas dos outros jogadores são decididas automaticamente
+- No torneio não há revanche nem reiniciar partida; o placar do topo mostra a fase (QUARTAS, SEMI ou FINAL)
+- Ganhou a final: tela de **CAMPEÃO** com troféu
 
 ## Modos de jogo
 - **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)
@@ -97,9 +107,11 @@ Quando a partida termina:
 | Samurai    | 75    | 30     | 50   | 45       |
 | Oceano     | 50    | 70     | 45   | 55       |
 | Pistoleiro | 70    | 35     | 60   | 55       |
+| Brasileiro | 60    | 50     | 60   | 60       |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
 - **Pistoleiro** (cowboy): taco de couro e latão com brilho de bala correndo pelo taco e estrela de xerife piscando; bate forte e tem boa mira
+- **Brasileiro**: verde, amarelo e azul da bandeira, com faixas que mudam de cor e estrelinhas correndo pelo taco; equilibrado, com um pouco mais de efeito
 - Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
 - Força: velocidade da bola na tacada
 - Efeito: quanto a bola branca curva com L2/R2
