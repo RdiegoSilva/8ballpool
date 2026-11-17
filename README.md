@@ -101,9 +101,9 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 
 ## Raridade dos personagens
 Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
-- **LENDÁRIO**: Grinch e Poseidon
+- **LENDÁRIO**: Grinch
 - **MÍSTICO**: Vampiro, Mago e Mestre do Tempo
-- **ÉPICO**: Hacker e Papai Noel
+- **ÉPICO**: Hacker, Papai Noel e Poseidon
 - **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
 - **RARO**: Pinguim, Robô, Alien, Gato e Cowboy
 
@@ -112,7 +112,7 @@ Novo combo pack **GRINCH** (personagem + taco + mesa), o único **LENDÁRIO** (c
 - **Puxão verde**: depois da batida, a bola alvo é puxada para a caçapa mais próxima (mais provável com poucas bolas na mesa)
 - **Bagunça**: as bolas do adversário levam um empurrão em direções aleatórias e ficam espalhadas (mais provável quando o adversário está perto de ganhar ou tem muitas bolas)
 
-Cada personagem tem o seu taco especial e a sua mesa (base para o modo história). Os personagens sem taco usam os tacos padrão.
+Cada personagem tem o seu taco especial e a sua mesa (base para o modo história). Todos os personagens têm taco e habilidade própria.
 
 | Personagem | Taco | Habilidade | Mesa |
 |------------|------|------------|------|
@@ -123,12 +123,15 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Chapolin   | Marreta Biônica | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
 | Hacker     | Hack       | **HACK**: calcula a melhor tacada (confere na simulação da mesa), trava mira, efeito e pulo, mostra o caminho todo e marca a **força ideal** na barra | Hack |
 | Poseidon   | Tridente   | **MARÉ ALTA**: uma onda gigante empurra **todas as bolas** (menos a branca) na direção da caçapa mais próxima de cada uma, com força fraca: só as bolas que já estão perto de uma caçapa chegam lá | Abismo |
+| Alien      | Ovni       | **RASTREIO**: a branca curva sozinha e **persegue a bola certa** mais perto da sua mira (a sua bola; mesa aberta: qualquer uma, menos a 8), até a primeira batida | Galáxia |
+| Robô       | Robô       | **ÍMÃ**: as **suas bolas** são puxadas para a caçapa mais próxima de cada uma, com força fraca (mesa aberta: todas, menos a 8) | Neon |
+| Mago       | Varinha    | **ESCUDO**: um escudo roxo **perdoa a falta** da tacada, até a branca na caçapa (o adversário não ganha bola na mão). Se não houver falta, a habilidade **não gasta** | Noite Lua |
+| Gato       | Gato       | **NOVA VIDA**: se a tacada **não encaçapar** e não for falta, você **joga de novo**. Se encaçapar, a habilidade **não gasta** | Rosa |
 | Grinch     | Grinch     | **GRINCH**: ao apertar O na mira, a habilidade é **sorteada** entre Puxão verde e Bagunça conforme a situação da mesa (veja abaixo da tabela) | Grinch |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
 | Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
 | Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
 
-Robô, Alien, Mago e Gato: só mesa (Robô: Neon, Alien: Galáxia, Mago: Noite Lua, Gato: Rosa) ou nada.
 - **Usar a habilidade: O na mira.** Na maioria, o primeiro toque arma a habilidade (aparece "ARMADO!" no canto) e vale para a próxima tacada; tocar de novo cancela. O **HACK** age na hora
   - **HACK (melhorado)**: só mostra tacadas que **realmente encaçapam** (cada uma é testada na física do jogo: bola certa primeiro, branca não cai). Funciona na Bola 8 e na Sinuca Brasileira. **O de novo** troca para a próxima melhor opção (até 4) e, depois da última, libera a mira. Com o HACK ligado a mira, o efeito, o pulo e a troca de taco ficam travados, a tacada não sofre desvio de giz, a barra de força anda mais devagar e **gruda na força ideal** (±6%). Sem tacada possível, ele sugere uma jogada de segurança (acerta a bola certa sem arriscar a branca). Na quebra mira reto no triângulo com força total
   - **CHAMINÉ**: vale para a Bola 8 e para a Sinuca Brasileira; o efeito dura só a tacada e depois a recarga é de 3 tacadas
@@ -173,10 +176,15 @@ Categoria própria no catálogo: tacos com as cores da bandeira (faixas que gira
 | Grinch     | 58    | 62     | 55   | 60       |
 | Hack       | 50    | 50     | 80   | 80       |
 | Tridente   | 56    | 64     | 55   | 60       |
+| Ovni       | 52    | 55     | 60   | 58       |
+| Robô       | 62    | 35     | 65   | 65       |
+| Varinha    | 48    | 70     | 55   | 55       |
+| Gato       | 52    | 58     | 55   | 62       |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
 - **Pistoleiro** (cowboy): taco de couro e latão com brilho de bala correndo pelo taco e estrela de xerife piscando; bate forte e tem boa mira
 - **Tridente** (Poseidon): azul profundo com ondas turquesa correndo pelo taco, ponta brilhante e detalhe dourado
+- **Ovni** (Alien): verde com luzes de disco voador correndo pelo taco; **Robô**: aço com luzinhas de LED piscando; **Varinha** (Mago): roxo com estrelinhas douradas; **Gato**: rosa com bolinhas pulando e ponta pulsando
 - **Vampiro**: ponta vermelha pulsando e gotas de sangue; **Noel**: listras de bengala doce e brilhos de neve; **Hack**: pacotes de dados ciano e magenta correndo pelo taco, com falhas
 - **Brasileiro**: verde, amarelo e azul da bandeira, com faixas que mudam de cor e estrelinhas correndo pelo taco; equilibrado, com um pouco mais de efeito
 - Alguns tacos têm animação: **Dragão** e **Ouro** (brilho pulsando), **Gelo** e **Oceano** (faíscas correndo pelo taco), **Neon** (fita e detalhe mudando de cor)
