@@ -32,7 +32,7 @@
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
 #define MAXV  640.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND };
 enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
 
 typedef struct { float x, y, vx, vy; int in; float z, vz; } Ball;   /* z/vz: altura no pulo */
@@ -68,8 +68,8 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_PRESENTE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "PRESENTE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_PRESENTE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "PRESENTE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2];
@@ -83,6 +83,10 @@ static const char *tRoundName(int r) { return r == 0 ? "QUARTAS DE FINAL" : (r =
 static float barLevel, strikePwr, strikeD0, hitX, hitY;
 static int   strikeK, follow;
 static int   fallT[16], fallP[16];
+/* MESTRE DO TEMPO: foto da mesa antes da tacada; se a tacada perder a partida, oferece voltar no tempo */
+static Ball  tmB[16];
+static int   tmSnap, tmArmed, tmNow, tmSel, tmEight, tmGrp[2];
+static char  tmNote[48];
 static float fallX[16], fallY[16];
 static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da barra */
 static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
@@ -178,7 +182,7 @@ typedef struct {
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
     int fx;                               /* animacao: 0 nenhuma, 1 brilho, 2 arco-iris, 3 faiscas */
 } CueDef;
-#define NCUES 23
+#define NCUES 24
 #define CUE_SNIPER 5
 static CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
@@ -204,6 +208,8 @@ static CueDef CUES[NCUES] = {
     { "NOEL",       55,  60,  55,  65, {245,245,250}, {200, 32, 42}, { 16,104, 50}, {255,214, 80}, {245,245,250}, 7 },
     { "HACK",       50,  50,  80,  80, {  0,255,200}, { 24, 30, 40}, { 12, 16, 24}, {  0,255,140}, {  0,200,255}, 8 },
     { "CHIPOTE",    60,  40,  55,  55, {255,214, 40}, {214, 36, 40}, {255,214, 40}, {255,214, 40}, {158, 22, 28}, 10 },
+    /* MESTRE DO TEMPO: relogio azul e dourado; a habilidade volta no tempo se a tacada perder a partida */
+    { "MESTRE DO TEMPO", 55, 50, 65, 65, {120,200,255}, { 28, 40, 84}, { 14, 18, 44}, {255,214, 90}, {120,200,255}, 1 },
     /* tacos de paises (fx 9: faixas com as cores da bandeira) */
     { "MEXICANO",   58,  52,  58,  57, {206, 17, 38}, {  0,104, 71}, {206, 17, 38}, {245,245,245}, {  0,104, 71}, 9 },
     { "ARGENTINO",  56,  56,  58,  58, {246,180, 14}, {117,170,219}, {245,245,245}, {246,180, 14}, {245,245,245}, 9 },
@@ -215,7 +221,7 @@ static CueDef CUES[NCUES] = {
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, CHIPOTE-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
-                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA };
+                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA, [23] = AB_TEMPO };
 
 #define GAME_VERSION "2.2.0"
 #define GAME_AUTHOR  "DIEGO REIS"
@@ -682,6 +688,11 @@ static void newGame(int m)
 
 static void shoot(float p)
 {
+    tmSnap = 0; tmArmed = 0;
+    if (abilArm && curAb() == AB_TEMPO) {             /* guarda a mesa antes da tacada */
+        memcpy(tmB, b, sizeof(b)); tmGrp[0] = grp[0]; tmGrp[1] = grp[1];
+        tmSnap = 1; tmArmed = 1;
+    }
     float ch = isBot() ? 1.0f : chalk[cur], a = ang, pm = 1.0f;
     memset(pocketed, 0, sizeof(pocketed));
     firstHit = -1;
@@ -1019,12 +1030,24 @@ static void botTakePick(void)                       /* o bot tira a propria bola
      uma das PROPRIAS bolas da mesa e joga
    - suicidio (branca na cacapa): derrota na hora
    - meteu a ultima bola da sua cor COM falta: perde, mesmo que o adversario ainda tenha as 4 bolas */
+/* Mestre do Tempo: a tacada perdeu a partida -> pergunta se quer voltar no tempo */
+static int tmOffer(const char *note, int eight)
+{
+    if (!tmNow || !tmSnap) return 0;
+    tmNow = 0; tmEight = eight; tmSel = 0;
+    strncpy(tmNote, note, 47); tmNote[47] = 0;
+    charging = 0; pwr = 0; botTimer = 0; botPlanned = 0;
+    state = S_REWIND;
+    return 1;
+}
+
 static void resolveBR(void)
 {
     int i, foul, own = 0, mine, theirs;
     char buf[64];
     overNote[0] = 0;
     if (pocketed[0]) {
+        if (tmOffer("SUICIDIO - BRANCA NA CACAPA", 0)) return;
         strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
         endGame(1 - cur);
         return;
@@ -1035,6 +1058,7 @@ static void resolveBR(void)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
     if (foul && mine == 0) {                         /* meteu a ultima bola, mas com falta: perde mesmo assim */
+        if (tmOffer(firstHit < 0 ? "FALTA: NAO TOCOU NA PROPRIA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO", 0)) return;
         strcpy(overNote, firstHit < 0 ? "FALTA: NAO TOCOU NA PROPRIA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO");
         endGame(1 - cur);
         return;
@@ -1058,11 +1082,13 @@ static void resolve(void)
     int i, foul, ownPocket = 0;
 
     overNote[0] = 0;
+    tmNow = tmArmed && tmSnap; tmArmed = 0;
     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
     if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
+        if (!ok && tmOffer("BOLA 8 ENCACAPADA ANTES DA HORA", 1)) return;
         winner = ok ? cur : 1 - cur;
         (mode == 0 ? winsBot : winsVs)[winner]++;
         state = S_OVER;
@@ -2420,7 +2446,7 @@ static void drawGuide(void)
             L = (22.0f + 70.0f * dot) * gs;
             if (sn) L = 1.0e6f;                           /* sniper: caminho completo */
             tmax = castRay(b[hit].x, b[hit].y, nx, ny, hit, &h2, &w2);
-            pkp = pocketPath(b[hit].x, b[hit].y, nx, ny, hit, &pl);
+            pkp = -1; (void)pl;                           /* sem destaque verde da cacapa */
             if (pkp >= 0) {                               /* vai para a cacapa: desenha o caminho ate o buraco */
                 float le = pl - PR[pkp] * 0.4f;
                 glowFade(b[hit].x + nx*R, b[hit].y + ny*R, b[hit].x + nx*le, b[hit].y + ny*le,
@@ -2430,13 +2456,6 @@ static void drawGuide(void)
                 L = 0.0f;                                 /* ja desenhado: pula o trecho curto */
             } else if (L >= tmax - 0.5f) {
                 L = tmax;
-                if (h2 < 0) {
-                    pk = nearPocket(b[hit].x + nx*L, b[hit].y + ny*L);
-                    if (pk >= 0) {
-                        ringN(PX[pk], PY[pk], PR[pk] + 2.0f, 2.0f, 24, CA(90, 255, 120, 0x78));
-                        ringN(PX[pk], PY[pk], PR[pk] + 5.0f, 1.2f, 24, CA(90, 255, 120, 0x40));
-                    }
-                }
             }
             if (L > R) glowFade(b[hit].x + nx*R, b[hit].y + ny*R,
                                 b[hit].x + nx*L,  b[hit].y + ny*L, 0x7c, L >= tmax - 0.5f ? 0x50 : 0x10,
@@ -3398,7 +3417,7 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
 /* catalogo: ordem das fichas (padrao primeiro, depois os tacos de personagem) */
 #define NCAT_STD 8                                  /* padrao: 0..7 | paises: 8..13 | personagens: 14..22 */
 #define NCAT_PAIS 14
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 18, 19, 20, 21, 22,   7, 12, 14, 15, 16, 6, 10, 11, 17 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 18, 19, 20, 21, 22,   7, 12, 14, 15, 16, 6, 10, 11, 17, 23 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
 
@@ -3416,7 +3435,8 @@ static void drawCueMenu(void)
         { "A BOLA ALVO EXPLODE E EMPURRA PARA LONGE", "AS BOLAS QUE ESTAO PERTO DELA." },
         { "+20% DE FORCA E A BRANCA PARA NA HORA AO", "BATER NA BOLA (TACADA CORTADA)." },
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
-        { "CHIPOTE CHILLON! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." } };
+        { "CHIPOTE CHILLON! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
+        { "SE A TACADA FIZER VOCE PERDER (SUICIDIO), PODE", "VOLTAR NO TEMPO - SO SE VOCE ACEITAR." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
     char buf[64];
@@ -4598,6 +4618,22 @@ static void drawChalkFx(float bx, float by, float d0)
     }
 }
 
+static void drawRewind(void)
+{
+    float pulse = 0.5f + 0.5f * sinf(menuT * 0.12f);
+    rect(0, 0, 640, 448, CA(10, 14, 40, 0x50));
+    hbox(110, 150, 530, 300, CA(120, 200, 255, 0x90), CA(12, 16, 38, 0x60));
+    ringN(320, 180, 14.0f + 2.0f * pulse, 2.0f, 28, CA(255, 214, 90, 0x90));
+    line(320, 180, 320, 170, CA(255, 214, 90, 0xa0));
+    line(320, 180, 328, 184, CA(120, 200, 255, 0xa0));
+    textC(204, 0.44f, COL(255,214,90), "MESTRE DO TEMPO");
+    textC(228, 0.3f, COL(255,150,130), tmNote);
+    textC(246, 0.3f, COL(215,220,232), "VOLTAR NO TEMPO E NAO PERDER A PARTIDA?");
+    text(190, 272, 0.4f, tmSel == 0 ? COL(110,255,140) : COL(130,138,155), tmSel == 0 ? "> SIM" : "  SIM");
+    text(350, 272, 0.4f, tmSel == 1 ? COL(255,120,110) : COL(130,138,155), tmSel == 1 ? "> NAO" : "  NAO");
+    textC(290, 0.24f, COL(150,155,170), "SETAS ESCOLHEM   X CONFIRMA");
+}
+
 static void drawScene(void)
 {
     int i;
@@ -4688,6 +4724,7 @@ static void drawScene(void)
         snprintf(tb, sizeof tb, "MUSICA: %s", musicToast());
         textC(14, 0.32f, COL(190,220,255), tb);
     }
+    if (state == S_REWIND) drawRewind();
     if (paused) drawPause();
 }
 
@@ -4938,6 +4975,26 @@ int main(int argc, char *argv[])
                 setmsg(tb);
                 state = cueRet;
             } else if (pressed & (PAD_CIRCLE | PAD_SELECT)) state = cueRet;
+            break;
+
+        case S_REWIND:
+            if (pressed & (PAD_LEFT | PAD_RIGHT)) tmSel = !tmSel;
+            if (pressed & PAD_CIRCLE) tmSel = 1;
+            if (pressed & (PAD_CROSS | PAD_CIRCLE)) {
+                if (tmSel == 0) {                                   /* SIM: volta a mesa para antes da tacada */
+                    memcpy(b, tmB, sizeof(b)); grp[0] = tmGrp[0]; grp[1] = tmGrp[1];
+                    memset(pocketed, 0, sizeof(pocketed)); memset(fallT, 0, sizeof(fallT));
+                    firstHit = -1; b[0].vx = b[0].vy = 0; pwr = 0; charging = 0; abilArm = 0; hackOn = 0;
+                    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; abilForgive = 0;
+                    overNote[0] = 0; botTimer = 0; botPlanned = 0; state = S_AIM;
+                    setmsg("VOLTOU NO TEMPO! JOGUE DE NOVO");
+                } else if (tmEight) {                               /* NAO: a derrota vale */
+                    winner = 1 - cur; (mode == 0 ? winsBot : winsVs)[winner]++; overNote[0] = 0; overT = 0; state = S_OVER;
+                } else {
+                    strcpy(overNote, tmNote); endGame(1 - cur);
+                }
+                tmSnap = 0;
+            }
             break;
 
         case S_STRIKE:
