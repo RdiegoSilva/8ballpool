@@ -26,4 +26,10 @@ const char *musicStatus(void);          /* texto curto para a tela */
 const char *musicSource(void);          /* pasta onde as musicas foram achadas */
 const char *musicToast(void);           /* nome da faixa que acabou de comecar (ou NULL) */
 
+
+/* ---- efeitos sonoros (gerados por codigo, misturados com a musica) ---- */
+enum { SFX_HIT, SFX_BALL, SFX_CUSHION, SFX_POCKET, SFX_MOVE, SFX_OK, SFX_BACK,
+       SFX_WIN, SFX_LOSE, SFX_FOUL, SFX_CHALK, SFX_ABIL, SFX_COUNT };
+void sfxPlay(int id, int vol);          /* toca o efeito; vol 0..100 */
+
 #endif

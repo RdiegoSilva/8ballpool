@@ -235,6 +235,8 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
 #define NLEVELS 4
 static int botLevel = 1, menuT;
 static int sndOn = 1, musOn = 1, volLvl = 8, fxOn = 1, tipsOn = 1;   /* opcoes do menu de pausa */
+static int sfxMute;                                                    /* > 0 durante simulacoes (HACK): sem som */
+#define SFX(id, v) do { if (sndOn && !sfxMute) sfxPlay((id), (v)); } while (0)   /* efeito sonoro (opcao SOM) */
 static const char  *LVL_NAME[NLEVELS]  = { "FACIL", "MEDIO", "DIFICIL", "PROFISSIONAL" };
 static const float  BOT_ERR[NLEVELS]   = { 0.075f, 0.02f, 0.004f, 0.0006f };  /* erro de mira (rad) */
 static const float  BOT_POWV[NLEVELS]  = { 0.20f, 0.06f, 0.0f, 0.0f };        /* erro de forca */
@@ -750,6 +752,7 @@ static void shoot(float p)
     }
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(hitCue) * pm;
+    SFX(SFX_HIT, 35 + (int)(p * 65.0f));                 /* toc do taco na bola */
     spinCur = spinSel * (0.8f + 0.2f * ch); spinK = cueSpinK(hitCue); spinSel = 0;
     spinVCur = spinV * (0.8f + 0.2f * ch); spinVK = cueVSpin(hitCue); spinV = 0;
     if (abilCD[cur] > 0) abilCD[cur]--;
@@ -866,7 +869,7 @@ static int stepPhysics(float dt)
             float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, prc = PRC[p] * pockMul, mouth = prc + R;
             if (!air && d2 < prc*prc) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
-                b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; break;
+                b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; SFX(SFX_POCKET, 90); break;
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
@@ -896,6 +899,10 @@ static int stepPhysics(float dt)
             if (inMouth && b[i].y - (TY1-R) > 2.0f) jawHit(&b[i], 1, mpx, mpr);
             else { b[i].y = TY1-R; if (b[i].vy > 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
         }
+        if (wl) {                                         /* som da tabela (mais forte quanto mais rapida a bola) */
+            float cs = sqrtf(b[i].vx * b[i].vx + b[i].vy * b[i].vy);
+            if (cs > 25.0f) SFX(SFX_CUSHION, 20 + (int)(cs * 0.14f));
+        }
         if (wl && i == 0 && spinCur != 0.0f) {          /* efeito lateral muda o angulo do rebote na tabela */
             float kx = -b[0].vy, ky = b[0].vx;
             b[0].vx += kx * spinCur * 0.12f; b[0].vy += ky * spinCur * 0.12f;
@@ -917,6 +924,7 @@ static int stepPhysics(float dt)
             if (rv > 0) {
                 float cvx = b[i].vx, cvy = b[i].vy;
                 rv *= 0.98f;                      /* choque quase elastico */
+                if (rv > 8.0f) SFX(SFX_BALL, 15 + (int)(rv * 0.16f));   /* clac */
                 b[i].vx -= rv*nx; b[i].vy -= rv*ny;
                 b[j].vx += rv*nx; b[j].vy += rv*ny;
                 if (i == 0 && firstHit < 0) { firstHit = j; abilOnFirstHit(j); }
@@ -1001,6 +1009,7 @@ static void endTurn(int foul, int ownPocket)
     else if (abilForgive == 1) { abilCD[cur] = 0; saved = 1; }   /* PRESENTE armado e sem falta: nao gasta */
     abilForgive = 0;
     if (foul) {
+        SFX(SFX_FOUL, 80);
         if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY; }
         b[0].vx = b[0].vy = 0; b[0].z = b[0].vz = 0;
         cur = 1 - cur;
@@ -5147,12 +5156,14 @@ static int hackSim(float a, float p, int safeOnly)
     spinCur = spinVCur = spinK = spinVK = 0.0f; abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(curCue());
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(curCue());
+    sfxMute++;                                        /* simulacao: sem som */
     do {
         mv = 0;
         for (i = 0; i < 8; i++) stepPhysics((1.0f / 60.0f) / 8.0f);
         for (i = 0; i < 16; i++) if (b[i].in && (b[i].vx != 0.0f || b[i].vy != 0.0f || b[i].z > 0.0f)) mv = 1;
         st++;
     } while (mv && st < 420);
+    sfxMute--;
     legal = firstHit > 0 && (gr < 0 ? firstHit != 8 : (ballGroup(firstHit) == gr || (firstHit == 8 && gdone)));
     for (i = 1; i < 16; i++)
         if (pocketed[i] && (gr < 0 ? i != 8 : (ballGroup(i) == gr || (i == 8 && gdone)))) ownp = 1;
@@ -5300,10 +5311,11 @@ static void useAbility(void)
     }
     if (abilCD[cur] > 0) { sprintf(tb, "%s RECARREGA EM %d TACADA(S)", AB_NAME[ab], abilCD[cur]); setmsg(tb); return; }
     if (ab == AB_HACK) {
-        hackSolve(); hackApply(); abilCD[cur] = AB_COOL + 1;
+        hackSolve(); hackApply(); abilCD[cur] = AB_COOL + 1; SFX(SFX_ABIL, 70);
         return;
     }
     abilArm = !abilArm;
+    if (abilArm) SFX(SFX_ABIL, 70);
     sprintf(tb, abilArm ? "HABILIDADE PRONTA: %s" : "HABILIDADE CANCELADA: %s", AB_NAME[ab]);
     setmsg(tb);
 }
@@ -5357,6 +5369,15 @@ int main(int argc, char *argv[])
             in |= p0 & PAD_START;
         pressed = in & ~prev;
         prev = in;
+        {                                                 /* sons de menu */
+            int ui = paused || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER ||
+                     state == S_BRACKET || state == S_CUES || state == S_CREDITS || state == S_OVER || state == S_TAKE;
+            if (ui) {
+                if (pressed & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT | PAD_L1 | PAD_R1)) SFX(SFX_MOVE, 60);
+                if (pressed & (PAD_CROSS | PAD_START)) SFX(SFX_OK, 70);
+                else if (pressed & (PAD_CIRCLE | PAD_SELECT)) SFX(SFX_BACK, 60);
+            } else if (state == S_PLACE && (pressed & PAD_CROSS)) SFX(SFX_OK, 60);
+        }
         menuT++;
         if (state == S_OVER) overT++;
         if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET) menuUpdate();
@@ -5433,7 +5454,7 @@ int main(int argc, char *argv[])
                         setmsg(jumpArm ? "PULO ATIVADO: A BRANCA VAI PULAR" : "PULO DESLIGADO");
                     }
                     else if (pressed & PAD_SQUARE) {
-                        if (chalk[cur] < 0.97f) chalkAnim = 50;
+                        if (chalk[cur] < 0.97f) { chalkAnim = 50; SFX(SFX_CHALK, 70); }
                         else setmsg("O TACO JA ESTA COM GIZ");
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
@@ -5585,6 +5606,12 @@ int main(int argc, char *argv[])
                     setmsg(tb);
                 }
             }
+        }
+
+        {                                                 /* fim de partida: jingle de vitoria ou derrota */
+            static int lastSt = -1;
+            if (state == S_OVER && lastSt != S_OVER) SFX((mode == 1 || winner == 0) ? SFX_WIN : SFX_LOSE, 90);
+            lastSt = state;
         }
 
         /* animacoes por frame: barra de forca, bolas na cacapa, taco */

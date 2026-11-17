@@ -202,7 +202,10 @@ A **linha guia** continua podendo ser trocada a qualquer momento: aperte **START
 
 ## Pausa (START)
 Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
-Obs.: os sons dos efeitos (tacadas, caçapas) ainda não existem; a opção **Som** já fica salva no menu.
+Obs.: a opção **Som** liga/desliga os efeitos sonoros (veja abaixo); a opção **Música** e o **Volume** só afetam as músicas.
+
+## Efeitos sonoros (novo)
+Os sons são **gerados pelo próprio jogo** (não precisa de nenhum arquivo): tacada, bola contra bola, tabela, caçapa, falta, giz, habilidade, sons de menu (mover, confirmar, voltar) e jingles de **vitória** e **derrota**. A força do som depende da velocidade da bola. Eles são misturados com a música por um mixer em `music.c` e a opção **Som** liga/desliga todos. O volume da música não altera o volume dos efeitos.
 
 ## Música durante a partida
 O jogo toca as suas músicas enquanto você joga (toca sozinho ao abrir, em ordem aleatória, e segue para a próxima faixa).

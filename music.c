@@ -10,6 +10,7 @@
 #include <string.h>
 #include <strings.h>
 #include <dirent.h>
+#include <math.h>
 
 #define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h>
@@ -77,7 +78,7 @@ int musicInit(const char *argv0)
     SifLoadModule("rom0:LIBSD", 0, NULL);
     SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, NULL);
     audioOK = (audsrv_init() == 0);
-    if (audioOK) audsrv_set_volume(volume * 10);
+    if (audioOK) audsrv_set_volume(100);          /* o volume da musica e aplicado no mixer (efeitos nao sao afetados) */
     return audioOK;
 }
 
@@ -193,14 +194,181 @@ static int openWav(void)                         /* le o cabecalho; 1 = ok */
     return 0;
 }
 
-static int setFmt(void)                          /* aplica o formato da faixa no audsrv */
+/* ---------------- efeitos sonoros + mixer ---------------- */
+#define SFX_HZ 22050
+#define NVOICE 8
+#define IDLE_QUEUE 8192                          /* sem musica: mantem so ~45 ms de audio na fila (efeito responde rapido) */
+
+typedef struct { short *d; int len; } Sfx;
+typedef struct { const short *d; int len, id, gain; unsigned pos; } Voice;
+static Sfx   sfx[SFX_COUNT];
+static Voice vc[NVOICE];
+static int   nVoice, sfxBuilt;
+static int   outHz, outCh, outBits;              /* formato que o audsrv esta usando agora */
+static unsigned nzSeed = 12345u;
+static unsigned char mixbuf[8192];
+
+static float nz(void) { nzSeed = nzSeed * 1664525u + 1013904223u; return ((nzSeed >> 8) & 0xFFFF) / 32768.0f - 1.0f; }
+
+static int build(int id)                         /* sintetiza o efeito (mono, 16 bits, SFX_HZ) */
+{
+    static const float DUR[SFX_COUNT] = { 0.12f, 0.09f, 0.15f, 0.45f, 0.04f, 0.14f, 0.14f, 1.00f, 1.00f, 0.40f, 0.28f, 0.50f };
+    const float TP = 6.2831853f;
+    int i, n = (int)(DUR[id] * SFX_HZ);
+    short *o = (short *)malloc((size_t)n * sizeof(short));
+    float lp = 0.0f, lp2 = 0.0f, ph = 0.0f;
+    if (!o) return 0;
+    for (i = 0; i < n; i++) {
+        float t = (float)i / SFX_HZ, v = 0.0f, x;
+        switch (id) {
+        case SFX_HIT:                                        /* "toc" grave do taco na bola branca */
+            v = 0.75f * expf(-t * 40.0f) * sinf(TP * 190.0f * t) + 0.55f * nz() * expf(-t * 140.0f)
+              + 0.3f * expf(-t * 90.0f) * sinf(TP * 1400.0f * t);
+            break;
+        case SFX_BALL:                                       /* "clac" seco de bola contra bola */
+            v = expf(-t * 75.0f) * (0.55f * sinf(TP * 2300.0f * t) + 0.35f * sinf(TP * 3700.0f * t + 1.0f))
+              + 0.3f * nz() * expf(-t * 320.0f);
+            break;
+        case SFX_CUSHION:                                    /* "pof" surdo da tabela */
+            x = nz(); lp += 0.12f * (x - lp);
+            v = 0.8f * expf(-t * 32.0f) * sinf(TP * 95.0f * t) + 1.2f * lp * expf(-t * 45.0f);
+            break;
+        case SFX_POCKET:                                     /* bola cai na cacapa e rola no couro */
+            x = nz(); lp += 0.07f * (x - lp);
+            ph += TP * (120.0f - 70.0f * t) / SFX_HZ;
+            v = 0.8f * expf(-t * 14.0f) * sinf(ph) + 2.2f * lp * expf(-t * 5.0f) * (t < 0.03f ? t / 0.03f : 1.0f)
+              + 0.4f * nz() * expf(-t * 200.0f);
+            break;
+        case SFX_MOVE:   v = 0.5f * expf(-t * 90.0f) * sinf(TP * 1200.0f * t); break;
+        case SFX_OK:     v = 0.55f * expf(-(t < 0.05f ? t : t - 0.05f) * 28.0f) * sinf(TP * (t < 0.05f ? 880.0f : 1320.0f) * t); break;
+        case SFX_BACK:   v = 0.55f * expf(-(t < 0.05f ? t : t - 0.05f) * 28.0f) * sinf(TP * (t < 0.05f ? 660.0f : 440.0f) * t); break;
+        case SFX_WIN: {                                      /* arpejo subindo: do-mi-sol-do */
+            static const float F[4] = { 523.25f, 659.25f, 783.99f, 1046.5f };
+            int k = (int)(t / 0.17f); float tt;
+            if (k > 3) k = 3;
+            tt = t - k * 0.17f;
+            v = 0.45f * expf(-tt * (k == 3 ? 3.0f : 9.0f)) * (sinf(TP * F[k] * t) + 0.35f * sinf(TP * F[k] * 2.0f * t));
+            break; }
+        case SFX_LOSE: {                                     /* notas descendo, tristes */
+            static const float F[4] = { 392.0f, 369.99f, 349.23f, 261.63f };
+            int k = (int)(t / 0.22f); float tt;
+            if (k > 3) k = 3;
+            tt = t - k * 0.22f;
+            v = 0.45f * expf(-tt * (k == 3 ? 2.5f : 6.0f)) * (sinf(TP * F[k] * t) + 0.5f * sinf(TP * F[k] * 1.5f * t));
+            break; }
+        case SFX_FOUL: {                                     /* dois "bips" ruins */
+            float tt = t < 0.18f ? t : t - 0.18f, saw = fmodf(t * 130.0f, 1.0f) * 2.0f - 1.0f;
+            v = 0.35f * saw * expf(-tt * 9.0f) * (t < 0.14f || (t > 0.18f && t < 0.38f) ? 1.0f : 0.0f);
+            break; }
+        case SFX_CHALK:                                      /* giz raspando */
+            x = nz(); lp += 0.5f * (x - lp);
+            v = 0.55f * (x - lp) * sinf(3.14159f * t / DUR[id]) * (0.6f + 0.4f * sinf(TP * 28.0f * t));
+            break;
+        case SFX_ABIL:                                       /* varredura subindo */
+            ph += TP * (250.0f + 1400.0f * (t / DUR[id])) / SFX_HZ;
+            v = 0.5f * sinf(ph) * sinf(3.14159f * t / DUR[id]);
+            break;
+        }
+        (void)lp2;
+        if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
+        o[i] = (short)(v * 30000.0f);
+    }
+    sfx[id].d = o; sfx[id].len = n;
+    return 1;
+}
+
+static int ensureFmt(int hz, int ch, int bits, int force)   /* aplica o formato no audsrv (so se mudou) */
 {
     struct audsrv_fmt_t f;
+    if (!force && hz == outHz && ch == outCh && bits == outBits) return 1;
     audsrv_stop_audio();
-    f.freq = fmtHz; f.bits = fmtBits; f.channels = fmtCh;
-    if (audsrv_set_format(&f) != AUDSRV_ERR_NOERROR) return 0;
-    fmtSet = 1;
+    f.freq = hz; f.bits = bits; f.channels = ch;
+    if (audsrv_set_format(&f) != AUDSRV_ERR_NOERROR) { outHz = 0; return 0; }
+    outHz = hz; outCh = ch; outBits = bits;
     return 1;
+}
+
+static int setFmt(void)                          /* aplica o formato da faixa no audsrv */
+{
+    fmtSet = ensureFmt(fmtHz, fmtCh, fmtBits, 1);
+    return fmtSet;
+}
+
+/* escreve nbytes (multiplo do frame) em dst: musica (src, ou silencio se NULL) com ganho mg/256 + efeitos */
+static void mixOut(unsigned char *dst, const unsigned char *src, int nbytes, int mg)
+{
+    int fb, frames, f, k;
+    unsigned step;
+    if (outHz <= 0) return;
+    fb = outCh * (outBits / 8); frames = nbytes / fb;
+    step = ((unsigned)SFX_HZ << 16) / (unsigned)outHz;
+    for (f = 0; f < frames; f++) {
+        int l = 0, r = 0;
+        if (src) {
+            if (outBits == 16) {
+                const short *s = (const short *)src;
+                l = s[f * outCh]; r = outCh == 2 ? s[f * outCh + 1] : l;
+            } else {
+                l = ((int)src[f * outCh] - 128) << 8; r = outCh == 2 ? (((int)src[f * outCh + 1] - 128) << 8) : l;
+            }
+            l = (l * mg) >> 8; r = (r * mg) >> 8;
+        }
+        for (k = 0; k < nVoice; k++) {
+            Voice *v = &vc[k];
+            unsigned idx = v->pos >> 16;
+            int a, b, s;
+            if ((int)idx >= v->len) { vc[k--] = vc[--nVoice]; continue; }
+            a = v->d[idx]; b = ((int)idx + 1 < v->len) ? v->d[idx + 1] : 0;
+            s = a + (((b - a) * (int)((v->pos & 0xFFFF) >> 1)) >> 15);      /* interpolacao linear */
+            s = (s * v->gain) >> 8;
+            l += s; r += s;
+            v->pos += step;
+        }
+        if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+        if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+        if (outBits == 16) {
+            short *d = (short *)dst;
+            d[f * outCh] = (short)l; if (outCh == 2) d[f * outCh + 1] = (short)r;
+        } else {
+            dst[f * outCh] = (unsigned char)((l >> 8) + 128); if (outCh == 2) dst[f * outCh + 1] = (unsigned char)((r >> 8) + 128);
+        }
+    }
+}
+
+void sfxPlay(int id, int vol)
+{
+    int i, same = 0, pick = -1;
+    unsigned best = 0;
+    Voice *v;
+    if (!audioOK || id < 0 || id >= SFX_COUNT || vol <= 0) return;
+    if (!sfx[id].d && !build(id)) return;
+    if (vol > 100) vol = 100;
+    for (i = 0; i < nVoice; i++) if (vc[i].id == id) same++;
+    if (same >= 3 || nVoice >= NVOICE) {          /* sem vaga: troca o que ja tocou mais (do mesmo efeito, se ha muitos) */
+        for (i = 0; i < nVoice; i++) {
+            if (same >= 3 && vc[i].id != id) continue;
+            if (pick < 0 || vc[i].pos > best) { pick = i; best = vc[i].pos; }
+        }
+        if (pick < 0) return;
+        v = &vc[pick];
+    } else v = &vc[nVoice++];
+    v->d = sfx[id].d; v->len = sfx[id].len; v->id = id; v->pos = 0;
+    v->gain = vol * 2;                            /* 100 -> 200/256 (deixa folga para somar com a musica) */
+}
+
+static void sfxIdle(void)                         /* sem musica tocando: manda so os efeitos */
+{
+    int avail, n, want;
+    if (!nVoice) return;
+    if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) return;
+    avail = audsrv_available();
+    want = IDLE_QUEUE - audsrv_queued();
+    n = avail < want ? avail : want;
+    if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
+    n -= n % (outCh * (outBits / 8));
+    if (n <= 0) return;
+    mixOut(mixbuf, NULL, n, 0);
+    audsrv_play_audio((const char *)mixbuf, n);
 }
 
 static int decodeNext(void)                      /* enche pcm[]; 0 = fim da faixa ou erro */
@@ -286,7 +454,6 @@ void musicSetVolume(int v)
     if (v < 0) v = 0;
     if (v > 10) v = 10;
     volume = v;
-    if (audioOK) audsrv_set_volume(volume * 10);
 }
 
 void musicSetEnabled(int on)
@@ -300,9 +467,10 @@ void musicSetEnabled(int on)
 
 void musicUpdate(void)
 {
-    int it;
+    int it, fed = 0;
     if (!audioOK) return;
     if (toastT > 0) toastT--;
+    if (sfxBuilt < SFX_COUNT) { if (!sfx[sfxBuilt].d) build(sfxBuilt); sfxBuilt++; }   /* gera um efeito por quadro */
 
     if (nTr == 0 && !scanDone && --scanWait <= 0) {              /* o USB demora um pouco para aparecer */
         scanWait = 240;
@@ -313,25 +481,30 @@ void musicUpdate(void)
         wantAuto = 0;
         if (enabled) { srand((unsigned)(scanTries * 7919 + nTr)); musicPlay(rand() % nTr); }
     }
-    if (state != 1) return;
 
-    if (ending) {                                                 /* espera o som acabar e vai para a proxima */
-        if (audsrv_queued() < 1024) musicNext(1);
-        return;
-    }
-    for (it = 0; it < 2; it++) {
-        int avail, n;
-        if (pcmPos >= pcmLen) {
-            if (!decodeNext()) { if (!fmtSet) { if (++failStreak > nTr) { state = 0; return; } musicNext(1); } else ending = 1; return; }
+    if (state == 1 && ending) {                                   /* espera o som acabar e vai para a proxima */
+        if (audsrv_queued() < 1024 && !nVoice) { musicNext(1); return; }
+    } else if (state == 1) {
+        for (it = 0; it < 2; it++) {
+            int avail, n, fb;
+            if (pcmPos >= pcmLen) {
+                if (!decodeNext()) { if (!fmtSet) { if (++failStreak > nTr) { state = 0; return; } musicNext(1); return; } ending = 1; break; }
+            }
+            if (!ensureFmt(fmtHz, fmtCh, fmtBits, 0)) { state = 0; return; }   /* volta ao formato da musica (os efeitos podem ter mudado) */
+            avail = audsrv_available();
+            if (avail <= 0) break;
+            fb = outCh * (outBits / 8);
+            n = pcmLen - pcmPos;
+            if (n > avail) n = avail;
+            if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
+            n -= n % fb;
+            if (n <= 0) { if (pcmLen - pcmPos < fb) pcmPos = pcmLen; break; }
+            mixOut(mixbuf, (const unsigned char *)pcm + pcmPos, n, volume * 256 / 10);
+            audsrv_play_audio((const char *)mixbuf, n);
+            pcmPos += n; fed = 1;
         }
-        avail = audsrv_available();
-        if (avail <= 0) break;
-        n = pcmLen - pcmPos;
-        if (n > avail) n = avail;
-        if (n <= 0) break;
-        audsrv_play_audio((const char *)pcm + pcmPos, n);
-        pcmPos += n;
     }
+    if (!fed) sfxIdle();                                          /* parada, pausada, sem faixas ou no fim da faixa: so efeitos */
 }
 
 /* ---------------- consulta ---------------- */
