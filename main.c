@@ -68,8 +68,8 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn;   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
@@ -185,7 +185,7 @@ typedef struct {
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
     int fx;                               /* animacao: 0 nenhuma, 1 brilho, 2 arco-iris, 3 faiscas */
 } CueDef;
-#define NCUES 25
+#define NCUES 26
 #define CUE_SNIPER 5
 static CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
@@ -221,12 +221,14 @@ static CueDef CUES[NCUES] = {
     { "JAPONES",    48,  45,  67,  72, {188,  0, 45}, {245,245,245}, {188,  0, 45}, {188,  0, 45}, { 40, 40, 44}, 9 },
     /* GRINCH: pelo verde, ponta brilhante e um coracao vermelho que cresce 3 tamanhos; habilidade sorteada entre 5 poderes */
     { "GRINCH",     58,  62,  55,  60, {150,235, 90}, { 70,150, 50}, {190, 30, 40}, {255,230, 70}, {245,245,245}, 11 },
+    /* TRIDENTE (Poseidon): azul profundo com ondas turquesa correndo pelo taco e detalhe dourado */
+    { "TRIDENTE",   56,  64,  55,  60, {110,230,255}, { 20, 92,170}, { 10, 48,110}, {255,214, 90}, { 60,200,210}, 12 },
 };
 
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, MARRETA BIONICA-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
-                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH };
+                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA };
 
 #define GAME_VERSION "2.3.0"
 #define GAME_AUTHOR  "DIEGO REIS"
@@ -708,6 +710,25 @@ static void bagunca(void)
     fxX = TCX; fxY = TCY;
 }
 
+/* POSEIDON (MARE ALTA): uma onda empurra todas as bolas da mesa (menos a branca) para a cacapa mais proxima de cada uma.
+   Forca fraca: so as bolas que ja estao perto de uma cacapa chegam la */
+static void marePush(void)
+{
+    int k, p;
+    for (k = 1; k < 16; k++) {
+        float bd = 1e9f, dx = 0.0f, dy = 0.0f, d;
+        if (!b[k].in) continue;
+        for (p = 0; p < 6; p++) {
+            float ddx = PX[p] - b[k].x, ddy = PY[p] - b[k].y, d2 = ddx * ddx + ddy * ddy;
+            if (d2 < bd) { bd = d2; dx = ddx; dy = ddy; }
+        }
+        d = sqrtf(bd);
+        if (d < 1.0f) continue;
+        b[k].vx += dx / d * 85.0f; b[k].vy += dy / d * 85.0f;
+    }
+    fxX = TCX; fxY = TCY;
+}
+
 /* GRINCH: ao usar a habilidade, sorteia um dos poderes. O sorteio e "viciado" pela situacao da mesa:
    poucas bolas -> mais PUXAO VERDE | adversario perto de ganhar ou com muitas bolas -> mais BAGUNCA */
 static const char *GR_NAME[2] = { "PUXAO VERDE", "BAGUNCA" };
@@ -766,6 +787,7 @@ static void shoot(float p)
         case AB_MARE:     spinK *= 2.6f; if (fabsf(spinCur) < 0.3f) spinCur = spinCur < 0.0f ? -0.8f : 0.8f; break;
         case AB_CONGELAR: fricMul = 0.22f; break;
         case AB_CHAMINE:  pockMul = 1.45f; break;
+        case AB_MAREALTA: marePush(); break;                /* POSEIDON: onda empurra as bolas para as cacapas */
         case AB_BAGUNCA:  bagunca(); break;                 /* CHAMINE: cacapas bem maiores nesta tacada */
         default: break;
         }
@@ -1284,7 +1306,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 24
+#define NTABLES 25
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1310,6 +1332,7 @@ static const TableDef TABLES[NTABLES] = {
     { "CHAPOLIN", {176, 30, 38}, {236,186, 30}, {255,230, 90}, 15 },
     { "TEMPO",    { 18, 30, 78}, { 20, 24, 56}, {255,214, 90}, 16 },
     { "GRINCH",   { 74,158, 48}, { 40, 26, 30}, {255, 70, 60}, 17 },
+    { "ABISMO",   {  8, 62,122}, { 10, 30, 56}, {130,235,255}, 18 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -2126,6 +2149,77 @@ static void tableDecoGrinch(int stage, int mt)
     }
 }
 
+/* ---------- mesa ABISMO (style 18): fundo do mar, ondas de luz, bolhas, peixes, corais e redemoinhos nas cacapas ---------- */
+static void tableDecoAbyss(int stage, int mt)
+{
+    int k, j;
+    float W = TX1 - TX0, H = TY1 - TY0;
+    if (stage == 0) {
+        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, COL(40, 170, 205));
+        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(150, 235, 255, 0x70));
+        for (k = 0; k < 44; k++) {                                   /* agua correndo na moldura: pontinhos em onda */
+            float px, py, nx, ny, wv = sinf(mt * 0.1f - k * 0.7f);
+            perim(k, 44, 18.5f + 1.6f * wv, &px, &py, &nx, &ny);
+            rect(px - 1.4f, py - 1.4f, px + 1.4f, py + 1.4f, CA(150, 235, 255, 0x50 + (int)(0x40 * (0.5f + 0.5f * wv))));
+        }
+        for (k = 0; k < 4; k++) {                                    /* corais e conchas nos cantos */
+            float x = (k & 1) ? TX1 + 21.0f : TX0 - 21.0f, y = (k & 2) ? TY1 + 21.0f : TY0 - 21.0f, sw = 1.5f * sinf(mt * 0.06f + k);
+            for (j = -1; j <= 1; j++)
+                tri(x + j * 3.0f - 2.0f, y + 4.0f, x + j * 3.0f + 2.0f, y + 4.0f, x + j * 6.0f + sw, y - 7.0f - (j == 0 ? 3.0f : 0.0f),
+                    j == 0 ? COL(255, 120, 110) : COL(230, 84, 96));
+            discN(x, y + 4.0f, 4.0f, COL(250, 190, 200), 8);
+            discN(x, y + 4.0f, 1.6f, COL(255, 235, 240), 6);
+        }
+    } else if (stage == 1) {
+        rect(TX0, TY0, TX1, TY1, CA(10, 70, 150, 0x10));                           /* tom de fundo do mar */
+        for (k = 0; k < 4; k++) {                                                  /* raios de luz atravessando a agua */
+            float x0 = TX0 + fmodf(k * 150.0f + mt * 0.25f + 40.0f * sinf(mt * 0.02f + k), W + 40.0f) - 20.0f, x1 = x0 + 26.0f;
+            if (x0 < TX0) x0 = TX0;
+            if (x1 > TX1) x1 = TX1;
+            if (x1 > x0) rect(x0, TY0, x1, TY1, CA(170, 235, 255, 0x0a));
+        }
+        for (k = 0; k < 5; k++) {                                                  /* ondas de luz ondulando no feltro */
+            float yb = TY0 + 30.0f + k * 50.0f;
+            for (j = 0; j < 22; j++) {
+                float xa = TX0 + j * (W / 22.0f), xb = xa + W / 22.0f;
+                float ya = yb + 5.0f * sinf(mt * 0.05f + j * 0.7f + k * 1.3f), yc = yb + 5.0f * sinf(mt * 0.05f + (j + 1) * 0.7f + k * 1.3f);
+                line(xa, ya, xb, yc, CA(190, 240, 255, 0x16));
+            }
+        }
+        for (k = 0; k < 24; k++) {                                                 /* bolhas subindo */
+            float sx = TX0 + fmodf(k * 53.1f + 8.0f * sinf(mt * 0.04f + k), W), sy = TY1 - fmodf(mt * (0.3f + (k % 4) * 0.12f) + k * 37.0f, H);
+            float br = 1.4f + (k % 3) * 0.8f;
+            ringN(sx, sy, br, 0.7f, 8, CA(205, 245, 255, 0x58));
+            disc(sx - br * 0.35f, sy - br * 0.35f, 0.5f, CA(255, 255, 255, 0x70));
+        }
+        for (k = 0; k < 3; k++) {                                                  /* peixes passando */
+            int dir = (k & 1) ? -1 : 1;
+            float u = fmodf(mt * (0.45f + k * 0.17f) + k * 190.0f, W - 40.0f);
+            float fx = dir > 0 ? TX0 + 20.0f + u : TX1 - 20.0f - u, fy = TY0 + 42.0f + k * 80.0f + 7.0f * sinf(mt * 0.05f + k * 2.0f);
+            u64 fc = k == 0 ? CA(255, 170, 60, 0x50) : (k == 1 ? CA(120, 230, 255, 0x50) : CA(255, 120, 170, 0x50));
+            discN(fx, fy, 4.4f, fc, 10);
+            discN(fx + dir * 3.0f, fy, 3.2f, fc, 8);
+            tri(fx - dir * 3.0f, fy, fx - dir * 10.0f, fy - 4.5f + 1.5f * sinf(mt * 0.3f + k), fx - dir * 10.0f, fy + 4.5f, fc);
+            disc(fx + dir * 4.2f, fy - 1.0f, 0.8f, CA(20, 30, 50, 0x80));
+        }
+    } else {
+        for (k = 0; k < 6; k++) {                                                  /* cacapas: redemoinhos e ondas */
+            float pulse = 0.5f + 0.5f * sinf(mt * 0.09f + k), a = mt * 0.07f + k;
+            discN(PX[k], PY[k], PR[k] + 8.0f, CA(40, 150, 255, 0x0c + (int)(0x08 * pulse)), 12);
+            ring(PX[k], PY[k], PR[k] + 4.5f, CA(130, 235, 255, 0x90));
+            for (j = 0; j < 2; j++) {
+                float rr = fmodf(mt * 0.3f + j * 6.0f + k * 2.0f, 12.0f);
+                ringN(PX[k], PY[k], PR[k] + 3.0f + rr, 0.9f, 20, CA(190, 245, 255, 0x50 - (int)(rr * 4.0f)));
+            }
+            for (j = 0; j < 3; j++) {
+                float aa = a + j * 2.094f;
+                disc(PX[k] + cosf(aa) * (PR[k] + 6.0f), PY[k] + sinf(aa) * (PR[k] + 6.0f), 1.3f, CA(210, 248, 255, 0xa0));
+            }
+        }
+        line(HEADX, TY0, HEADX, TY1, CA(130, 235, 255, 0x28));
+    }
+}
+
 static void tableDeco(int stage, const TableDef *T)
 {
     int k;
@@ -2215,6 +2309,8 @@ static void tableDeco(int stage, const TableDef *T)
         tableDecoTime(stage, mt);
     } else if (T->style == 17) {
         tableDecoGrinch(stage, mt);
+    } else if (T->style == 18) {
+        tableDecoAbyss(stage, mt);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
@@ -2293,6 +2389,12 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
             if (i % 4 == 0) discN(px, y1 - fmodf(mt * 0.4f * (1 + i % 3) + i * 9.0f, h), 2.0f, CA(110, 220, 70, 0x40), 8);
             rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, (i & 1) ? CA(120, 230, 70, 0x80) : CA(230, 40, 50, 0x80));
             if (i == 0) ring((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, h * (0.12f + 0.05f * s), CA(214, 36, 48, 0x78));
+            break;
+        case 18:                                             /* abismo: bolhas subindo, ondas e um peixe */
+            py = y1 - fmodf(mt * 0.4f * (1 + i % 3) + i * 11.0f, h);
+            rect(px - 1.0f, py - 1.0f, px + 1.0f, py + 1.0f, CA(190, 240, 255, 0x70));
+            rect(px - 1.2f, y0 - f * 0.75f - 1.2f + 1.5f * sinf(mt * 0.15f + i), px + 1.2f, y0 - f * 0.75f + 1.2f + 1.5f * sinf(mt * 0.15f + i), CA(120, 230, 255, 0x80));
+            if (i == 0) { float fx2 = x0 + fmodf(mt * 0.5f, w); discN(fx2, (y0 + y1) * 0.5f, 2.4f, CA(255, 170, 60, 0x80), 8); tri(fx2 - 2.0f, (y0 + y1) * 0.5f, fx2 - 6.0f, (y0 + y1) * 0.5f - 2.4f, fx2 - 6.0f, (y0 + y1) * 0.5f + 2.4f, CA(255, 170, 60, 0x80)); }
             break;
         case 14:                                             /* hack: bits caindo e varredura */
             py = y0 + fmodf(mt * 0.8f * (1 + i % 3) + i * 13.0f, h);
@@ -2807,6 +2909,17 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
                 cuePt(u, (k & 1) ? 1.4f : -1.4f, &ax, &ay);
                 disc(ax, ay, 1.0f + tw2, (k & 1) ? CA(255, 230, 70, (al * (0x30 + (int)(0x40 * tw2))) / 128) : CA(150, 255, 90, (al * (0x30 + (int)(0x40 * tw2))) / 128));
             }
+        } else if (cd->fx == 12) {                                /* tridente: ponta turquesa, ondas correndo e detalhe dourado */
+            float p = 0.5f + 0.5f * sinf(mt * 0.1f);
+            cuePt(0.0f, 0.0f, &ax, &ay);
+            discN(ax, ay, 4.0f + 3.0f * p, CA(120, 240, 255, (al * (0x18 + (int)(0x20 * p))) / 128), 10);
+            for (k = 0; k < 4; k++) {
+                float u = fmodf(mt * 1.2f + k * 72.0f, 290.0f), wv = sinf(u * 0.09f - mt * 0.15f);
+                cuePt(u, 2.6f * wv, &ax, &ay);
+                disc(ax, ay, 1.4f, CA(170, 240, 255, (al * 0x70) / 128));
+            }
+            cuePt(234.0f, 0.0f, &ax, &ay);
+            discN(ax, ay, 3.6f, CA(255, 214, 90, (al * 0x70) / 128), 10);
         } else if (cd->fx == 10) {                                /* chipote: bola amarela pulsando e coracoes */
             float p = 0.5f + 0.5f * sinf(mt * 0.16f);
             cuePt(0.0f, 0.0f, &ax, &ay);
@@ -3117,14 +3230,14 @@ static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
-#define NCHARS 15
+#define NCHARS 16
 #define CPI 3.14159265f
 static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "ALIEN",
-                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL", "MESTRE DO TEMPO", "GRINCH" };
+                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL", "MESTRE DO TEMPO", "GRINCH", "POSEIDON" };
 
 /* kit de cada personagem (para o modo historia e para o catalogo): taco e mesa. -1 = nao tem */
-static const int CHAR_CUE[NCHARS] = {  7, -1, 11, 10, -1, 12, 14, -1,  6, -1, 17, 16, 15, 18, 24 };
-static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22, 23 };
+static const int CHAR_CUE[NCHARS] = {  7, -1, 11, 10, -1, 12, 14, -1,  6, -1, 17, 16, 15, 18, 24, 25 };
+static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22, 23, 24 };
 static int cueChar(int c) { int i; for (i = 0; i < NCHARS; i++) if (CHAR_CUE[i] == c) return i; return -1; }
 static int effTable(void) { return (tableAuto && CHAR_TAB[charSel[0]] >= 0) ? CHAR_TAB[charSel[0]] : tableSel; }
 
@@ -3641,6 +3754,46 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
         discN(XX(-8), YY(-50), ZZ(5.6f), COL(248, 248, 252), 10);
         break; }
 
+    case 15: {  /* POSEIDON: cabelo e barba azuis, coroa de coral, tunica turquesa e tridente dourado */
+        u64 sk = COL(238, 190, 150), bd = COL(44, 132, 218), bdD = COL(24, 88, 170), bdL = COL(130, 205, 255);
+        u64 cr = COL(255, 118, 104), crD = COL(214, 72, 76), tn = COL(28, 152, 196), tnD = COL(16, 100, 148), gd2 = COL(255, 206, 60);
+        if (full) {
+            float hx, hy;
+            legsC(cx, cy, s, sk, gd2);
+            torsoC(cx, cy, s, tn, tnD);
+            beam(XX(-27), YY(79), XX(27), YY(79), ZZ(5), gd2);                            /* cinto dourado */
+            discN(cx, YY(79), ZZ(5.5f), cr, 8);                                           /* concha no cinto */
+            armsC(cx, cy, s, mood, t, tn, sk, 9.0f);
+            if (mood == 1)      { hx = XX(-(46 + 3 * sinf(t * 0.3f - 1.0f))); hy = YY(2 + 7 * sinf(t * 0.35f)); }   /* segue a mao esquerda */
+            else if (mood == 2) { hx = XX(-31); hy = YY(86); }
+            else                { hx = XX(-37); hy = YY(74); }
+            beam(hx, hy + ZZ(36), hx, hy - ZZ(46), ZZ(3.2f), gd2);                        /* tridente */
+            beam(hx - ZZ(9), hy - ZZ(52), hx - ZZ(9), hy - ZZ(38), ZZ(2.4f), gd2);
+            beam(hx + ZZ(9), hy - ZZ(52), hx + ZZ(9), hy - ZZ(38), ZZ(2.4f), gd2);
+            beam(hx - ZZ(9), hy - ZZ(38), hx, hy - ZZ(31), ZZ(2.4f), gd2);
+            beam(hx + ZZ(9), hy - ZZ(38), hx, hy - ZZ(31), ZZ(2.4f), gd2);
+            tri(hx - ZZ(3.6f), hy - ZZ(46), hx + ZZ(3.6f), hy - ZZ(46), hx, hy - ZZ(62), gd2);
+            tri(hx - ZZ(12.6f), hy - ZZ(52), hx - ZZ(5.4f), hy - ZZ(52), hx - ZZ(9), hy - ZZ(63), gd2);
+            tri(hx + ZZ(5.4f), hy - ZZ(52), hx + ZZ(12.6f), hy - ZZ(52), hx + ZZ(9), hy - ZZ(63), gd2);
+        }
+        ell(cx, YY(-2), ZZ(30), ZZ(28), bd);                                              /* cabelo */
+        ell(XX(-25), YY(20), ZZ(8), ZZ(21), bd); ell(XX(25), YY(20), ZZ(8), ZZ(21), bd);  /* mechas dos lados */
+        ell(cx, YY(4), ZZ(23), ZZ(24), sk);                                               /* rosto */
+        discN(cx, YY(5), ZZ(3.0f), COL(222, 160, 124), 8);                                /* nariz */
+        ell(cx, YY(20), ZZ(22), ZZ(15), bd);                                              /* barba */
+        tri(XX(-18), YY(24), XX(18), YY(24), cx, YY(46), bd);                             /* barba pontuda */
+        beam(cx, YY(28), cx, YY(42), ZZ(2.0f), bdL);
+        ell(XX(-8), YY(10), ZZ(8.5f), ZZ(3.4f), bdL); ell(XX(8), YY(10), ZZ(8.5f), ZZ(3.4f), bdL);   /* bigode */
+        faceStd(cx, cy, s, mood, t, 9, -3, 17, bdD, 3);                                   /* olhos, sobrancelhas e boca */
+        rect(XX(-20), YY(-31), XX(20), YY(-25), crD);                                     /* coroa de coral */
+        for (k = -2; k <= 2; k++) {
+            int ak = k < 0 ? -k : k;
+            float bx = k * 9.0f, ty = -31.0f - (ak == 0 ? 16.0f : (ak == 1 ? 12.0f : 9.0f)), tx = bx + (k < 0 ? -2.0f : (k > 0 ? 2.0f : 0.0f));
+            tri(XX(bx - 4.5f), YY(-31), XX(bx + 4.5f), YY(-31), XX(tx), YY(ty), ak == 1 ? crD : cr);
+            discN(XX(tx), YY(ty), ZZ(1.8f), COL(250, 250, 255), 6);                       /* perola na ponta */
+        }
+        break; }
+
     default: {  /* GATO */
         u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
         if (full) {
@@ -3711,16 +3864,16 @@ static u64 rarCol(int r)
     default: return COL(255,215,70);
     }
 }
-/* LENDARIO: so o Grinch | MISTICO: Vampiro, Mago e Mestre do Tempo | EPICO: Hacker e Papai Noel |
+/* LENDARIO: Grinch e Poseidon | MISTICO: Vampiro, Mago e Mestre do Tempo | EPICO: Hacker e Papai Noel |
    SUPER RARO: Viking, Ninja, Chapolin e Pirata | RARO: Pinguim, Robo, Alien, Gato e Cowboy */
-static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 2, 3, 4 };
+static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 2, 3, 4, 4 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 #define NCAT_SEC 7
 static const int CATH[NCAT_SEC] = { 0, 8, 14, 16, 20, 23, 24 };     /* 1a ficha de cada categoria */
 static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO" };
 static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12,   11, 10, 6, 17,   16, 15, 18,   14,   24 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12,   11, 10, 6, 17,   16, 15, 18,   14,   24, 25 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
@@ -3741,7 +3894,9 @@ static void drawCueMenu(void)
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
         { "MARRETA BIONICA! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
         { "DEPOIS DE QUALQUER TACADA, VOCE PODE VOLTAR NO", "TEMPO E REFAZER A JOGADA - SE QUISER." },
-        { "PODER SORTEADO CONFORME A MESA: PUXAO VERDE (A BOLA", "ALVO VAI PARA A CACAPA) OU BAGUNCA (SACODE AS BOLAS DO ADVERSARIO)." } };
+        { "PODER SORTEADO CONFORME A MESA: PUXAO VERDE (A BOLA", "ALVO VAI PARA A CACAPA) OU BAGUNCA (SACODE AS BOLAS DO ADVERSARIO)." },
+        { "", "" },
+        { "UMA ONDA GIGANTE EMPURRA TODAS AS BOLAS DA MESA", "NA DIRECAO DA CACAPA MAIS PROXIMA (FORCA FRACA)." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
     char buf[64];
@@ -3792,7 +3947,7 @@ static void drawCueMenu(void)
     }
 
     text(228, 118, 0.6f, COL(255,255,255), cd->name);
-    if (cueMenuSel == 24) strcpy(buf, "TACO LENDARIO DO GRINCH"); else if (ch >= 0) sprintf(buf, "TACO DO %s", CHAR_NAME[ch]); else strcpy(buf, cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23) ? "TACO DE PAIS" : "TACO PADRAO");
+    if (ch >= 0 && CHAR_RAR[ch] == 4) sprintf(buf, "TACO LENDARIO DO %s", CHAR_NAME[ch]); else if (ch >= 0) sprintf(buf, "TACO DO %s", CHAR_NAME[ch]); else strcpy(buf, cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23) ? "TACO DE PAIS" : "TACO PADRAO");
     text(228, 142, 0.32f, ch >= 0 ? COL(255,190,110) : (strcmp(buf, "TACO DE PAIS") == 0 ? COL(120,235,150) : COL(150,220,255)), buf);
 
     for (k = 0; k < 4; k++) {
@@ -5006,6 +5161,19 @@ static void drawScene(void)
             } else if (abilKind == AB_CORTE) {
                 line(fxX - 22.0f * u - 6, fxY - 22.0f * u - 6, fxX + 22.0f * u + 6, fxY + 22.0f * u + 6, CA(255, 255, 255, (int)(0x80 * fl)));
                 ringN(fxX, fxY, R + 2.0f + u * 16.0f, 1.6f, 20, CA(235, 235, 245, (int)(0x70 * fl)));
+            } else if (abilKind == AB_MAREALTA) {                      /* MARE ALTA: uma onda varre a mesa da esquerda para a direita */
+                float wx = TX0 + u * (TX1 - TX0) * 1.15f, wl2 = wx < TX1 ? wx : TX1;
+                int j2;
+                rect(TX0, TY0, wl2, TY1, CA(40, 140, 235, (int)(0x48 * fl)));
+                if (wx < TX1) {
+                    for (j2 = 0; j2 < 22; j2++) {
+                        float y0w = TY0 + j2 * ((TY1 - TY0) / 22.0f), y1w = y0w + (TY1 - TY0) / 22.0f;
+                        float x0w = wx + 6.0f * sinf(j2 * 0.9f + menuT * 0.3f), x1w = wx + 6.0f * sinf((j2 + 1) * 0.9f + menuT * 0.3f);
+                        line(x0w, y0w, x1w, y1w, CA(210, 248, 255, (int)(0xa0 * fl)));
+                        line(x0w - 12.0f, y0w, x1w - 12.0f, y1w, CA(120, 215, 255, (int)(0x70 * fl)));
+                        if (j2 % 3 == 0) disc(x0w + 3.0f, y0w, 2.0f, CA(255, 255, 255, (int)(0x90 * fl)));
+                    }
+                }
             } else {
                 ringN(b[0].x, b[0].y, R + 3.0f + u * 18.0f, 1.6f, 20, CA(120, 230, 255, (int)(0x60 * fl)));
             }
