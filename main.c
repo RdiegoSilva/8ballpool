@@ -100,7 +100,7 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define PO 9.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
 static const float PX[6] = { TX0 - PO, TCX, TX1 + PO, TX0 - PO, TCX, TX1 + PO };
 static const float PY[6] = { TY0 - PO, TY0 - PO, TY0 - PO, TY1 + PO, TY1 + PO, TY1 + PO };
-static const float PR[6] = { 12.6f, 10.0f, 12.6f, 12.6f, 10.0f, 12.6f };   /* raio DESENHADO do buraco */
+static const float PR[6] = { 15.5f, 13.0f, 15.5f, 15.5f, 13.0f, 15.5f };   /* raio DESENHADO do buraco (grande, estilo 8 Ball Pool) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
 static const float PRC[6] = { 18.6f, 15.5f, 18.6f, 18.6f, 15.5f, 18.6f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
@@ -2072,7 +2072,7 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
 {
     float k = w / 588.0f, hw = (TX1 - TX0) * 0.5f * k, hh = (TY1 - TY0) * 0.5f * k;
     float x0 = cx - hw, x1 = cx + hw, y0 = cy - hh, y1 = cy + hh;
-    float f = 26.0f * k, c = 11.0f * k, pk = 12.0f * k, pr = R * k;
+    float f = 26.0f * k, c = 11.0f * k, pk = 14.0f * k, pr = R * k;
     float qx[6], qy[6], bx, by;
     int i, j, mt = fxOn ? menuT : 0;
     u64 dia = COL(T->dia[0], T->dia[1], T->dia[2]);
@@ -2097,8 +2097,9 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
         rect(x1 + o - 1, y0 + dy - 1, x1 + o + 1, y0 + dy + 1, dia);
     }
     for (i = 0; i < 6; i++) {                          /* cacapas */
-        discN(qx[i], qy[i], pk + 1.4f, COL(52,31,14), 10);
-        discN(qx[i], qy[i], pk, COL(3,3,5), 10);
+        discN(qx[i], qy[i], pk + 1.8f, COL(110,114,122), 12);
+        discN(qx[i], qy[i], pk + 0.9f, COL(36,38,44), 12);
+        discN(qx[i], qy[i], pk, COL(2,2,4), 12);
     }
 
     if (T->style == 1) {                               /* preta ouro */
@@ -2221,16 +2222,16 @@ static void drawTable(void)
         diamond(TX0 - 18.5f, y);  diamond(TX1 + 18.5f, y);
     }
 
-    /* cacapas: aro de couro, borda dourada e buraco */
+    /* cacapas estilo 8 Ball Pool: buraco preto grande com aro fino metalico */
     for (p = 0; p < 6; p++) {
-        discN(PX[p], PY[p], PR[p] + 7, CA(0, 0, 0, 0x1a), 20);
-        discN(PX[p], PY[p], PR[p] + 4, COL(52,31,14), 20);
-        discN(PX[p] - 1.0f, PY[p] - 1.5f, PR[p] + 2.5f, COL(70,42,20), 20);
-        ring(PX[p], PY[p], PR[p] + 4, COL(176,132,58));
-        ring(PX[p], PY[p], PR[p] + 3, COL(214,172,86));
-        discN(PX[p], PY[p], PR[p] + 0.5f, COL(3,3,5), 20);
-        ring(PX[p], PY[p], PR[p] + 0.5f, COL(28,20,12));
-        discN(PX[p] - PR[p] * 0.55f, PY[p] - PR[p] * 0.75f, 1.6f, CA(255, 240, 200, 0x40), 6);
+        float r0 = PR[p];
+        discN(PX[p], PY[p], r0 + 6.0f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
+        discN(PX[p], PY[p], r0 + 2.6f, COL(120,124,132), 24);             /* aro metalico */
+        discN(PX[p], PY[p], r0 + 1.6f, COL(36,38,44), 24);
+        discN(PX[p], PY[p], r0, COL(2,2,4), 24);                          /* buraco */
+        discN(PX[p] + 0.8f, PY[p] + 1.0f, r0 * 0.78f, COL(0,0,0), 20);    /* fundo mais escuro */
+        ring(PX[p], PY[p], r0 + 0.2f, COL(18,18,22));
+        discN(PX[p] - r0 * 0.5f, PY[p] - r0 * 0.7f, 1.4f, CA(210, 215, 230, 0x30), 6);
     }
 
     /* linha da cabeceira e marcas do feltro */
@@ -2329,6 +2330,32 @@ static int nearPocket(float x, float y)
     return -1;
 }
 
+/* a bola alvo, saindo de (x,y) na direcao (nx,ny), chega numa cacapa sem nada no meio?
+   devolve o indice da cacapa (ou -1) e a distancia ate o centro dela em *len */
+static int pocketPath(float x, float y, float nx, float ny, int ignore, float *len)
+{
+    int k, i, best = -1;
+    float bt = 1e9f;
+    for (k = 0; k < 6; k++) {
+        float fx = PX[k] - x, fy = PY[k] - y;
+        float proj = fx*nx + fy*ny, perp = fx*ny - fy*nx, lim = PR[k] + 3.0f;
+        int blocked = 0;
+        if (perp < 0) perp = -perp;
+        if (proj < R || perp > lim || proj >= bt) continue;
+        for (i = 1; i < 16 && !blocked; i++) {            /* outra bola no caminho? */
+            float gx, gy, pp, qq;
+            if (!b[i].in || i == ignore) continue;
+            gx = b[i].x - x; gy = b[i].y - y;
+            pp = gx*nx + gy*ny; qq = gx*ny - gy*nx;
+            if (qq < 0) qq = -qq;
+            if (pp > 0 && pp < proj && qq < 2.0f * R) blocked = 1;
+        }
+        if (!blocked) { bt = proj; best = k; }
+    }
+    if (best >= 0) *len = bt;
+    return best;
+}
+
 /* pulo armado: arco e marca de onde a branca deve cair (estimativa sem atrito) */
 static void drawJumpMark(void)
 {
@@ -2383,7 +2410,8 @@ static void drawGuide(void)
         if (hit > 0) {
             float nx = b[hit].x - gx, ny = b[hit].y - gy, nl = sqrtf(nx*nx + ny*ny);
             float dot, tx, ty, tl, L, tmax;
-            int h2, w2, pk;
+            int h2, w2, pk, pkp;
+            float pl = 0.0f;
             if (nl < 0.01f) return;
             nx /= nl; ny /= nl;
             dot = dx*nx + dy*ny; if (dot < 0) dot = 0;
@@ -2392,7 +2420,15 @@ static void drawGuide(void)
             L = (22.0f + 70.0f * dot) * gs;
             if (sn) L = 1.0e6f;                           /* sniper: caminho completo */
             tmax = castRay(b[hit].x, b[hit].y, nx, ny, hit, &h2, &w2);
-            if (L >= tmax - 0.5f) {
+            pkp = pocketPath(b[hit].x, b[hit].y, nx, ny, hit, &pl);
+            if (pkp >= 0) {                               /* vai para a cacapa: desenha o caminho ate o buraco */
+                float le = pl - PR[pkp] * 0.4f;
+                glowFade(b[hit].x + nx*R, b[hit].y + ny*R, b[hit].x + nx*le, b[hit].y + ny*le,
+                         0x7c, 0x68, 90, 255, 120);
+                ringN(PX[pkp], PY[pkp], PR[pkp] + 3.0f, 2.0f, 28, CA(90, 255, 120, 0x78));
+                ringN(PX[pkp], PY[pkp], PR[pkp] + 6.0f, 1.2f, 28, CA(90, 255, 120, 0x40));
+                L = 0.0f;                                 /* ja desenhado: pula o trecho curto */
+            } else if (L >= tmax - 0.5f) {
                 L = tmax;
                 if (h2 < 0) {
                     pk = nearPocket(b[hit].x + nx*L, b[hit].y + ny*L);
