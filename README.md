@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.2.0
+- Versão: 2.3.0
 
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
@@ -36,6 +36,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
     - **Natal**: feltro verde com moldura vermelha, pisca-pisca colorido, bolas de Natal nos cantos, neve, estrelas e o **trenó do Papai Noel** cruzando a mesa
     - **Hack**: grade e varredura ciano, chuva de bits ciano/magenta, pacotes de dados correndo na moldura, falhas (glitch), "HACK" piscando e mira nas caçapas
     - **Chapolin**: feltro vermelho, moldura vermelha e amarela, corações nos cantos e subindo pelo feltro, grande coração amarelo no centro, estrelas e antenas saltitantes
+    - **Grinch**: feltro verde, moldura vermelha com luzes piscando em verde, vermelho e branco, carinha do Grinch nos cantos, grande coração vermelho no centro que cresce, fumaça verde subindo, neve e presentes roubados flutuando
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)
@@ -43,7 +44,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
-Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 13 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 15 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho), **Mestre do Tempo** e **Grinch** (pelo verde, olhos amarelos e gorro roubado do Noel). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
@@ -97,7 +98,19 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - Pular e usar efeito gastam mais giz. O BOT não usa pulo nem efeito vertical
 - A barra de dicas alterna sozinha entre duas páginas de teclas
 
+## Raridade dos personagens
+Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
+- **LENDÁRIO**: Grinch
+- **MÍSTICO**: Vampiro, Mago e Mestre do Tempo
+- **ÉPICO**: Hacker e Papai Noel
+- **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
+- **RARO**: Pinguim, Robô, Alien, Gato e Cowboy
+
 ## Kits dos personagens (taco + habilidade + mesa)
+Novo combo pack **GRINCH** (personagem + taco + mesa), o único **LENDÁRIO** (categoria própria no catálogo de tacos). O taco sorteia um poder quando você usa a habilidade (O na mira), com o sorteio puxado pela situação da mesa. Recarrega em 3 tacadas e aparece "GRINCH SORTEOU: ..." na tela:
+- **Puxão verde**: depois da batida, a bola alvo é puxada para a caçapa mais próxima (mais provável com poucas bolas na mesa)
+- **Bagunça**: as bolas do adversário levam um empurrão em direções aleatórias e ficam espalhadas (mais provável quando o adversário está perto de ganhar ou tem muitas bolas)
+
 Cada personagem tem o seu taco especial e a sua mesa (base para o modo história). Os personagens sem taco usam os tacos padrão.
 
 | Personagem | Taco | Habilidade | Mesa |
@@ -108,6 +121,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Papai Noel | Noel       | **CHAMINÉ**: todas as caçapas ficam **45% maiores** nesta tacada, com aro dourado (a branca também pode cair: cuidado com o suicídio) | Natal |
 | Chapolin   | Marreta Biônica | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
 | Hacker     | Hack       | **HACK**: calcula a melhor tacada (confere na simulação da mesa), trava mira, efeito e pulo, mostra o caminho todo e marca a **força ideal** na barra | Hack |
+| Grinch     | Grinch     | **GRINCH**: ao apertar O na mira, a habilidade é **sorteada** entre Puxão verde e Bagunça conforme a situação da mesa (veja abaixo da tabela) | Grinch |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
 | Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
 | Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
@@ -154,6 +168,7 @@ Categoria própria no catálogo: tacos com as cores da bandeira (faixas que gira
 | Brasileiro | 60    | 50     | 60   | 60       |
 | Vampiro    | 65    | 60     | 55   | 50       |
 | Noel       | 55    | 60     | 55   | 65       |
+| Grinch     | 58    | 62     | 55   | 60       |
 | Hack       | 50    | 50     | 80   | 80       |
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
