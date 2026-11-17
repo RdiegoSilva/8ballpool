@@ -101,12 +101,13 @@ static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (s
 static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define PO 9.0f                                   /* o centro das cacapas fica um pouco para fora da mesa (na moldura) */
-static const float PX[6] = { TX0 - PO, TCX, TX1 + PO, TX0 - PO, TCX, TX1 + PO };
-static const float PY[6] = { TY0 - PO, TY0 - PO, TY0 - PO, TY1 + PO, TY1 + PO, TY1 + PO };
-static const float PR[6] = { 15.5f, 13.0f, 15.5f, 15.5f, 13.0f, 15.5f };   /* raio DESENHADO do buraco (grande, estilo 8 Ball Pool) */
+#define POC 5.0f                                  /* quina: o centro do buraco fica quase no canto da mesa (boca larga, em diagonal) */
+#define POM 9.0f                                  /* meio: um pouco para fora, na moldura */
+static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
+static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
+static const float PR[6] = { 18.0f, 14.0f, 18.0f, 18.0f, 14.0f, 18.0f };   /* raio DESENHADO do buraco (grande, estilo 8 Ball Pool) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 18.6f, 15.5f, 18.6f, 18.6f, 15.5f, 18.6f };
+static const float PRC[6] = { 22.0f, 16.5f, 22.0f, 22.0f, 16.5f, 22.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -1231,16 +1232,16 @@ static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa es
 
 static void cushH(float xa, float xb, float yo, float yi)
 {
-    quad(xa - 7, yo, xb + 7, yo, xb, yi, xa, yi, tcCush);
+    quad(xa - 11, yo, xb + 11, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
-    line(xa - 7, yo, xb + 7, yo, tcCushLo);
+    line(xa - 11, yo, xb + 11, yo, tcCushLo);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 7, xo, yb + 7, xi, yb, xi, ya, tcCush);
+    quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
-    line(xo, ya - 7, xo, yb + 7, tcCushLo);
+    line(xo, ya - 11, xo, yb + 11, tcCushLo);
 }
 
 static void diamond(float cx, float cy)
@@ -2284,7 +2285,7 @@ static void drawTable(void)
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
-        float ce = PRC[0] - PO + 2.0f, cm = PRC[1] + 1.0f;
+        float ce = PRC[0] - POC + 2.0f, cm = PRC[1] + 1.0f;
         cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0);
         cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0);
         cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1);
