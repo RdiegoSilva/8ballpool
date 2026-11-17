@@ -101,13 +101,13 @@ static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (s
 static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 5.0f                                  /* quina: o centro do buraco fica quase no canto da mesa (boca larga, em diagonal) */
-#define POM 9.0f                                  /* meio: um pouco para fora, na moldura */
+#define POC 9.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
+#define POM 11.0f                                  /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 18.0f, 14.0f, 18.0f, 18.0f, 14.0f, 18.0f };   /* raio DESENHADO do buraco (grande, estilo 8 Ball Pool) */
+static const float PR[6] = { 14.0f, 12.0f, 14.0f, 14.0f, 12.0f, 14.0f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 22.0f, 16.5f, 22.0f, 22.0f, 16.5f, 22.0f };
+static const float PRC[6] = { 21.0f, 18.0f, 21.0f, 21.0f, 18.0f, 21.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -1235,6 +1235,8 @@ static void cushH(float xa, float xb, float yo, float yi)
     quad(xa - 11, yo, xb + 11, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(xa - 11, yo, xb + 11, yo, tcCushLo);
+    line(xa - 11, yo, xa, yi, tcCushHi);                 /* pontas inclinadas (linhas da cacapa) */
+    line(xb + 11, yo, xb, yi, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
@@ -1242,6 +1244,8 @@ static void cushV(float ya, float yb, float xo, float xi)
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
+    line(xo, ya - 11, xi, ya, tcCushHi);                 /* pontas inclinadas (linhas da cacapa) */
+    line(xo, yb + 11, xi, yb, tcCushHi);
 }
 
 static void diamond(float cx, float cy)
@@ -2154,7 +2158,7 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
 {
     float k = w / 588.0f, hw = (TX1 - TX0) * 0.5f * k, hh = (TY1 - TY0) * 0.5f * k;
     float x0 = cx - hw, x1 = cx + hw, y0 = cy - hh, y1 = cy + hh;
-    float f = 26.0f * k, c = 11.0f * k, pk = 14.0f * k, pr = R * k;
+    float f = 26.0f * k, c = 11.0f * k, pk = 11.0f * k, pr = R * k;
     float qx[6], qy[6], bx, by;
     int i, j, mt = fxOn ? menuT : 0;
     u64 dia = COL(T->dia[0], T->dia[1], T->dia[2]);
@@ -2307,9 +2311,9 @@ static void drawTable(void)
     /* cacapas estilo 8 Ball Pool: buraco preto grande com aro fino metalico */
     for (p = 0; p < 6; p++) {
         float r0 = PR[p];
-        discN(PX[p], PY[p], r0 + 6.0f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
-        discN(PX[p], PY[p], r0 + 2.6f, COL(120,124,132), 24);             /* aro metalico */
-        discN(PX[p], PY[p], r0 + 1.6f, COL(36,38,44), 24);
+        discN(PX[p], PY[p], r0 + 3.5f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
+        discN(PX[p], PY[p], r0 + 1.5f, COL(96,100,108), 24);              /* aro metalico fino */
+        discN(PX[p], PY[p], r0 + 0.8f, COL(30,32,38), 24);
         discN(PX[p], PY[p], r0, COL(2,2,4), 24);                          /* buraco */
         discN(PX[p] + 0.8f, PY[p] + 1.0f, r0 * 0.78f, COL(0,0,0), 20);    /* fundo mais escuro */
         ring(PX[p], PY[p], r0 + 0.2f, COL(18,18,22));
@@ -2407,7 +2411,7 @@ static int nearPocket(float x, float y)
     int k;
     for (k = 0; k < 6; k++) {
         float ex = x - PX[k], ey = y - PY[k];
-        if (ex*ex + ey*ey < (PR[k] + 4.0f) * (PR[k] + 4.0f)) return k;
+        if (ex*ex + ey*ey < PRC[k] * PRC[k]) return k;
     }
     return -1;
 }
@@ -2420,7 +2424,7 @@ static int pocketPath(float x, float y, float nx, float ny, int ignore, float *l
     float bt = 1e9f;
     for (k = 0; k < 6; k++) {
         float fx = PX[k] - x, fy = PY[k] - y;
-        float proj = fx*nx + fy*ny, perp = fx*ny - fy*nx, lim = PR[k] + 3.0f;
+        float proj = fx*nx + fy*ny, perp = fx*ny - fy*nx, lim = PRC[k] - 1.0f;
         int blocked = 0;
         if (perp < 0) perp = -perp;
         if (proj < R || perp > lim || proj >= bt) continue;
