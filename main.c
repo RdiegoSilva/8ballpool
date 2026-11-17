@@ -221,7 +221,7 @@ static CueDef CUES[NCUES] = {
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, CHIPOTE-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
-                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA, [23] = AB_TEMPO };
+                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO };
 
 #define GAME_VERSION "2.2.0"
 #define GAME_AUTHOR  "DIEGO REIS"
@@ -1199,7 +1199,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 22
+#define NTABLES 23
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1223,6 +1223,7 @@ static const TableDef TABLES[NTABLES] = {
     { "NATAL",    { 16,100, 54}, {158, 26, 34}, {255,255,255}, 13 },
     { "HACK",     {  6, 18, 30}, { 10, 14, 20}, {  0,255,210}, 14 },
     { "CHAPOLIN", {176, 30, 38}, {236,186, 30}, {255,230, 90}, 15 },
+    { "TEMPO",    { 18, 30, 78}, { 20, 24, 56}, {255,214, 90}, 16 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -1922,6 +1923,52 @@ static void tableDecoChapolin(int stage, int mt)
     }
 }
 
+static void tableDecoTime(int stage, int mt)
+{
+    int k;
+    if (stage == 0) {
+        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, COL(255, 214, 90));
+        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(120, 200, 255, 0x60));
+        for (k = 0; k < 48; k++) {                                   /* marcas de relogio na moldura; uma luz corre como o ponteiro */
+            float px, py, nx, ny;
+            u64 c = (k == (mt / 10) % 48) ? COL(255, 255, 255) : (((k & 3) == 0) ? COL(255, 214, 90) : CA(120, 200, 255, 0x90));
+            perim(k, 48, 19.0f, &px, &py, &nx, &ny);
+            rect(px - 2.0f, py - 2.0f, px + 2.0f, py + 2.0f, c);
+        }
+        for (k = 0; k < 4; k++) {                                    /* mini relogios nos cantos */
+            float x = (k & 1) ? TX1 + 21.0f : TX0 - 21.0f, y = (k & 2) ? TY1 + 21.0f : TY0 - 21.0f, a = mt * 0.05f + k * 1.3f;
+            discN(x, y, 8.0f, COL(190, 146, 40), 12);
+            discN(x, y, 6.2f, COL(240, 244, 255), 12);
+            line(x, y, x + cosf(a) * 5.0f, y + sinf(a) * 5.0f, COL(20, 26, 70));
+            line(x, y, x + cosf(a * 0.083f) * 3.2f, y + sinf(a * 0.083f) * 3.2f, COL(20, 26, 70));
+        }
+    } else if (stage == 1) {
+        float am = mt * 0.03f;
+        ring(TCX, TCY, 66.0f, CA(255, 214, 90, 0x2c));               /* mostrador gigante no feltro */
+        ring(TCX, TCY, 60.0f, CA(120, 200, 255, 0x24));
+        for (k = 0; k < 12; k++) {
+            float an = k * 0.5236f;
+            line(TCX + cosf(an) * 52.0f, TCY + sinf(an) * 52.0f, TCX + cosf(an) * 62.0f, TCY + sinf(an) * 62.0f, CA(255, 214, 90, 0x3c));
+        }
+        line(TCX, TCY, TCX + cosf(am) * 50.0f, TCY + sinf(am) * 50.0f, CA(120, 200, 255, 0x48));
+        line(TCX, TCY, TCX + cosf(am / 12.0f) * 32.0f, TCY + sinf(am / 12.0f) * 32.0f, CA(255, 214, 90, 0x48));
+        discN(TCX, TCY, 3.0f, CA(255, 214, 90, 0x58), 8);
+        for (k = 0; k < 18; k++) {                                   /* brilhos de poeira do tempo */
+            float sx = TX0 + 10.0f + fmodf(k * 131.7f, 508.0f), sy = TY0 + 8.0f + fmodf(k * 67.3f, 248.0f), tw2 = sinf(mt * 0.07f + k * 1.9f);
+            if (tw2 < 0) tw2 = 0;
+            disc(sx, sy, 1.3f, CA(190, 225, 255, 0x10 + (int)(0x50 * tw2)));
+        }
+    } else {
+        for (k = 0; k < 6; k++) {
+            float pulse = 0.5f + 0.5f * sinf(mt * 0.1f + k);
+            discN(PX[k], PY[k], PR[k] + 8.0f, CA(120, 200, 255, 0x0e + (int)(0x0a * pulse)), 12);
+            ring(PX[k], PY[k], PR[k] + 4.5f, CA(255, 214, 90, 0x90));
+            ring(PX[k], PY[k], PR[k] + 6.2f + pulse * 1.4f, CA(120, 200, 255, 0x40));
+        }
+        line(HEADX, TY0, HEADX, TY1, CA(255, 214, 90, 0x38));
+    }
+}
+
 /* stage 0: moldura (antes do feltro) | 1: feltro (antes das tabelas) | 2: por cima das cacapas */
 static void tableDeco(int stage, const TableDef *T)
 {
@@ -2008,6 +2055,8 @@ static void tableDeco(int stage, const TableDef *T)
         tableDecoHack(stage, mt);
     } else if (T->style == 15) {
         tableDecoChapolin(stage, mt);
+    } else if (T->style == 16) {
+        tableDecoTime(stage, mt);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
@@ -2077,6 +2126,10 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
             rect(px - 1.2f, py - 1.2f, px + 1.2f, py + 1.2f, CA(255, 214, 40, 0x78));
             if (i == 0) discN((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, h * 0.28f, CA(255, 214, 40, 0x22), 16);
             rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, (i & 1) ? CA(255, 214, 40, 0x80) : CA(214, 36, 40, 0x80));
+            break;
+        case 16:                                             /* tempo: relogio e brilhos */
+            if (i == 0) { float cx2 = (x0 + x1) * 0.5f, cy2 = (y0 + y1) * 0.5f, a2 = mt * 0.03f; ring(cx2, cy2, h * 0.30f, CA(255, 214, 90, 0x50)); line(cx2, cy2, cx2 + cosf(a2) * h * 0.26f, cy2 + sinf(a2) * h * 0.26f, CA(120, 200, 255, 0x78)); }
+            rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, (i & 1) ? CA(255, 214, 90, 0x80) : CA(120, 200, 255, 0x80));
             break;
         case 14:                                             /* hack: bits caindo e varredura */
             py = y0 + fmodf(mt * 0.8f * (1 + i % 3) + i * 13.0f, h);
@@ -2889,14 +2942,14 @@ static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
-#define NCHARS 13
+#define NCHARS 14
 #define CPI 3.14159265f
 static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "ALIEN",
-                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL" };
+                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL", "MESTRE DO TEMPO" };
 
 /* kit de cada personagem (para o modo historia e para o catalogo): taco e mesa. -1 = nao tem */
-static const int CHAR_CUE[NCHARS] = {  7, -1, 11, 10, -1, 12, 14, -1,  6, -1, 17, 16, 15 };
-static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19 };
+static const int CHAR_CUE[NCHARS] = {  7, -1, 11, 10, -1, 12, 14, -1,  6, -1, 17, 16, 15, 18 };
+static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22 };
 static int cueChar(int c) { int i; for (i = 0; i < NCHARS; i++) if (CHAR_CUE[i] == c) return i; return -1; }
 static int effTable(void) { return (tableAuto && CHAR_TAB[charSel[0]] >= 0) ? CHAR_TAB[charSel[0]] : tableSel; }
 
@@ -3357,6 +3410,30 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
         discN(XX(-8), YY(-50), ZZ(5.6f), wt, 10);
         break; }
 
+    case 13: {  /* MESTRE DO TEMPO: capuz azul com detalhes dourados, monoculo e relogio no peito */
+        u64 bl = COL(34, 48, 110), blD = COL(18, 26, 70), gd2 = COL(255, 214, 90), gdD = COL(190, 146, 40), cy2 = COL(120, 200, 255), sv = COL(214, 222, 236);
+        float ha = t * 0.05f;
+        if (full) {
+            legsC(cx, cy, s, blD, gdD);
+            torsoC(cx, cy, s, bl, gdD);
+            rect(XX(-27), YY(76), XX(27), YY(80), gd2);                                   /* cinto */
+            discN(cx, YY(62), ZZ(13), gdD, 16);                                           /* relogio */
+            discN(cx, YY(62), ZZ(11), COL(240, 244, 255), 16);
+            for (k = 0; k < 4; k++) discN(XX(cosf(k * CPI * 0.5f) * 8.6f), YY(62 + sinf(k * CPI * 0.5f) * 8.6f), ZZ(0.9f), blD, 6);
+            beam(cx, YY(62), XX(cosf(ha) * 8.0f), YY(62 + sinf(ha) * 8.0f), ZZ(1.4f), blD);
+            beam(cx, YY(62), XX(cosf(ha * 0.083f) * 5.0f), YY(62 + sinf(ha * 0.083f) * 5.0f), ZZ(1.8f), blD);
+            armsC(cx, cy, s, mood, t, bl, skin, 9.0f);
+        }
+        disc(cx, cy, ZZ(26), bl);                                                         /* capuz */
+        arcL(cx, cy, ZZ(25), ZZ(25), 1.05f * CPI, 1.95f * CPI, ZZ(2.2f), gd2);
+        discN(cx, YY(-17), ZZ(4.5f), gd2, 10); discN(cx, YY(-17), ZZ(3.0f), cy2, 8);      /* relogio na testa do capuz */
+        ell(cx, YY(5), ZZ(17.5f), ZZ(19), skin);
+        ell(cx, YY(22), ZZ(8.5f), ZZ(5.5f), sv);                                          /* barbicha */
+        faceStd(cx, cy, s, mood, t, 8.5f, -3, 14, sv, 3);
+        ring(XX(8.5f), YY(-3), ZZ(6.8f), gd2);                                            /* monoculo */
+        beam(XX(14), YY(1), XX(22), YY(18), ZZ(1.0f), gd2);
+        break; }
+
     default: {  /* GATO */
         u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
         if (full) {
@@ -3415,9 +3492,9 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
 
 /* menu de tacos: foto do taco, nome e estatisticas */
 /* catalogo: ordem das fichas (padrao primeiro, depois os tacos de personagem) */
-#define NCAT_STD 8                                  /* padrao: 0..7 | paises: 8..13 | personagens: 14..22 */
+#define NCAT_STD 8                                  /* padrao: 0..7 | paises: 8..13 | personagens: 14..23 */
 #define NCAT_PAIS 14
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 18, 19, 20, 21, 22,   7, 12, 14, 15, 16, 6, 10, 11, 17, 23 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 14, 15, 16, 6, 10, 11, 17, 18 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
 
@@ -3487,7 +3564,7 @@ static void drawCueMenu(void)
     }
 
     text(228, 118, 0.6f, COL(255,255,255), cd->name);
-    if (ch >= 0) sprintf(buf, "TACO DO %s", CHAR_NAME[ch]); else strcpy(buf, cueMenuSel == 13 || (cueMenuSel >= 18 && cueMenuSel <= 22) ? "TACO DE PAIS" : "TACO PADRAO");
+    if (ch >= 0) sprintf(buf, "TACO DO %s", CHAR_NAME[ch]); else strcpy(buf, cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23) ? "TACO DE PAIS" : "TACO PADRAO");
     text(228, 142, 0.32f, ch >= 0 ? COL(255,190,110) : (strcmp(buf, "TACO DE PAIS") == 0 ? COL(120,235,150) : COL(150,220,255)), buf);
 
     for (k = 0; k < 4; k++) {
@@ -3524,7 +3601,7 @@ static void drawCueMenu(void)
         sprintf(buf, "MESA DO PERSONAGEM: %s", TABLES[tb].name);
         text(260, 373, 0.32f, COL(190,200,215), buf);
     } else text(228, 373, 0.32f, COL(120,128,145), "MESA: LIVRE (ESCOLHA NA CONFIGURACAO)");
-    if (cueMenuSel == 13 || (cueMenuSel >= 18 && cueMenuSel <= 22)) text(228, 392, 0.3f, COL(120,235,150), "TACO COM AS CORES DA BANDEIRA - SO ATRIBUTOS");
+    if (cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23)) text(228, 392, 0.3f, COL(120,235,150), "TACO COM AS CORES DA BANDEIRA - SO ATRIBUTOS");
 
     if (ab && !abilOn) text(228, 392, 0.3f, COL(255,120,110), "HABILIDADES DESLIGADAS NESTA PARTIDA");
     if (cueSel[cur] == cueMenuSel) text(500, 372, 0.4f, COL(110,230,130), "EM USO");
