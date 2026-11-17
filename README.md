@@ -105,15 +105,17 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Pinguim    | Gelo       | **CONGELAR**: o gelo cobre a mesa e as bolas deslizam muito mais longe (quase sem atrito) | Gelo |
 | Cowboy     | Pistoleiro | **TIRO**: a branca sai como uma bala (+50% de velocidade, sem efeito) com clarão de disparo | Faroeste |
 | Vampiro    | Vampiro    | **SUGAR**: depois da batida, a bola alvo é puxada para a caçapa mais próxima | Vampiro |
-| Papai Noel | Noel       | **PRESENTE**: perdoa uma falta (a vez passa sem bola na mão) | Natal |
-| Chapolin   | Chipote    | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
-| Hacker     | Hack       | **HACK**: a mira trava sozinha na melhor tacada, mostra o caminho todo e marca a **força ideal** na barra | Hack |
+| Papai Noel | Noel       | **PRESENTE**: perdoa a falta da tacada (bola errada, branca na caçapa e, na Sinuca Brasileira, até o suicídio); devolve a bola 8 se ela cair cedo demais; se você encaçapou uma bola sua, joga de novo. Se não houver falta, o presente **não é gasto** | Natal |
+| Chapolin   | Marreta Biônica | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
+| Hacker     | Hack       | **HACK**: calcula a melhor tacada (confere na simulação da mesa), trava mira, efeito e pulo, mostra o caminho todo e marca a **força ideal** na barra | Hack |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
 | Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
 | Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
 
 Robô, Alien, Mago e Gato: só mesa (Robô: Neon, Alien: Galáxia, Mago: Noite Lua, Gato: Rosa) ou nada.
 - **Usar a habilidade: O na mira.** Na maioria, o primeiro toque arma a habilidade (aparece "ARMADO!" no canto) e vale para a próxima tacada; tocar de novo cancela. O **HACK** age na hora
+  - **HACK (melhorado)**: só mostra tacadas que **realmente encaçapam** (cada uma é testada na física do jogo: bola certa primeiro, branca não cai). Funciona na Bola 8 e na Sinuca Brasileira. **O de novo** troca para a próxima melhor opção (até 4) e, depois da última, libera a mira. Com o HACK ligado a mira, o efeito, o pulo e a troca de taco ficam travados, a tacada não sofre desvio de giz, a barra de força anda mais devagar e **gruda na força ideal** (±6%). Sem tacada possível, ele sugere uma jogada de segurança (acerta a bola certa sem arriscar a branca). Na quebra mira reto no triângulo com força total
+  - **PRESENTE (melhorado)**: veja a tabela. Também vale na Sinuca Brasileira (branca volta ao centro)
 - Depois de usar, a habilidade **recarrega em 3 tacadas** (o contador aparece ao lado do nome do taco)
 - O BOT não usa habilidades. No torneio ninguém usa (só taco Clássico)
 - No **versus** você escolhe na configuração se a partida é **com ou sem habilidades** (HABILIDADES: LIGADAS/DESLIGADAS). Desligadas, os tacos valem só pelos atributos

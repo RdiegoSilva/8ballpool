@@ -74,6 +74,8 @@ static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "PRESENTE",
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2];
 static float fricMul = 1.0f, hackPow, fxX, fxY;
+static float hCandAng[10], hCandPow[10], hCandSc[10];   /* HACK: melhores tacadas encontradas (a mais facil primeiro) */
+static int hCandN, hCandI;
 static const char *tRoundName(int r) { return r == 0 ? "QUARTAS DE FINAL" : (r == 1 ? "SEMIFINAL" : "FINAL"); }
 
 /* animacoes: tacada, barra de forca e bolas caindo na cacapa */
@@ -208,7 +210,7 @@ static CueDef CUES[NCUES] = {
     { "VAMPIRO",    65,  60,  55,  50, {220, 40, 60}, { 64, 14, 28}, { 20,  8, 18}, {210, 20, 44}, {110, 10, 26}, 6 },
     { "NOEL",       55,  60,  55,  65, {245,245,250}, {200, 32, 42}, { 16,104, 50}, {255,214, 80}, {245,245,250}, 7 },
     { "HACK",       50,  50,  80,  80, {  0,255,200}, { 24, 30, 40}, { 12, 16, 24}, {  0,255,140}, {  0,200,255}, 8 },
-    { "CHIPOTE",    60,  40,  55,  55, {255,214, 40}, {214, 36, 40}, {255,214, 40}, {255,214, 40}, {158, 22, 28}, 10 },
+    { "MARRETA BIONICA", 60, 40, 55, 55, {255,214, 40}, {214, 36, 40}, {255,214, 40}, {255,214, 40}, {158, 22, 28}, 10 },
     /* MESTRE DO TEMPO: relogio azul e dourado; a habilidade volta no tempo se a tacada perder a partida */
     { "MESTRE DO TEMPO", 55, 50, 65, 65, {120,200,255}, { 28, 40, 84}, { 14, 18, 44}, {255,214, 90}, {120,200,255}, 1 },
     /* tacos de paises (fx 9: faixas com as cores da bandeira) */
@@ -220,7 +222,7 @@ static CueDef CUES[NCUES] = {
 };
 
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
-   NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, CHIPOTE-Chapolin */
+   NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, MARRETA BIONICA-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO };
 
@@ -695,14 +697,16 @@ static void shoot(float p)
         tmSnap = 1; tmArmed = 1;
     }
     float ch = isBot() ? 1.0f : chalk[cur], a = ang, pm = 1.0f;
+    int hk = hackOn;                                  /* HACK: tacada certeira, sem desvio de giz */
     memset(pocketed, 0, sizeof(pocketed));
     firstHit = -1;
     gAtStart = grp[cur];
     startOwnLeft = gAtStart >= 0 ? countGroup(gAtStart) : 99;
     hitX = b[0].x; hitY = b[0].y; hitCue = curCue();
     if (!isBot()) {                                   /* giz: ponta sem giz escorrega e a tacada sai torta */
-        float miss = (1.0f - ch) * 0.045f, dev = ((int)(rnd() % 2001) - 1000) / 1000.0f;
-        if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
+        float miss = hk ? 0.0f : (1.0f - ch) * 0.045f, dev = ((int)(rnd() % 2001) - 1000) / 1000.0f;
+        if (hk) { }
+        else if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
         else if (ch < 0.25f) setmsg("POUCO GIZ! PASSE GIZ NO TACO");
         a += dev * miss;
         chalk[cur] -= 0.035f + 0.03f * fabsf(spinSel) + 0.02f * fabsf(spinV) + (jumpArm ? 0.03f : 0.0f);   /* gasta devagar: ~28 tacadas normais */
@@ -773,7 +777,7 @@ static void abilOnFirstHit(int j)
 {
     int k;
     if (abilKind == AB_SUGAR) abilT = 420;
-    else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* chipote chillon */
+    else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* marreta bionica */
     else if (abilKind == AB_CORTE) { b[0].vx = b[0].vy = 0; abilFx = 36; fxX = b[0].x; fxY = b[0].y; }
     else if (abilKind == AB_FOGO) {
         for (k = 1; k < 16; k++) {
@@ -917,14 +921,35 @@ static int validPlace(float x, float y)
     return 1;
 }
 
+/* devolve uma bola a mesa num lugar livre (PRESENTE do Noel) */
+static void respot(int id, float x, float y)
+{
+    int tries;
+    b[id].in = 0; fallT[id] = 0; b[id].vx = b[id].vy = 0; b[id].z = b[id].vz = 0; pocketed[id] = 0;
+    for (tries = 0; tries < 600; tries++) {
+        int ok;
+        if (tries > 0) {
+            x = TX0 + R + (rnd() % (int)(TX1 - TX0 - 2 * R));
+            y = TY0 + R + (rnd() % (int)(TY1 - TY0 - 2 * R));
+        }
+        ok = validPlace(x, y);
+        if (ok && id != 0 && b[0].in) {
+            float dx = b[0].x - x, dy = b[0].y - y;
+            if (dx * dx + dy * dy < (2 * R + 1) * (2 * R + 1)) ok = 0;
+        }
+        if (ok) break;
+    }
+    b[id].x = x; b[id].y = y; b[id].in = 1;
+}
+
 static void endTurn(int foul, int ownPocket)
 {
     char buf[64];
-    int forgiven = 0;
+    int forgiven = 0, saved = 0;
     botTimer = 0; botPlanned = 0;
     abilArm = 0; hackOn = 0;
     if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
-        foul = 0; ownPocket = 0; forgiven = 1;
+        foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
         if (!b[0].in) {
             int tries;
             b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY;
@@ -935,6 +960,7 @@ static void endTurn(int foul, int ownPocket)
             }
         }
     } else if (abilForgive == 2) forgiven = 1;
+    else if (abilForgive == 1) { abilCD[cur] = 0; saved = 1; }   /* PRESENTE armado e sem falta: nao gasta */
     abilForgive = 0;
     if (foul) {
         if (!b[0].in) { b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY; }
@@ -946,7 +972,7 @@ static void endTurn(int foul, int ownPocket)
     } else {
         if (!ownPocket) cur = 1 - cur;
         state = S_AIM;
-        sprintf(buf, forgiven ? "FALTA PERDOADA! VEZ DE %s" : "VEZ DE %s", pname(cur));
+        sprintf(buf, forgiven ? "FALTA PERDOADA! VEZ DE %s" : (saved ? "PRESENTE GUARDADO! VEZ DE %s" : "VEZ DE %s"), pname(cur));
         setmsg(buf);
     }
 }
@@ -1044,16 +1070,20 @@ static int tmOffer(const char *note, int eight)
 
 static void resolveBR(void)
 {
-    int i, foul, own = 0, mine, theirs;
+    int i, foul, own = 0, mine, theirs, saved = 0;
     char buf[64];
     overNote[0] = 0;
     if (pocketed[0]) {
-        strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
-        endGame(1 - cur);
-        return;
+        if (abilForgive == 1) {                          /* PRESENTE: o Noel salva do suicidio e devolve a branca ao centro */
+            respot(0, TCX, TCY); pocketed[0] = 0; saved = 1;
+        } else {
+            strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
+            endGame(1 - cur);
+            return;
+        }
     }
     foul = firstHit < 0 || ballGroup(firstHit) != grp[cur];
-    if (foul && abilForgive == 1) { foul = 0; abilForgive = 2; }       /* PRESENTE: perdoa a falta */
+    if (saved || (foul && abilForgive == 1)) { foul = 0; abilForgive = 2; }       /* PRESENTE: perdoa a falta */
     for (i = 1; i < 16; i++)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
@@ -1092,6 +1122,11 @@ static void resolve(void)
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
+        if (!ok && abilForgive == 1) {                     /* PRESENTE: o Noel devolve a bola 8 e perdoa */
+            respot(8, FOOTX, TCY);
+            endTurn(1, 0);
+            return;
+        }
         winner = ok ? cur : 1 - cur;
         (mode == 0 ? winsBot : winsVs)[winner]++;
         state = S_OVER;
@@ -2937,7 +2972,7 @@ static void drawHUD(void)
     if (state == S_AIM && !isBot() && curAb() != AB_NONE) {            /* indicador da habilidade */
         char ab[40];
         u64 ac;
-        if (hackOn)                 { strcpy(ab, "HACK ATIVO"); ac = COL(0,255,220); }
+        if (hackOn)                 { sprintf(ab, "HACK %d/%d  O: OUTRA", hCandI + 1, hCandN); ac = COL(0,255,220); }
         else if (abilArm)           { sprintf(ab, "%s ARMADO!", AB_NAME[curAb()]); ac = COL(110,255,140); }
         else if (abilCD[cur] > 0)   { sprintf(ab, "%s: %d", AB_NAME[curAb()], abilCD[cur]); ac = COL(150,155,170); }
         else                        { sprintf(ab, "O: %s", AB_NAME[curAb()]); ac = COL(255,230,60); }
@@ -3514,12 +3549,12 @@ static void drawCueMenu(void)
         { "A BRANCA SAI COMO UMA BALA: +50% DE VELOCIDADE", "E SEM EFEITO. O TACO DISPARA COM UM CLARAO." },
         { "O GELO COBRE A MESA: AS BOLAS DESLIZAM MUITO", "MAIS LONGE (QUASE SEM ATRITO) NESTA TACADA." },
         { "DEPOIS DA BATIDA, A BOLA ALVO E PUXADA PARA", "A CACAPA MAIS PROXIMA." },
-        { "PAPAI NOEL PERDOA UMA FALTA: SE VOCE FALTAR", "NESTA TACADA, A VEZ PASSA SEM BOLA NA MAO." },
-        { "A MIRA TRAVA SOZINHA NA MELHOR TACADA, MOSTRA", "O CAMINHO TODO E INDICA A FORCA IDEAL." },
+        { "PERDOA UMA FALTA (INCLUSIVE SUICIDIO) E DEVOLVE", "A BOLA 8. SE NAO FALTAR, O PRESENTE NAO GASTA." },
+        { "TRAVA A MIRA NA MELHOR TACADA (O DE NOVO TROCA", "A OPCAO), MOSTRA O CAMINHO E A FORCA IDEAL." },
         { "A BOLA ALVO EXPLODE E EMPURRA PARA LONGE", "AS BOLAS QUE ESTAO PERTO DELA." },
         { "+20% DE FORCA E A BRANCA PARA NA HORA AO", "BATER NA BOLA (TACADA CORTADA)." },
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
-        { "CHIPOTE CHILLON! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
+        { "MARRETA BIONICA! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
         { "DEPOIS DE QUALQUER TACADA, VOCE PODE VOLTAR NO", "TEMPO E REFAZER A JOGADA - SE QUISER." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
@@ -4875,24 +4910,206 @@ static void splashScreen(void)
 }
 
 /* ---------- habilidades: ativar na mira ---------- */
-static void hackPlan(void)                       /* HACK: mira sozinha na melhor tacada (como o BOT profissional) */
+/* HACK: planejador proprio (sem erro aleatorio do bot). Para cada bola legal e cada cacapa calcula a bola fantasma,
+   confere caminho livre, angulo de corte e de entrada na cacapa, risco de a branca cair (suicidio) e a FORCA exata
+   usando o atrito real da mesa. Guarda as 5 melhores tacadas; O de novo troca de opcao. */
+static float stopDist(float v)                   /* distancia que a bola percorre ate parar (v' = -0.6v - 24) */
 {
-    int lv = botLevel;
-    botLevel = 3; botPlan(); botLevel = lv;
-    ang = botAng; hackPow = botPow; hackOn = 1; spinSel = 0; spinV = 0;
+    return v <= 0.0f ? 0.0f : (v - 40.0f * logf(1.0f + v / 40.0f)) / 0.6f;
+}
+
+static float speedForDist(float d)               /* inverso: velocidade inicial para percorrer d */
+{
+    float lo = 0.0f, hi = 4000.0f;
+    int k;
+    for (k = 0; k < 26; k++) { float m = (lo + hi) * 0.5f; if (stopDist(m) < d) lo = m; else hi = m; }
+    return hi;
+}
+
+static int cueRisk(float x, float y, float vx, float vy)   /* a branca, andando de (x,y) com velocidade (vx,vy), cai numa cacapa? */
+{
+    float sp = sqrtf(vx * vx + vy * vy), dist, ux, uy;
+    int p;
+    if (sp < 8.0f) return 0;
+    dist = stopDist(sp) * 0.9f; ux = vx / sp; uy = vy / sp;
+    for (p = 0; p < 6; p++) {
+        float px = PX[p] - x, py = PY[p] - y, t = px * ux + py * uy, ex, ey;
+        if (t < 0.0f) continue;
+        if (t > dist) t = dist;
+        ex = px - ux * t; ey = py - uy * t;
+        if (ex * ex + ey * ey < (PRC[p] + 4.0f) * (PRC[p] + 4.0f)) return 1;
+    }
+    return 0;
+}
+
+/* simula a tacada na mesa de verdade (mesma fisica do jogo) e diz se ela da certo:
+   1 = primeira bola tocada e legal, encacapou uma bola sua e a branca ficou na mesa. Guarda e restaura todo o estado. */
+static int hackSim(float a, float p, int safeOnly)
+{
+    Ball sb[16];
+    int spk[16], sfT[16], sfP[16], sfh = firstHit, sak = abilKind, sat = abilT;
+    float sfX[16], sfY[16], ssc = spinCur, ssv = spinVCur, ssk = spinK, ssvk = spinVK, sfm = fricMul;
+    int i, st = 0, mv, ok, gr = grp[cur], gdone = (gr >= 0 && countGroup(gr) == 0), legal, ownp = 0;
+    memcpy(sb, b, sizeof b); memcpy(spk, pocketed, sizeof pocketed); memcpy(sfT, fallT, sizeof fallT);
+    memcpy(sfP, fallP, sizeof fallP); memcpy(sfX, fallX, sizeof fallX); memcpy(sfY, fallY, sizeof fallY);
+    memset(pocketed, 0, sizeof pocketed); firstHit = -1;
+    spinCur = spinVCur = spinK = spinVK = 0.0f; abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
+    b[0].vx = cosf(a) * p * MAXV * cuePowMul(curCue());
+    b[0].vy = sinf(a) * p * MAXV * cuePowMul(curCue());
+    do {
+        mv = 0;
+        for (i = 0; i < 8; i++) stepPhysics((1.0f / 60.0f) / 8.0f);
+        for (i = 0; i < 16; i++) if (b[i].in && (b[i].vx != 0.0f || b[i].vy != 0.0f || b[i].z > 0.0f)) mv = 1;
+        st++;
+    } while (mv && st < 420);
+    legal = firstHit > 0 && (gr < 0 ? firstHit != 8 : (ballGroup(firstHit) == gr || (firstHit == 8 && gdone)));
+    for (i = 1; i < 16; i++)
+        if (pocketed[i] && (gr < 0 ? i != 8 : (ballGroup(i) == gr || (i == 8 && gdone)))) ownp = 1;
+    ok = legal && !pocketed[0] && (safeOnly || ownp) && !(pocketed[8] && !(gr >= 0 && gdone));
+    memcpy(b, sb, sizeof b); memcpy(pocketed, spk, sizeof pocketed); memcpy(fallT, sfT, sizeof fallT);
+    memcpy(fallP, sfP, sizeof fallP); memcpy(fallX, sfX, sizeof fallX); memcpy(fallY, sfY, sizeof fallY);
+    firstHit = sfh; spinCur = ssc; spinVCur = ssv; spinK = ssk; spinVK = ssvk; abilKind = sak; abilT = sat; fricMul = sfm;
+    return ok;
+}
+
+/* a tabela so abre na boca da cacapa: a bola alvo precisa cruzar a linha da tabela dentro da largura do buraco */
+static float pocketEntryOff(float tx, float ty, int p)     /* desvio do centro na linha da tabela (0 = entra no meio) */
+{
+    float dx = PX[p] - tx, dy = PY[p] - ty, bt = 1e9f, bo = 0.0f, tt;
+    if (PY[p] < TY0 + R && dy < -0.01f && ty > TY0 + R) {
+        tt = (TY0 + R - ty) / dy; if (tt < bt) { bt = tt; bo = tx + dx * tt - PX[p]; }
+    } else if (PY[p] > TY1 - R && dy > 0.01f && ty < TY1 - R) {
+        tt = (TY1 - R - ty) / dy; if (tt < bt) { bt = tt; bo = tx + dx * tt - PX[p]; }
+    }
+    if (PX[p] < TX0 + R && dx < -0.01f && tx > TX0 + R) {
+        tt = (TX0 + R - tx) / dx; if (tt < bt) { bt = tt; bo = ty + dy * tt - PY[p]; }
+    } else if (PX[p] > TX1 - R && dx > 0.01f && tx < TX1 - R) {
+        tt = (TX1 - R - tx) / dx; if (tt < bt) { bt = tt; bo = ty + dy * tt - PY[p]; }
+    }
+    return bt > 1e8f ? 0.0f : fabsf(bo);
+}
+
+static void hackAdd(float ang_, float pw, float sc)
+{
+    int k, j;
+    for (k = 0; k < hCandN && hCandSc[k] <= sc; k++) ;
+    if (k >= 10) return;
+    if (hCandN < 10) hCandN++;
+    for (j = hCandN - 1; j > k; j--) { hCandAng[j] = hCandAng[j-1]; hCandPow[j] = hCandPow[j-1]; hCandSc[j] = hCandSc[j-1]; }
+    hCandAng[k] = ang_; hCandPow[k] = pw; hCandSc[k] = sc;
+}
+
+static void hackSolve(void)
+{
+    int t, p, gr = grp[cur];
+    float cx = b[0].x, cy = b[0].y, pmul = MAXV * cuePowMul(curCue());
+    hCandN = 0; hCandI = 0;
+
+    if (breakShot) {                                         /* quebra: reto na bola da ponta do triangulo, forca total */
+        hCandAng[0] = atan2f(b[1].y - cy, b[1].x - cx); hCandPow[0] = 1.0f; hCandSc[0] = 0.0f; hCandN = 1;
+        return;
+    }
+    for (t = 1; t < 16; t++) {
+        if (!b[t].in) continue;
+        if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
+        else if (gr >= 0 && ballGroup(t) != gr) continue;
+        for (p = 0; p < 6; p++) {
+            float tx = b[t].x, ty = b[t].y, dx = PX[p] - tx, dy = PY[p] - ty;
+            float dl = sqrtf(dx * dx + dy * dy), gx, gy, ax, ay, al, cc, ox, oy, ol, appr, vt, vc, v0, pw, sc, eo;
+            float cvx, cvy;
+            if (dl < 1.0f) continue;
+            dx /= dl; dy /= dl;
+            ox = PX[p] < TCX ? -1.0f : (PX[p] > TCX ? 1.0f : 0.0f);        /* eixo de entrada da cacapa */
+            oy = PY[p] < TCY ? -1.0f : 1.0f;
+            ol = sqrtf(ox * ox + oy * oy); ox /= ol; oy /= ol;
+            appr = dx * ox + dy * oy;                                       /* 1 = entra de frente */
+            if (appr < (ox != 0.0f ? 0.34f : 0.55f)) continue;              /* entra de lado demais: bate na quina */
+            eo = pocketEntryOff(tx, ty, p);
+            if (eo > PRC[p] + 5.0f) continue;                               /* rasante na tabela: nao entra */
+            gx = tx - dx * 2 * R; gy = ty - dy * 2 * R;
+            if (gx < TX0 + R || gx > TX1 - R || gy < TY0 + R || gy > TY1 - R) continue;
+            ax = gx - cx; ay = gy - cy; al = sqrtf(ax * ax + ay * ay);
+            if (al < 1.0f) continue;
+            ax /= al; ay /= al;
+            cc = ax * dx + ay * dy;
+            if (cc < 0.30f) continue;                                       /* corte fino demais */
+            if (!pathClear(cx, cy, gx, gy, t)) continue;
+            if (!pathClear(tx, ty, PX[p], PY[p], t)) continue;
+            /* forca: a bola alvo sai com ~0.98*cos do corte e precisa chegar na cacapa com folga */
+            vt = speedForDist(dl + 12.0f);
+            vc = vt / (0.98f * cc);
+            v0 = speedForDist(al + stopDist(vc));
+            pw = v0 / pmul;
+            if (pw > 1.0f) continue;                                        /* nao ha forca para essa tacada */
+            if (pw < 0.12f) pw = 0.12f;
+            /* para onde a branca vai depois da batida (risco de cair na cacapa) */
+            cvx = vc * ax - 0.98f * vc * cc * dx; cvy = vc * ay - 0.98f * vc * cc * dy;
+            sc = al * 0.8f + dl + (1.0f - cc) * 520.0f + (1.0f - appr) * 160.0f + pw * 90.0f + eo * 14.0f;
+            if (cueRisk(gx, gy, cvx, cvy)) sc += 450.0f;
+            hackAdd(atan2f(gy - cy, gx - cx), pw, sc);
+        }
+    }
+    {                                                                       /* confere cada tacada na simulacao: so ficam as que dao certo */
+        int k, n = 0;
+        for (k = 0; k < hCandN; k++) {
+            if (n >= 4) break;
+            if (hackSim(hCandAng[k], hCandPow[k], 0)) { hCandAng[n] = hCandAng[k]; hCandPow[n] = hCandPow[k]; hCandSc[n] = hCandSc[k]; n++; }
+        }
+        hCandN = n;
+    }
+    if (hCandN == 0) {                                                      /* sem tacada direta: jogada de seguranca */
+        float bd[16], ba[16], bp[16];
+        int order[16], n = 0, k, j, best = -1;
+        for (t = 1; t < 16; t++) {
+            float dx, dy, d;
+            if (!b[t].in) continue;
+            if (t == 8 && !(gr >= 0 && countGroup(gr) == 0)) continue;
+            if (gr >= 0 && t != 8 && ballGroup(t) != gr) continue;
+            if (gr < 0 && t == 8) continue;
+            dx = b[t].x - cx; dy = b[t].y - cy; d = sqrtf(dx * dx + dy * dy);
+            bd[n] = d + (pathClear(cx, cy, b[t].x, b[t].y, t) ? 0.0f : 400.0f);   /* prefere bola com caminho livre */
+            ba[n] = atan2f(dy, dx);
+            bp[n] = speedForDist(d + 40.0f) / pmul;
+            if (bp[n] < 0.15f) bp[n] = 0.15f;
+            if (bp[n] > 1.0f) bp[n] = 1.0f;
+            order[n] = n; n++;
+        }
+        for (k = 0; k < n; k++)                                             /* ordena pela distancia */
+            for (j = k + 1; j < n; j++)
+                if (bd[order[j]] < bd[order[k]]) { int tmp = order[k]; order[k] = order[j]; order[j] = tmp; }
+        for (k = 0; k < n && k < 4; k++)
+            if (hackSim(ba[order[k]], bp[order[k]], 1)) { best = order[k]; break; }
+        if (best < 0 && n > 0) best = order[0];
+        if (best >= 0) { hCandAng[0] = ba[best]; hCandPow[0] = bp[best]; }
+        else { hCandAng[0] = atan2f(TCY - cy, FOOTX - cx); hCandPow[0] = 0.4f; }
+        hCandSc[0] = 1e6f; hCandN = 1;
+    }
+}
+
+static void hackApply(void)                      /* trava a mira na opcao escolhida */
+{
+    char tb[64];
+    ang = hCandAng[hCandI]; hackPow = hCandPow[hCandI]; hackOn = 1;
+    spinSel = 0; spinV = 0; jumpArm = 0; charging = 0; pwr = 0;
+    if (hCandSc[hCandI] >= 1e5f) strcpy(tb, "HACK: SEM TACADA DIRETA - JOGADA DE SEGURANCA");
+    else sprintf(tb, "HACK %d/%d: FORCA %d%% - O TROCA A OPCAO", hCandI + 1, hCandN, (int)(hackPow * 100.0f + 0.5f));
+    setmsg(tb);
 }
 
 static void useAbility(void)
 {
     int ab = curAb();
-    char tb[56];
+    char tb[64];
     if (ab == AB_NONE) { setmsg(abilOn ? "ESTE TACO NAO TEM HABILIDADE" : "HABILIDADES DESLIGADAS NESTA PARTIDA"); return; }
+    if (ab == AB_HACK && hackOn) {                       /* ja ativo: O troca para a proxima melhor tacada (e depois libera a mira) */
+        hCandI++;
+        if (hCandI >= hCandN) { hackOn = 0; hCandI = 0; setmsg("HACK DESLIGADO: MIRA LIVRE"); }
+        else hackApply();
+        return;
+    }
     if (abilCD[cur] > 0) { sprintf(tb, "%s RECARREGA EM %d TACADA(S)", AB_NAME[ab], abilCD[cur]); setmsg(tb); return; }
     if (ab == AB_HACK) {
-        if (hackOn) { setmsg("HACK JA ESTA ATIVO"); return; }
-        hackPlan(); abilCD[cur] = AB_COOL + 1;
-        sprintf(tb, "HACK: MIRA TRAVADA! FORCA %d%%", (int)(hackPow * 100.0f + 0.5f));
-        setmsg(tb);
+        hackSolve(); hackApply(); abilCD[cur] = AB_COOL + 1;
         return;
     }
     abilArm = !abilArm;
@@ -5000,6 +5217,8 @@ int main(int argc, char *argv[])
                     if (chalkAnim == 22) { chalk[cur] = 1.0f; setmsg("GIZ PASSADO NO TACO!"); }
                     break;
                 }
+                if (hackOn) { fineHold = 0; }                    /* HACK: mira, efeito e pulo travados */
+                else {
                 if (in & PAD_LEFT)  ang -= 0.025f;
                 if (in & PAD_RIGHT) ang += 0.025f;
                 if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
@@ -5013,9 +5232,11 @@ int main(int argc, char *argv[])
                 if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
                 if (in & PAD_UP)   { spinV += 0.03f; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */
                 if (in & PAD_DOWN) { spinV -= 0.03f; if (spinV < -1.0f) spinV = -1.0f; }   /* puxa */
+                }
                 if (!charging) {
                     if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
-                    else if (pressed & PAD_SELECT) openCueMenu();
+                    else if (pressed & PAD_SELECT) { if (hackOn) setmsg("HACK ATIVO: TACO TRAVADO"); else openCueMenu(); }
+                    else if ((pressed & PAD_TRIANGLE) && hackOn) setmsg("HACK ATIVO: MIRA TRAVADA");
                     else if (pressed & PAD_TRIANGLE) {
                         jumpArm = !jumpArm;
                         setmsg(jumpArm ? "PULO ATIVADO: A BRANCA VAI PULAR" : "PULO DESLIGADO");
@@ -5026,12 +5247,13 @@ int main(int argc, char *argv[])
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
                 } else {
-                    pwr += barDir * cueBarSpeed(curCue());        /* sobe e desce sozinha */
+                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
                     if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
                     if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
                     if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
                     else if (pressed & PAD_CROSS) {
                         charging = 0;
+                        if (hackOn && fabsf(pwr - hackPow) <= 0.06f) pwr = hackPow;   /* HACK: ima na forca ideal */
                         if (pwr > 0.05f) startStrike(pwr); else pwr = 0;
                     }
                 }
