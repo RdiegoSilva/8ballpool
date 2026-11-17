@@ -68,12 +68,12 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_PRESENTE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "PRESENTE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2];
-static float fricMul = 1.0f, hackPow, fxX, fxY;
+static float fricMul = 1.0f, pockMul = 1.0f, hackPow, fxX, fxY;   /* pockMul: CHAMINE aumenta as cacapas */
 static float hCandAng[10], hCandPow[10], hCandSc[10];   /* HACK: melhores tacadas encontradas (a mais facil primeiro) */
 static int hCandN, hCandI;
 static const char *tRoundName(int r) { return r == 0 ? "QUARTAS DE FINAL" : (r == 1 ? "SEMIFINAL" : "FINAL"); }
@@ -224,7 +224,7 @@ static CueDef CUES[NCUES] = {
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, MARRETA BIONICA-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
-                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_PRESENTE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO };
+                                   [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO };
 
 #define GAME_VERSION "2.2.0"
 #define GAME_AUTHOR  "DIEGO REIS"
@@ -683,7 +683,7 @@ static void newGame(int m)
     spinSel = spinCur = 0; barDir = 1.0f;
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
-    abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; abilForgive = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
+    abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
@@ -717,7 +717,7 @@ static void shoot(float p)
     spinCur = spinSel * (0.8f + 0.2f * ch); spinK = cueSpinK(hitCue); spinSel = 0;
     spinVCur = spinV * (0.8f + 0.2f * ch); spinVK = cueVSpin(hitCue); spinV = 0;
     if (abilCD[cur] > 0) abilCD[cur]--;
-    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; abilForgive = 0; hackOn = 0;
+    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; hackOn = 0;
     if (abilArm && curAb() != AB_NONE) {                 /* habilidade do taco de personagem */
         abilKind = curAb(); abilCD[cur] = AB_COOL; abilFx = 36; fxX = hitX; fxY = hitY;
         switch (abilKind) {
@@ -725,7 +725,7 @@ static void shoot(float p)
         case AB_CORTE:    b[0].vx *= 1.2f; b[0].vy *= 1.2f; break;
         case AB_MARE:     spinK *= 2.6f; if (fabsf(spinCur) < 0.3f) spinCur = spinCur < 0.0f ? -0.8f : 0.8f; break;
         case AB_CONGELAR: fricMul = 0.22f; break;
-        case AB_PRESENTE: abilForgive = 1; break;
+        case AB_CHAMINE:  pockMul = 1.45f; break;                 /* CHAMINE: cacapas bem maiores nesta tacada */
         default: break;
         }
     }
@@ -825,14 +825,14 @@ static int stepPhysics(float dt)
         }
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
-            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, mouth = PRC[p] + R;
-            if (!air && d2 < PRC[p]*PRC[p]) {
+            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, prc = PRC[p] * pockMul, mouth = prc + R;
+            if (!air && d2 < prc*prc) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; break;
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
-                inMouth = 1; mdx = fabsf(dx); mdy = fabsf(dy); mpr = PRC[p]; mpx = PX[p]; mpy = PY[p];
+                inMouth = 1; mdx = fabsf(dx); mdy = fabsf(dy); mpr = prc; mpx = PX[p]; mpy = PY[p];
                 if (d > 0.001f && toward > 0.0f && POCK_PULL > 0.0f) {   /* so ajuda quem vai em direcao ao buraco */
                     b[i].vx -= dx / d * POCK_PULL * dt;
                     b[i].vy -= dy / d * POCK_PULL * dt;
@@ -1112,7 +1112,7 @@ static void resolve(void)
 
     overNote[0] = 0;
     tmNow = tmArmed && tmSnap; tmArmed = 0;
-    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
+    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f;
     if (tmNow) {                                      /* MESTRE DO TEMPO: qualquer jogada pode ser desfeita */
         const char *nt = pocketed[0] ? "A BRANCA CAIU NA CACAPA" : (pocketed[8] ? "A BOLA 8 CAIU NA CACAPA" :
                          (firstHit < 0 ? "NAO TOCOU EM NENHUMA BOLA" : "A JOGADA TERMINOU"));
@@ -3549,7 +3549,7 @@ static void drawCueMenu(void)
         { "A BRANCA SAI COMO UMA BALA: +50% DE VELOCIDADE", "E SEM EFEITO. O TACO DISPARA COM UM CLARAO." },
         { "O GELO COBRE A MESA: AS BOLAS DESLIZAM MUITO", "MAIS LONGE (QUASE SEM ATRITO) NESTA TACADA." },
         { "DEPOIS DA BATIDA, A BOLA ALVO E PUXADA PARA", "A CACAPA MAIS PROXIMA." },
-        { "PERDOA UMA FALTA (INCLUSIVE SUICIDIO) E DEVOLVE", "A BOLA 8. SE NAO FALTAR, O PRESENTE NAO GASTA." },
+        { "TODAS AS CACAPAS FICAM 45% MAIORES NESTA TACADA,", "COM ARO DOURADO. A CHAMINE DO PAPAI NOEL!" },
         { "TRAVA A MIRA NA MELHOR TACADA (O DE NOVO TROCA", "A OPCAO), MOSTRA O CAMINHO E A FORCA IDEAL." },
         { "A BOLA ALVO EXPLODE E EMPURRA PARA LONGE", "AS BOLAS QUE ESTAO PERTO DELA." },
         { "+20% DE FORCA E A BRANCA PARA NA HORA AO", "BATER NA BOLA (TACADA CORTADA)." },
@@ -4790,6 +4790,14 @@ static void drawScene(void)
                 if (tw2 > 0.2f) { line(sx - 3, sy, sx + 3, sy, CA(235, 248, 255, 0x60)); line(sx, sy - 3, sx, sy + 3, CA(235, 248, 255, 0x60)); }
             }
         }
+        if (pockMul > 1.0f) {                                          /* CHAMINE: aros dourados nas cacapas maiores */
+            int pk;
+            for (pk = 0; pk < 6; pk++) {
+                float pr = PRC[pk] * pockMul, pu = 1.5f * sinf(menuT * 0.25f + pk);
+                ringN(PX[pk], PY[pk], pr + pu, 2.4f, 32, CA(255, 214, 80, 0x90));
+                ringN(PX[pk], PY[pk], pr * 0.7f, 1.4f, 28, CA(255, 245, 190, 0x50));
+            }
+        }
         if (abilKind == AB_SUGAR && abilT > 0 && firstHit > 0 && b[firstHit].in)
             ringN(b[firstHit].x, b[firstHit].y, R + 4.0f + 2.0f * sinf(menuT * 0.3f), 1.8f, 20, CA(255, 40, 70, 0x90));
         if (abilFx > 0 && abilKind != AB_NONE) {
@@ -5294,7 +5302,7 @@ int main(int argc, char *argv[])
                     memcpy(b, tmB, sizeof(b)); grp[0] = tmGrp[0]; grp[1] = tmGrp[1];
                     memset(pocketed, 0, sizeof(pocketed)); memset(fallT, 0, sizeof(fallT));
                     firstHit = -1; b[0].vx = b[0].vy = 0; pwr = 0; charging = 0; abilArm = 0; hackOn = 0;
-                    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; abilForgive = 0;
+                    abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0;
                     overNote[0] = 0; botTimer = 0; botPlanned = 0; state = S_AIM;
                     setmsg("VOLTOU NO TEMPO! JOGUE DE NOVO");
                 } else {                                            /* NAO: a jogada vale; resolve normalmente */
