@@ -68,11 +68,12 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_ESCUDO, AB_VIDAS, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "ESCUDO", "NOVA VIDA" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
-static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1;   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
+static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
+static int grinchPend;                                /* poder que o Grinch tem agora (0 = ainda nao sorteado); aparece na tela antes de usar */
 static float fricMul = 1.0f, pockMul = 1.0f, hackPow, fxX, fxY;   /* pockMul: CHAMINE aumenta as cacapas */
 static float hCandAng[10], hCandPow[10], hCandSc[10];   /* HACK: melhores tacadas encontradas (a mais facil primeiro) */
 static int hCandN, hCandI;
@@ -234,7 +235,7 @@ static CueDef CUES[NCUES] = {
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, MARRETA BIONICA-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
-                                   [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_ESCUDO, [29] = AB_VIDAS };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
+                                   [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
 #define GAME_VERSION "2.3.0"
 #define GAME_AUTHOR  "DIEGO REIS"
@@ -695,7 +696,7 @@ static void newGame(int m)
     spinSel = spinCur = 0; barDir = 1.0f;
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
-    abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; hackOn = 0; abilCD[0] = abilCD[1] = 0;
+    abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
@@ -767,20 +768,21 @@ static int grinchPick(void)
 {
     static const int KIND[2] = { AB_SUGAR, AB_BAGUNCA };
     int w[2] = { 10, 10 }, i, k, alive = 0, oppN, og = grp[1 - cur];
-    char tb[64];
     if (og < 0 && grp[cur] >= 0 && grp[cur] < 2) og = 1 - grp[cur];
     for (k = 1; k < 16; k++) if (b[k].in) alive++;
     oppN = og >= 0 ? countGroup(og) : alive;
     if (alive <= 6) w[0] += 25; else if (alive <= 9) w[0] += 8;
     if (oppN <= 2) w[1] += 30; else if (oppN >= 5) w[1] += 10;
     i = ((int)(rnd() % (unsigned)(w[0] + w[1])) < w[0]) ? 0 : 1;
-    sprintf(tb, "GRINCH SORTEOU: %s!", GR_NAME[i]);
-    setmsg(tb);
     return KIND[i];
 }
+static void grinchEnsure(void) { if (!grinchPend) grinchPend = grinchPick(); }
+static const char *grinchName(void) { grinchEnsure(); return GR_NAME[grinchPend == AB_SUGAR ? 0 : 1]; }
 
 static void shoot(float p)
 {
+    int cursedNow = curse[cur];                       /* MALDICAO do mago: vale so para esta tacada */
+    curse[cur] = 0;
     tmSnap = 0; tmArmed = 0;
     if (abilArm && curAb() == AB_TEMPO) {             /* guarda a mesa antes da tacada */
         memcpy(tmB, b, sizeof(b)); tmGrp[0] = grp[0]; tmGrp[1] = grp[1];
@@ -799,6 +801,7 @@ static void shoot(float p)
         else if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
         else if (ch < 0.25f) setmsg("POUCO GIZ! PASSE GIZ NO TACO");
         a += dev * miss;
+        if (cursedNow) a += ((int)(rnd() % 2001) - 1000) / 1000.0f * 0.02f;     /* maldicao: a mira treme */
         chalk[cur] -= 0.035f + 0.03f * fabsf(spinSel) + 0.02f * fabsf(spinV) + (jumpArm ? 0.03f : 0.0f);   /* gasta devagar: ~28 tacadas normais */
         if (chalk[cur] < 0.0f) chalk[cur] = 0.0f;
     }
@@ -811,7 +814,11 @@ static void shoot(float p)
     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; hackOn = 0; grinchOn = 0; abilExtra = 0; rastT = -1;
     if (abilArm && curAb() != AB_NONE) {                 /* habilidade do taco de personagem */
         abilKind = curAb(); abilCD[cur] = AB_COOL; abilFx = 36; fxX = hitX; fxY = hitY;
-        if (abilKind == AB_GRINCH) { abilKind = grinchPick(); grinchOn = 1; }   /* vira um dos 5 poderes */
+        if (abilKind == AB_GRINCH) {                      /* vira o poder que ja estava sorteado e mostrado na tela */
+            char tb[64];
+            grinchEnsure(); abilKind = grinchPend; grinchOn = 1;
+            sprintf(tb, "GRINCH USOU: %s!", GR_NAME[abilKind == AB_SUGAR ? 0 : 1]); setmsg(tb);
+        }
         switch (abilKind) {
         case AB_TIRO:     b[0].vx *= 1.5f; b[0].vy *= 1.5f; spinCur = 0.0f; spinVCur = 0.0f; jumpArm = 0; break;
         case AB_CORTE:    b[0].vx *= 1.2f; b[0].vy *= 1.2f; break;
@@ -820,13 +827,13 @@ static void shoot(float p)
         case AB_CHAMINE:  pockMul = 1.45f; break;
         case AB_MAREALTA: marePush(); break;                /* POSEIDON: onda empurra as bolas para as cacapas */
         case AB_IMA:      imaPull(); break;                 /* ROBO: puxa as suas bolas para as cacapas */
-        case AB_ESCUDO:   abilForgive = 1; break;           /* MAGO: perdoa a falta da tacada */
+        case AB_MALDICAO: curse[1 - cur] = 1; break;        /* MAGO: amaldicoa a proxima tacada do adversario */
         case AB_VIDAS:    abilExtra = 1; break;             /* GATO: joga de novo se nao encacapar */
         case AB_BAGUNCA:  bagunca(); break;                 /* CHAMINE: cacapas bem maiores nesta tacada */
         default: break;
         }
     }
-    abilArm = 0;
+    abilArm = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
     if (jumpArm && !isBot()) {                        /* pulo: a branca sobe e passa por cima das outras bolas */
         b[0].vz = (150.0f + 90.0f * p) * cueJumpMul(hitCue);
         b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
@@ -1104,7 +1111,7 @@ static void endTurn(int foul, int ownPocket)
         if (!ownPocket && !kept) cur = 1 - cur;
         state = S_AIM;
         sprintf(buf, kept == 1 ? "NOVA VIDA! %s JOGA DE NOVO" : (kept == 2 ? "NOVA VIDA GUARDADA! VEZ DE %s" :
-                forgiven ? "FALTA PERDOADA! VEZ DE %s" : (saved ? "ESCUDO GUARDADO! VEZ DE %s" : "VEZ DE %s")), pname(cur));
+                forgiven ? "FALTA PERDOADA! VEZ DE %s" : (saved ? "PRESENTE GUARDADO! VEZ DE %s" : "VEZ DE %s")), pname(cur));
         setmsg(buf);
     }
 }
@@ -1354,16 +1361,37 @@ static void botPlan(void)
     if (botPow < 0.25f) botPow = 0.25f;
     if (breakShot) botPow = 1.0f;
     if (botPow > 1.0f) botPow = 1.0f;
-    botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * BOT_ERR[botLevel];
+    botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f));   /* maldicao: o bot erra mais */
 }
 
 /* ---------- entrada ---------- */
+/* analogico: sticks de -1 a 1 (zona morta radial); stX/stY = esquerdo, rsX/rsY = direito; anX.. = versao suavizada usada no jogo */
+static float stX[2], stY[2], rsX[2], rsY[2], anX, anY, anRX, anRY;
+static int padAnalogSet[2];
+
+static void stickDead(int hx, int vy, float *ox, float *oy)
+{
+    float x = (hx - 128) / 128.0f, y = (vy - 128) / 128.0f, m = sqrtf(x * x + y * y);
+    if (m < 0.2f) { *ox = 0.0f; *oy = 0.0f; return; }
+    m = (m > 1.0f ? 1.0f : m);
+    { float k = (m - 0.2f) / 0.8f / sqrtf(x * x + y * y); *ox = x * k; *oy = y * k; }
+}
+
 static u32 readpad(int port)
 {
     struct padButtonStatus s;
     int st = padGetState(port, 0);
-    if (st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1) return 0;
+    stX[port] = stY[port] = rsX[port] = rsY[port] = 0.0f;
+    if (st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1) { padAnalogSet[port] = 0; return 0; }
+    if (!padAnalogSet[port] && st == PAD_STATE_STABLE) {          /* liga o modo analogico (o jogador ainda pode trocar no botao ANALOG) */
+        padAnalogSet[port] = 1;
+        if (padInfoMode(port, 0, PAD_MODETABLE, -1) > 0) padSetMainMode(port, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_UNLOCK);
+    }
     if (padRead(port, 0, &s) == 0) return 0;
+    if ((s.mode >> 4) == PAD_TYPE_DUALSHOCK) {
+        stickDead(s.ljoy_h, s.ljoy_v, &stX[port], &stY[port]);
+        stickDead(s.rjoy_h, s.rjoy_v, &rsX[port], &rsY[port]);
+    }
     return 0xffff ^ s.btns;
 }
 
@@ -3234,6 +3262,7 @@ static void drawPlayerPanel(int pl)
     rect(ax1, amy, ax2, y2, pl == 0 ? COL(34,66,112) : COL(110,44,48));
     rect(ax1, y1, ax2, y1 + 1.0f, CA(255, 255, 255, 0x30));
     drawChar(charSel[pl], (ax1 + ax2) * 0.5f, y1 + 32.0f, 0.48f, 0, menuT, 0);   /* avatar do personagem */
+    if (curse[pl]) frameR(ax1 - 4.0f, y1 - 4.0f, ax2 + 4.0f, y2 + 4.0f, 2.0f, ((menuT / 10) & 1) ? CA(215, 150, 255, 0x90) : CA(150, 70, 230, 0x90));   /* MALDICAO: aura roxa */
     rect(ax1, y2 - 10.0f, ax2, y2, CA(0, 0, 0, 0x14));                           /* sombra na base da moldura */
 
     if (act && timeSel && mode == 1 && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
@@ -3350,11 +3379,13 @@ static void drawHUD(void)
         char ab[40];
         u64 ac;
         if (hackOn)                 { sprintf(ab, "HACK %d/%d  O: OUTRA", hCandI + 1, hCandN); ac = COL(0,255,220); }
-        else if (abilArm)           { sprintf(ab, "%s ARMADO!", AB_NAME[curAb()]); ac = COL(110,255,140); }
+        else if (abilArm)           { sprintf(ab, "%s ARMADO!", curAb() == AB_GRINCH ? grinchName() : AB_NAME[curAb()]); ac = COL(110,255,140); }
         else if (abilCD[cur] > 0)   { sprintf(ab, "%s: %d", AB_NAME[curAb()], abilCD[cur]); ac = COL(150,155,170); }
-        else                        { sprintf(ab, "O: %s", AB_NAME[curAb()]); ac = COL(255,230,60); }
+        else                        { sprintf(ab, "O: %s", curAb() == AB_GRINCH ? grinchName() : AB_NAME[curAb()]); ac = COL(255,230,60); }
         text(590 - tw(0.3f, ab), 408, 0.3f, ac, ab);
     }
+    if (state == S_AIM && curse[cur])                                  /* MALDICAO sobre quem esta mirando */
+        text(590 - tw(0.3f, "AMALDICOADO!"), 398, 0.3f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), "AMALDICOADO!");
 }
 
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
@@ -3995,16 +4026,16 @@ static u64 rarCol(int r)
     default: return COL(255,215,70);
     }
 }
-/* LENDARIO: Grinch | MISTICO: Vampiro, Mago e Mestre do Tempo | EPICO: Hacker, Papai Noel e Poseidon |
+/* LENDARIO: Grinch | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker e Poseidon |
    SUPER RARO: Viking, Ninja, Chapolin e Pirata | RARO: Pinguim, Robo, Alien, Gato e Cowboy */
-static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 2, 3, 4, 2 };
+static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 3, 3, 4, 2 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 #define NCAT_SEC 7
-static const int CATH[NCAT_SEC] = { 0, 8, 14, 19, 23, 27, 29 };     /* 1a ficha de cada categoria */
+static const int CATH[NCAT_SEC] = { 0, 8, 14, 19, 23, 26, 29 };     /* 1a ficha de cada categoria */
 static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO" };
 static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27, 29,   11, 10, 6, 17,   16, 15, 18, 25,   14, 28,   24 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27, 29,   11, 10, 6, 17,   16, 18, 25,   14, 15, 28,   24 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
@@ -4025,12 +4056,12 @@ static void drawCueMenu(void)
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
         { "MARRETA BIONICA! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
         { "DEPOIS DE QUALQUER TACADA, VOCE PODE VOLTAR NO", "TEMPO E REFAZER A JOGADA - SE QUISER." },
-        { "PODER SORTEADO CONFORME A MESA: PUXAO VERDE (A BOLA", "ALVO VAI PARA A CACAPA) OU BAGUNCA (SACODE AS BOLAS DO ADVERSARIO)." },
+        { "PODER SORTEADO CONFORME A MESA (PUXAO VERDE OU BAGUNCA) E", "MOSTRADO ANTES. NAO USOU NA TACADA? SORTEIA OUTRO." },
         { "", "" },
         { "UMA ONDA GIGANTE EMPURRA TODAS AS BOLAS DA MESA", "NA DIRECAO DA CACAPA MAIS PROXIMA (FORCA FRACA)." },
         { "A BRANCA CURVA SOZINHA E PERSEGUE A BOLA CERTA MAIS", "PERTO DA SUA MIRA, ATE A PRIMEIRA BATIDA." },
         { "AS SUAS BOLAS SAO PUXADAS PARA A CACAPA MAIS PROXIMA", "(FORCA FRACA). MESA ABERTA: TODAS, MENOS A 8." },
-        { "PERDOA A FALTA DESTA TACADA (ATE A BRANCA NA CACAPA).", "SEM FALTA, A HABILIDADE NAO GASTA." },
+        { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE A", "BARRA DE FORCA ANDA 2X MAIS RAPIDO E A MIRA TREME." },
         { "SE NAO ENCACAPAR E NAO FOR FALTA, VOCE JOGA DE NOVO.", "SE ENCACAPAR, A HABILIDADE NAO GASTA." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
@@ -5281,8 +5312,6 @@ static void drawScene(void)
             ringN(b[rastT].x, b[rastT].y, R + 4.0f + rp, 1.8f, 20, CA(110, 255, 150, 0x90));
             line(b[0].x, b[0].y, b[rastT].x, b[rastT].y, CA(110, 255, 150, 0x30));
         }
-        if (abilForgive == 1 && b[0].in)                                                /* MAGO: escudo em volta da branca */
-            ringN(b[0].x, b[0].y, R + 3.5f + 1.2f * sinf(menuT * 0.25f), 1.6f, 6, CA(190, 150, 255, 0x80));
         if (abilKind == AB_SUGAR && abilT > 0 && firstHit > 0 && b[firstHit].in)
             ringN(b[firstHit].x, b[firstHit].y, R + 4.0f + 2.0f * sinf(menuT * 0.3f), 1.8f, 20, CA(255, 40, 70, 0x90));
         if (abilFx > 0 && abilKind != AB_NONE) {
@@ -5313,9 +5342,14 @@ static void drawScene(void)
                         ringN(b[k2].x, b[k2].y, R + 2.0f + fl * 12.0f, 1.8f, 16, CA(255, 200, 60, (int)(0x78 * fl)));
                         ringN(b[k2].x, b[k2].y, R + 2.0f + fl * 6.0f, 1.2f, 12, CA(150, 200, 255, (int)(0x60 * fl)));
                     }
-            } else if (abilKind == AB_ESCUDO) {                        /* MAGO: o escudo se abre em volta da branca */
-                ringN(fxX, fxY, R + 4.0f + u * 22.0f, 2.4f, 6, CA(190, 150, 255, (int)(0x78 * fl)));
-                ringN(fxX, fxY, R + 2.0f + u * 12.0f, 1.4f, 6, CA(255, 230, 140, (int)(0x60 * fl)));
+            } else if (abilKind == AB_MALDICAO) {                      /* MAGO: aneis roxos giram e se abrem em volta da branca */
+                int k3;
+                ringN(fxX, fxY, R + 4.0f + u * 30.0f, 2.4f, 8, CA(190, 90, 255, (int)(0x78 * fl)));
+                ringN(fxX, fxY, R + 2.0f + u * 16.0f, 1.4f, 8, CA(90, 20, 140, (int)(0x70 * fl)));
+                for (k3 = 0; k3 < 6; k3++) {
+                    float aa = k3 * 1.0472f + u * 4.0f, rr = R + 6.0f + u * 26.0f;
+                    discN(fxX + cosf(aa) * rr, fxY + sinf(aa) * rr, 2.0f * fl + 0.6f, CA(220, 150, 255, (int)(0x80 * fl)), 6);
+                }
             } else if (abilKind == AB_VIDAS) {                         /* GATO: uma patinha rosa sobe da branca */
                 float py2 = fxY - 12.0f - u * 14.0f;
                 int t2;
@@ -5644,7 +5678,7 @@ static void useAbility(void)
     }
     abilArm = !abilArm;
     if (abilArm) SFX(SFX_ABIL, 70);
-    sprintf(tb, abilArm ? "HABILIDADE PRONTA: %s" : "HABILIDADE CANCELADA: %s", AB_NAME[ab]);
+    sprintf(tb, abilArm ? "HABILIDADE PRONTA: %s" : "HABILIDADE CANCELADA: %s", ab == AB_GRINCH ? grinchName() : AB_NAME[ab]);
     setmsg(tb);
 }
 
@@ -5695,6 +5729,22 @@ int main(int argc, char *argv[])
         if (paused) in = p0 | p1;
         else if (state == S_AIM || state == S_ROLL || state == S_PLACE || state == S_TAKE || state == S_STRIKE)
             in |= p0 & PAD_START;
+        {   /* ANALOGICO: o direcional continua valendo. Stick esquerdo = mira / mover a bola / menus; direito = efeito */
+            int rd1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET);
+            int all = paused || mode == 1 || state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_OPTS ||
+                      state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET;
+            float jx = 0.0f, jy = 0.0f, kx = 0.0f, ky = 0.0f;
+            if (all || cur == 0) { jx = stX[0]; jy = stY[0]; kx = rsX[0]; ky = rsY[0]; }
+            if (all && rd1)      { jx += stX[1]; jy += stY[1]; kx += rsX[1]; ky += rsY[1]; }
+            if (jx > 1.0f) jx = 1.0f; if (jx < -1.0f) jx = -1.0f; if (jy > 1.0f) jy = 1.0f; if (jy < -1.0f) jy = -1.0f;
+            if (kx > 1.0f) kx = 1.0f; if (kx < -1.0f) kx = -1.0f; if (ky > 1.0f) ky = 1.0f; if (ky < -1.0f) ky = -1.0f;
+            if (paused || (state != S_AIM && state != S_PLACE))      /* fora da mira e da bola na mao o stick vira direcional */
+                in |= (jx < -0.6f ? PAD_LEFT : 0) | (jx > 0.6f ? PAD_RIGHT : 0) | (jy < -0.6f ? PAD_UP : 0) | (jy > 0.6f ? PAD_DOWN : 0);
+            anX += (jx - anX) * 0.4f;  if (jx == 0.0f && fabsf(anX) < 0.02f) anX = 0.0f;      /* suaviza: a mira desliza */
+            anY += (jy - anY) * 0.4f;  if (jy == 0.0f && fabsf(anY) < 0.02f) anY = 0.0f;
+            anRX += (kx - anRX) * 0.4f; if (kx == 0.0f && fabsf(anRX) < 0.02f) anRX = 0.0f;
+            anRY += (ky - anRY) * 0.4f; if (ky == 0.0f && fabsf(anRY) < 0.02f) anRY = 0.0f;
+        }
         pressed = in & ~prev;
         prev = in;
         {                                                 /* sons de menu */
@@ -5761,6 +5811,7 @@ int main(int argc, char *argv[])
                 else {
                 if (in & PAD_LEFT)  ang -= 0.025f;
                 if (in & PAD_RIGHT) ang += 0.025f;
+                if (anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f;   /* analogico: quanto mais inclina, mais gira */
                 if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
                     float st;                                   /* ajuste fino: comeca bem devagar e so acelera um pouco segurando */
                     if (fineHold < 600) fineHold++;
@@ -5772,6 +5823,8 @@ int main(int argc, char *argv[])
                 if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
                 if (in & PAD_UP)   { spinV += 0.03f; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */
                 if (in & PAD_DOWN) { spinV -= 0.03f; if (spinV < -1.0f) spinV = -1.0f; }   /* puxa */
+                if (anRX != 0.0f) { spinSel += anRX * 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; if (spinSel > 1.0f) spinSel = 1.0f; }   /* stick direito: efeito */
+                if (anRY != 0.0f) { spinV -= anRY * 0.03f; if (spinV < -1.0f) spinV = -1.0f; if (spinV > 1.0f) spinV = 1.0f; }
                 }
                 if (!charging) {
                     if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
@@ -5787,7 +5840,7 @@ int main(int argc, char *argv[])
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
                 } else {
-                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
+                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f) * (curse[cur] ? 2.0f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
                     if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
                     if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
                     if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
@@ -5870,6 +5923,7 @@ int main(int argc, char *argv[])
                 if (in & PAD_RIGHT) b[0].x += 2;
                 if (in & PAD_UP)    b[0].y -= 2;
                 if (in & PAD_DOWN)  b[0].y += 2;
+                b[0].x += anX * 2.6f; b[0].y += anY * 2.6f;           /* analogico: movimento suave */
                 if (b[0].x < TX0+R) b[0].x = TX0+R;
                 if (b[0].x > TX1-R) b[0].x = TX1-R;
                 if (b[0].y < TY0+R) b[0].y = TY0+R;

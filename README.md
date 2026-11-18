@@ -91,6 +91,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - START: pausa o jogo (veja abaixo)
 - SELECT: abre o menu de tacos (Esq/Dir escolhe, X equipa, O ou SELECT volta)
 - Bola na mão: direcional move a bola branca, X confirma
+- **Analógico** (sugestão dos jogadores): o jogo liga o modo analógico do controle sozinho (o botão ANALOG ainda liga/desliga) e o direcional continua funcionando. **Stick esquerdo**: gira a mira (quanto mais inclina, mais rápido; perto do centro o ajuste é bem fino e o movimento é suavizado), move a bola branca na bola na mão e navega nos menus. **Stick direito**: efeito (esquerda/direita = lateral, cima = rola, baixo = puxa). L1/R1 continuam sendo o ajuste de precisão
 
 ## Efeito e pulo (novo na 1.6)
 - **Efeito lateral (L2/R2)**: a bola branca curva no caminho e, quando bate na tabela, o efeito também muda o ângulo do rebote
@@ -102,13 +103,13 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 ## Raridade dos personagens
 Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
 - **LENDÁRIO**: Grinch
-- **MÍSTICO**: Vampiro, Mago e Mestre do Tempo
-- **ÉPICO**: Hacker, Papai Noel e Poseidon
+- **MÍSTICO**: Vampiro, Mago, Papai Noel e Mestre do Tempo
+- **ÉPICO**: Hacker e Poseidon
 - **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
 - **RARO**: Pinguim, Robô, Alien, Gato e Cowboy
 
 ## Kits dos personagens (taco + habilidade + mesa)
-Novo combo pack **GRINCH** (personagem + taco + mesa), o único **LENDÁRIO** (categoria própria no catálogo de tacos). O taco sorteia um poder quando você usa a habilidade (O na mira), com o sorteio puxado pela situação da mesa. Recarrega em 3 tacadas e aparece "GRINCH SORTEOU: ..." na tela:
+Novo combo pack **GRINCH** (personagem + taco + mesa), o único **LENDÁRIO** (categoria própria no catálogo de tacos). O poder é **sorteado antes** (puxado pela situação da mesa) e **aparece na tela** ("O: PUXÃO VERDE" ou "O: BAGUNÇA"), então você decide se usa (O na mira). **Se tacar sem usar, o próximo poder é sorteado de novo** na jogada seguinte. Recarrega em 3 tacadas:
 - **Puxão verde**: depois da batida, a bola alvo é puxada para a caçapa mais próxima (mais provável com poucas bolas na mesa)
 - **Bagunça**: as bolas do adversário levam um empurrão em direções aleatórias e ficam espalhadas (mais provável quando o adversário está perto de ganhar ou tem muitas bolas)
 
@@ -125,7 +126,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Poseidon   | Tridente   | **MARÉ ALTA**: uma onda gigante empurra **todas as bolas** (menos a branca) na direção da caçapa mais próxima de cada uma, com força fraca: só as bolas que já estão perto de uma caçapa chegam lá | Abismo |
 | Alien      | Ovni       | **RASTREIO**: a branca curva sozinha e **persegue a bola certa** mais perto da sua mira (a sua bola; mesa aberta: qualquer uma, menos a 8), até a primeira batida | Galáxia |
 | Robô       | Robô       | **ÍMÃ**: as **suas bolas** são puxadas para a caçapa mais próxima de cada uma, com força fraca (mesa aberta: todas, menos a 8) | Neon |
-| Mago       | Varinha    | **ESCUDO**: um escudo roxo **perdoa a falta** da tacada, até a branca na caçapa (o adversário não ganha bola na mão). Se não houver falta, a habilidade **não gasta** | Noite Lua |
+| Mago       | Varinha    | **MALDIÇÃO**: amaldiçoa o adversário: na **próxima tacada dele** a barra de força anda **2x mais rápido** e a mira **treme** um pouco (o bot também erra mais). O painel do amaldiçoado ganha uma aura roxa e aparece "AMALDIÇOADO!" | Noite Lua |
 | Gato       | Gato       | **NOVA VIDA**: se a tacada **não encaçapar** e não for falta, você **joga de novo**. Se encaçapar, a habilidade **não gasta** | Rosa |
 | Grinch     | Grinch     | **GRINCH**: ao apertar O na mira, a habilidade é **sorteada** entre Puxão verde e Bagunça conforme a situação da mesa (veja abaixo da tabela) | Grinch |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
