@@ -40,6 +40,7 @@ IRX(usbhdfsd);
 typedef struct { char path[PATH_LEN]; char name[NAME_LEN]; } Track;
 
 static Track tr[MUS_MAX];
+static int idleRun, budget;
 static int dbgT, dbgM, dbgN, dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
 static int nTr, cur = -1, state, audioOK, volume = 8, enabled = 1;
 static int scanTries, scanWait = 120, scanDone, wantAuto = 1, ending, failStreak, toastT;
@@ -367,10 +368,14 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
 {
     int avail, n, want;
     if (dbgT++ % 300 == 0 && dbgM++ < 6) printf("pool8: musicUpdate state=%d nTr=%d voices=%d fmtSet=%d\n", state, nTr, nVoice, fmtSet);
-    if (!nVoice) return;
+    if (!nVoice) { idleRun = 0; return; }
     if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { if (dbgN++ < 5) printf("pool8: ensureFmt falhou\n"); return; }
     avail = audsrv_available();
-    want = 4096;                                  /* nao usa audsrv_queued(): em alguns audsrv/PCSX2 ele devolve o mesmo valor de available */
+    /* ritmo de reproducao: a cada quadro entra so o que o som consome em 1/60 s (44100 Hz * 4 bytes / 60 = 2940).
+       nao usa audsrv_queued(): em alguns audsrv/PCSX2 ele devolve o mesmo valor de available */
+    if (!idleRun) { idleRun = 1; budget = 2940 * 3; }          /* primeira entrega: colchao de ~50 ms */
+    else { budget += 2940; if (budget > 2940 * 4) budget = 2940 * 4; }
+    want = budget;
     n = avail < want ? avail : want;
     if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
     n -= n % (outCh * (outBits / 8));
@@ -379,6 +384,7 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     FlushCache(0);
     {
         int r = audsrv_play_audio((const char *)mixbuf, n);
+        budget -= n;
         if (dbgN++ < 8) printf("pool8: sfxIdle avail=%d want=%d n=%d voices=%d play=%d\n", avail, want, n, nVoice, r);
     }
 }
