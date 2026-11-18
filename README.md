@@ -5,6 +5,14 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 2.3.0
 
+## Visual dos menus (novo)
+Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
+- **Faixa de título** dourada no topo, com brilho que corre e enfeites nos lados
+- **Rodapé com os botões** do controle (X, O, START, SELECT, direcional, L1/R1) e o que cada um faz
+- **Menu inicial**: cartões com ícone para cada modo (JOGAR, TORNEIO, PLAYER DE MÚSICAS, OPÇÕES) e um **painel de detalhes** ao lado, que mostra o que tem em cada modo (e quantas músicas foram encontradas)
+- **Configurar partida / torneio**: barra de 4 etapas com bolinhas numeradas (etapa atual em dourado, concluídas em verde)
+- **Opções** em grupos (**AUDIO**, **VISUAL**, **SOBRE**): chaves liga/desliga, volume em barras e uma caixa com a descrição da opção selecionada
+
 ## Menu inicial (animado)
 - MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
@@ -106,7 +114,8 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 
 ## Raridade dos personagens
 Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
-- **LENDÁRIO**: Grinch e Coveiro
+- **ULTRA LENDÁRIO** (nova raridade, a mais alta; o nome muda de cor em arco-íris): Coveiro
+- **LENDÁRIO**: Grinch
 - **MÍSTICO**: Vampiro, Mago, Papai Noel e Mestre do Tempo
 - **ÉPICO**: Hacker e Poseidon
 - **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
@@ -242,7 +251,7 @@ Gera `pool8.elf` (requer PS2SDK e gsKit; rode no PCSX2 ou no PS2).
 O player de músicas usa audsrv, fileXio, USB (BDM) e o decodificador MP3 minimp3 (domínio público, já incluso em `minimp3.h`). Os módulos `.irx` do PS2SDK são embutidos no `.elf` pelo Makefile.
 Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
-## Coveiro (lendário) e mesa Cemitério
+## Coveiro (ultra lendário) e mesa Cemitério
 
 Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
