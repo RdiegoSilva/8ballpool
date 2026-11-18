@@ -40,7 +40,7 @@ IRX(usbhdfsd);
 typedef struct { char path[PATH_LEN]; char name[NAME_LEN]; } Track;
 
 static Track tr[MUS_MAX];
-static int dbgN, dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
+static int dbgT, dbgM, dbgN, dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
 static int nTr, cur = -1, state, audioOK, volume = 8, enabled = 1;
 static int scanTries, scanWait = 120, scanDone, wantAuto = 1, ending, failStreak, toastT;
 static char elfDir[PATH_LEN], srcDir[PATH_LEN];
@@ -366,6 +366,7 @@ void sfxPlay(int id, int vol)
 static void sfxIdle(void)                         /* sem musica tocando: manda so os efeitos */
 {
     int avail, n, want;
+    if (dbgT++ % 300 == 0 && dbgM++ < 6) printf("pool8: musicUpdate state=%d nTr=%d voices=%d fmtSet=%d\n", state, nTr, nVoice, fmtSet);
     if (!nVoice) return;
     if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { if (dbgN++ < 5) printf("pool8: ensureFmt falhou\n"); return; }
     avail = audsrv_available();
@@ -373,7 +374,7 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     n = avail < want ? avail : want;
     if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
     n -= n % (outCh * (outBits / 8));
-    if (n <= 0) return;
+    if (n <= 0) { if (dbgN++ < 8) printf("pool8: sfxIdle sem espaco avail=%d queued=%d want=%d\n", avail, audsrv_queued(), want); return; }
     mixOut(mixbuf, NULL, n, 0);
     FlushCache(0);
     {
