@@ -208,7 +208,7 @@ static int openWav(void)                         /* le o cabecalho; 1 = ok */
 #define IDLE_QUEUE 8192                          /* sem musica: mantem so ~45 ms de audio na fila (efeito responde rapido) */
 
 typedef struct { short *d; int len; } Sfx;
-typedef struct { const short *d; int len, id, gain; unsigned pos; } Voice;
+typedef struct { const short *d; int len, id, gain, gl, gr, pr; unsigned pos; } Voice;   /* gl/gr: ganho esq/dir; pr: tom (256 = normal) */
 static Sfx   sfx[SFX_COUNT];
 static Voice vc[NVOICE];
 static int   nVoice, sfxBuilt;
@@ -278,6 +278,11 @@ static int build(int id)                         /* sintetiza o efeito (mono, 16
             break;
         }
         (void)lp2;
+        {   /* entrada/saida suaves (1 ms / 6 ms): sem estalo no comeco e no fim do efeito */
+            float fi = (float)i / (SFX_HZ * 0.001f), fo = (float)(n - 1 - i) / (SFX_HZ * 0.006f);
+            if (fi < 1.0f) v *= fi;
+            if (fo < 1.0f) v *= fo;
+        }
         if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
         o[i] = (short)(v * 30000.0f);
     }
@@ -329,9 +334,11 @@ static void mixOut(unsigned char *dst, const unsigned char *src, int nbytes, int
             a = v->d[idx]; b = ((int)idx + 1 < v->len) ? v->d[idx + 1] : 0;
             s = a + (((b - a) * (int)((v->pos & 0xFFFF) >> 1)) >> 15);      /* interpolacao linear */
             s = (s * v->gain) >> 8;
-            l += s; r += s;
-            v->pos += step;
+            l += (s * v->gl) >> 8; r += (s * v->gr) >> 8;
+            v->pos += (step * (unsigned)v->pr) >> 8;
         }
+        if (l > 22000) l = 22000 + ((l - 22000) >> 2); else if (l < -22000) l = -22000 + ((l + 22000) >> 2);   /* limitador suave */
+        if (r > 22000) r = 22000 + ((r - 22000) >> 2); else if (r < -22000) r = -22000 + ((r + 22000) >> 2);
         if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
         if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
         if (outBits == 16) {
@@ -361,7 +368,13 @@ void sfxPlay(int id, int vol)
         v = &vc[pick];
     } else v = &vc[nVoice++];
     v->d = sfx[id].d; v->len = sfx[id].len; v->id = id; v->pos = 0;
-    v->gain = vol * 2;                            /* 100 -> 200/256 (deixa folga para somar com a musica) */
+    v->gain = vol * 2;
+    {   /* variacao leve de tom e posicao: cada batida soa um pouco diferente */
+        int pit = 256, pan = 0;
+        if (id == SFX_HIT || id == SFX_BALL || id == SFX_CUSHION) { pit = 256 + (int)(rand() % 29) - 14; pan = (int)(rand() % 97) - 48; }
+        else if (id == SFX_POCKET) { pit = 256 + (int)(rand() % 17) - 8; pan = (int)(rand() % 65) - 32; }
+        v->pr = pit; v->gl = 256 - (pan > 0 ? pan : 0); v->gr = 256 + (pan < 0 ? pan : 0);
+    }                            /* 100 -> 200/256 (deixa folga para somar com a musica) */
 }
 
 static void sfxIdle(void)                         /* sem musica tocando: manda so os efeitos */
