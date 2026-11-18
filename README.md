@@ -81,7 +81,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - O placar zera ao desligar o jogo
 
 ## Controles
-- Esquerda/Direita: girar a mira | L1/R1: **ajuste de precisão**: ao apertar a mira anda bem devagar (um toque move só um pouquinho) e, se você segurar, acelera aos poucos até um limite baixo
+- Esquerda/Direita: girar a mira (começa fino e acelera aos poucos enquanto você segura) | L1/R1: **ajuste de precisão**: ao apertar a mira anda bem devagar (um toque move só um pouquinho) e, se você segurar, acelera aos poucos até um limite baixo
 - X: a barra de força (lado esquerdo) sobe e desce sozinha; X de novo dispara a tacada
 - O: cancelar a tacada | **O (na mira): usar a habilidade do taco de personagem**
 - QUADRADO: passar giz no taco (veja abaixo)

@@ -1,6 +1,6 @@
 /* 8 BALL REIS para PS2 - PS2SDK + gsKit + libpad
  * Modos: 1 jogador (vs BOT, 4 niveis) e 2 jogadores (dois controles).
- * Criador: Diego Reis | Versao 2.2.0
+ * Criador: Diego Reis | Versao 2.3.0
  * Controles na mira:  Esq/Dir = girar | L1/R1 = ajuste fino
  *                     X = a barra de forca (esquerda) sobe e desce sozinha,
  *                         X de novo = tacada | O = cancelar a tacada
@@ -95,7 +95,7 @@ static float spinSel, spinCur, spinK, barDir = 1.0f;   /* efeito e vai-e-vem da 
 static int   cueSel[2], cueMenuSel, cueRet, hitCue;    /* taco de cada jogador / menu */
 static float chalk[2] = { 1.0f, 1.0f }, cueChalk;      /* giz no taco (1 = cheio) e giz mostrado na ponta */
 static int   chalkAnim;                                /* animacao de passar giz (frames) */
-static int   fineHold;                                 /* tempo segurando L1/R1 (ajuste fino acelera devagar) */
+static int   fineHold, dpadHold;                                 /* tempo segurando L1/R1 (ajuste fino acelera devagar) */
 
 /* pulo e efeito vertical (v1.6) */
 #define JUMP_G     900.0f                          /* gravidade da bola no ar */
@@ -1032,7 +1032,7 @@ static int stepPhysics(float dt)
         if (!b[i].in) continue;
         if (b[i].z > 0.0f) { moving = 1; continue; }       /* no ar nao ha atrito */
         sp = sqrtf(b[i].vx*b[i].vx + b[i].vy*b[i].vy);
-        if (sp < 6.0f) { b[i].vx = b[i].vy = 0; continue; }
+        if (sp < 9.0f) { b[i].vx = b[i].vy = 0; continue; }
         s2 = sp * (1.0f - 0.6f * dt * fricMul) - 24.0f * dt * fricMul;
         if (sp < 40.0f) s2 -= 30.0f * dt * fricMul;     /* freio suave no final */
         if (s2 < 0) s2 = 0;
@@ -5809,8 +5809,12 @@ int main(int argc, char *argv[])
                 }
                 if (hackOn) { fineHold = 0; }                    /* HACK: mira, efeito e pulo travados */
                 else {
-                if (in & PAD_LEFT)  ang -= 0.025f;
-                if (in & PAD_RIGHT) ang += 0.025f;
+                if (((in & PAD_LEFT) != 0) != ((in & PAD_RIGHT) != 0)) {   /* direcional: comeca fino e acelera aos poucos */
+                    float ds;
+                    if (dpadHold < 60) dpadHold++;
+                    ds = 0.010f + 0.020f * (dpadHold > 24 ? 1.0f : dpadHold / 24.0f);
+                    ang += (in & PAD_RIGHT) ? ds : -ds;
+                } else dpadHold = 0;
                 if (anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f;   /* analogico: quanto mais inclina, mais gira */
                 if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
                     float st;                                   /* ajuste fino: comeca bem devagar e so acelera um pouco segurando */
