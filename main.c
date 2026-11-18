@@ -3552,6 +3552,7 @@ static void drawSpinIndicator(void)
 {
     const float cx = 36.0f, cy = 406.0f, r = 13.0f;
     float px = cx + spinSel * (r - 5.0f), py = cy - spinV * (r - 5.0f);
+    hbox(6, 387, 64, 445, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x70));          /* painel do efeito / pulo */
     discN(cx, cy, r + 2.8f, COL(22,26,38), 20);                       /* aro: escuro, filete claro, escuro */
     discN(cx, cy, r + 1.8f, COL(150,158,174), 20);
     discN(cx, cy, r + 0.9f, COL(30,34,46), 20);
@@ -3575,6 +3576,7 @@ static void drawChalkIndicator(void)
     float lv = chalk[cur];
     u64 fc;
     if (isBot()) return;
+    hbox(601, 391, 636, 445, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x70));       /* painel do giz */
     fc = lv > 0.5f ? COL(110,230,130) : (lv > 0.25f ? COL(245,215,70) : COL(240,80,70));
     rect(x + 2, y + 2, x + 26, y + 18, COL(20,40,90));                /* cubo de giz */
     rect(x, y, x + 24, y + 16, COL(60,120,225));
@@ -3696,6 +3698,14 @@ static void drawScoreBoard(void)
     text(334 + 9, 36, s, COL(255,125,120), buf);                           /* jogador 2: vermelho */
 }
 
+/* texto que encolhe para caber em maxw pixels */
+static void hudText(float x, float y, float sc, u64 c, const char *t, float maxw)
+{
+    float w = tw(sc, t);
+    if (w > maxw && w > 0.0f) sc *= maxw / w;
+    text(x, y, sc, c, t);
+}
+
 static void drawHUD(void)
 {
     float x;
@@ -3709,9 +3719,21 @@ static void drawHUD(void)
 
     /* barra inferior: mensagem + teclas + taco equipado */
     hbox(70, 396, 598, 443, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x70));
-    if (msgTimer > 0) {
+    rect(70, 396, 74, 443, cur == 0 ? COL(80,140,225) : COL(225,90,92));          /* faixa na cor de quem joga */
+    rect(74, 396, 598, 397, CA(255, 215, 60, 0x30));
+    rect(448, 401, 449, 438, CA(120, 130, 150, 0x40));                           /* divisoria: dicas | taco e poder */
+    if (msgTimer > 0) {                                                          /* linha de cima: mensagem */
+        float msc = 0.42f, mw = tw(msc, msg);
         msgTimer--;
-        text(334 - tw(0.42f, msg) * 0.5f, 401, 0.42f, COL(255,235,110), msg);
+        if (mw > 360.0f) msc *= 360.0f / mw;
+        text(259.0f - tw(msc, msg) * 0.5f, 401, msc, COL(255,235,110), msg);
+    } else if (state == S_AIM && curse[cur]) {                                   /* MALDICAO sobre quem esta mirando */
+        const char *ct = "AMALDICOADO: MIRA INVERTIDA!";
+        text(259.0f - tw(0.34f, ct) * 0.5f, 402, 0.34f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), ct);
+    } else {
+        char vt[40];
+        sprintf(vt, "VEZ DE %s", pname(cur));
+        text(259.0f - tw(0.34f, vt) * 0.5f, 402, 0.34f, COL(150,158,175), vt);
     }
 
     x = 80.0f;
@@ -3749,37 +3771,36 @@ static void drawHUD(void)
         text(x, 425, 0.4f, COL(170,176,190), "AGUARDE AS BOLAS PARAREM...");
     }
 
-    if (state == S_AIM || state == S_CUES) {
-        const CueDef *cd = &CUES[curCue()];
-        char buf[40];
-        sprintf(buf, "TACO: %s", cd->name);
-        rect(590 - tw(0.36f, buf) - 16, 424, 590 - tw(0.36f, buf) - 8, 432,
-             COL(cd->tip[0], cd->tip[1], cd->tip[2]));
-        text(590 - tw(0.36f, buf), 423, 0.36f, COL(205,210,220), buf);
-    }
-    if (state == S_AIM && !isBot() && curAb() != AB_NONE) {            /* indicador da habilidade */
-        char ab[40];
-        u64 ac;
-        if (hackOn)                 { sprintf(ab, "HACK %d/%d  O: OUTRA", hCandI + 1, hCandN); ac = COL(0,255,220); }
-        else if (curAb() == AB_COVEIRO && graveOpen && !abilArm) { sprintf(ab, "%s INDISPONIVEL  O: TROCAR", GV_NAME[graveSel]); ac = COL(255,120,110); }
-        else if (abilArm)           { sprintf(ab, "%s ARMADO!%s", abLabel(curAb()), curAb() == AB_COVEIRO ? " O: TROCAR" : ""); ac = COL(110,255,140); }
-        else if (abilCD[cur] > 0)   { sprintf(ab, "%s: %d", AB_NAME[curAb()], abilCD[cur]); ac = COL(150,155,170); }
-        else                        { sprintf(ab, "O: %s", abLabel(curAb())); ac = COL(255,230,60); }
-        text(590 - tw(0.3f, ab), 408, 0.3f, ac, ab);
-    }
+    /* coluna da direita: poder (em cima) e taco equipado (embaixo) */
     if (state == S_AIM && !isBot() && curAb() == AB_COVEIRO && abilCD[cur] == 0) {   /* mini seletor do Coveiro */
         static const char *SH[3] = { "ENTERRO", "COVA", "RESSUSC." };
         int k;
         for (k = 0; k < 3; k++) {
-            float x1 = 590.0f - 186.0f + k * 62.0f, y1 = 376.0f;
+            float x1 = 454.0f + k * 47.0f, y1 = 400.0f;
             int ok = graveWhy(k) == NULL, sel = graveOpen && graveSel == k;
-            rect(x1, y1, x1 + 60.0f, y1 + 13.0f, sel ? CA(20, 40, 28, 0x70) : CA(10, 14, 22, 0x60));
-            outlineRect(x1, y1, x1 + 60.0f, y1 + 13.0f, sel ? (ok ? COL(110,255,140) : COL(255,110,100)) : COL(80,88,100));
-            text(x1 + 30.0f - tw(0.24f, SH[k]) * 0.5f, y1 + 1.0f, 0.24f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH[k]);
+            rect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? CA(20, 50, 32, 0x80) : CA(14, 20, 34, 0x70));
+            outlineRect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? (ok ? COL(110,255,140) : COL(255,110,100)) : COL(80,88,100));
+            text(x1 + 22.5f - tw(0.2f, SH[k]) * 0.5f, y1 + 4.0f, 0.2f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH[k]);
         }
+    } else if (state == S_AIM && !isBot() && curAb() != AB_NONE) {                  /* indicador do poder */
+        char ab[40];
+        u64 ac;
+        if (hackOn)                 { sprintf(ab, "HACK %d/%d  O: OUTRA", hCandI + 1, hCandN); ac = COL(0,255,220); }
+        else if (curAb() == AB_COVEIRO && graveOpen && !abilArm) { sprintf(ab, "%s INDISPONIVEL", GV_NAME[graveSel]); ac = COL(255,120,110); }
+        else if (abilArm)           { sprintf(ab, "%s ARMADO!", abLabel(curAb())); ac = COL(110,255,140); }
+        else if (abilCD[cur] > 0)   { sprintf(ab, "%s: %d", AB_NAME[curAb()], abilCD[cur]); ac = COL(150,155,170); }
+        else                        { sprintf(ab, "O: %s", abLabel(curAb())); ac = COL(255,230,60); }
+        rect(454, 400, 594, 415, CA(14, 20, 34, 0x70));
+        outlineRect(454, 400, 594, 415, ac);
+        hudText(458.0f, 403.0f, 0.28f, ac, ab, 132.0f);
     }
-    if (state == S_AIM && curse[cur])                                  /* MALDICAO sobre quem esta mirando */
-        text(590 - tw(0.3f, "AMALDICOADO: MIRA INVERTIDA!"), 398, 0.3f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), "AMALDICOADO: MIRA INVERTIDA!");
+    if (state == S_AIM || state == S_CUES) {                                      /* taco equipado */
+        const CueDef *cd = &CUES[curCue()];
+        rect(454, 420, 594, 438, CA(14, 20, 34, 0x70));
+        outlineRect(454, 420, 594, 438, COL(80,88,100));
+        rect(458, 423, 464, 435, COL(cd->tip[0], cd->tip[1], cd->tip[2]));
+        hudText(470.0f, 425.0f, 0.34f, COL(215,220,230), cd->name, 120.0f);
+    }
 }
 
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
@@ -4713,7 +4734,7 @@ static void panel(float x1, float y1, float x2, float y2)
 /* ===== visual dos menus: titulo, rodape com botoes, pilulas e barras ===== */
 static void uiTitle(const char *t)                    /* faixa do topo com titulo dourado */
 {
-    float sc = 0.62f, w = tw(sc, t), x0 = 320.0f - w * 0.5f, sh = fmodf(menuT * 3.0f, 560.0f);
+    float sc = 0.62f, w = tw(sc, t) * 1.08f, x0 = 320.0f - w * 0.5f, sh = fmodf(menuT * 3.0f, 560.0f);
     u64 gd = COL(255, 205 + (int)(40 * sinf(menuT * 0.05f)), 60);
     rect(0, 0, 640, 34, CA(0, 0, 12, 0x58));
     rect(0, 34, 640, 36, CA(255, 205, 60, 0x58));
@@ -5302,20 +5323,15 @@ static void drawSetupScreen(void)
     else if (v[setSel] == SR_GO)
         hint = tourney ? "X OU START: ESCOLHER O NOME E COMECAR O TORNEIO   O: ETAPA ANTERIOR" : "X OU START: INICIAR   O: ETAPA ANTERIOR";
     else
-        hint = "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   L1/R1: ETAPA   O: VOLTAR";
-    textC(y2 + 10, 0.3f, COL(170,180,195), hint);
-    {
-        static const int fk[4] = { 6, 7, 8, 1 };
-        static const char *const fl[4] = { "ESCOLHER", "MUDAR", "ETAPA", "VOLTAR" };
-        uiFoot(4, fk, fl);
-    }
+        hint = "";
+    if (hint[0]) textC(y2 + 10, 0.3f, COL(170,180,195), hint);
 
     if (setStep == 2) {                                   /* previa grande da mesa */
         if (tourney) textC(184, 0.4f, COL(255,215,70), "A MESA MUDA A CADA PARTIDA DO TORNEIO");
-        drawTablePreview(320.0f, 362.0f, 250.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
+        drawTablePreview(320.0f, 346.0f, 230.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
     } else if (setStep == 3) {                            /* bola branca e linha guia em destaque */
         const u8 *c = WB_COL[wbSel[0]];
-        float bx = 118.0f, by = 358.0f;
+        float bx = 118.0f, by = 346.0f;
         int r, gg, bb;
         if (gdSel[0] == NGD - 1) hue3(menuT * 0.01f, &r, &gg, &bb);
         else { r = GD_COL[gdSel[0]][0]; gg = GD_COL[gdSel[0]][1]; bb = GD_COL[gdSel[0]][2]; }
@@ -5324,7 +5340,7 @@ static void drawSetupScreen(void)
         discN(bx - 1.0f, by - 1.0f, 27.5f, shade(c, 1.0f, 0), 20);
         discN(bx - 10.0f, by - 11.0f, 7.0f, CA(255, 255, 255, 0x58), 10);
         text(bx - tw(0.3f, "BOLA BRANCA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "BOLA BRANCA");
-        drawTablePreview(320.0f, 360.0f, 200.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
+        drawTablePreview(320.0f, 350.0f, 190.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
         beam(432.0f, by, 560.0f, by, 8.0f, CA(r, gg, bb, 0x18));
         beam(432.0f, by, 560.0f, by, 4.0f, CA(r, gg, bb, 0x34));
         beam(432.0f, by, 560.0f, by, 1.8f, COL(r, gg, bb));
@@ -5353,6 +5369,11 @@ static void drawSetupScreen(void)
         }
         if (setStep == 0 && !tourney) textC(340, 0.9f, COL(255,215,70), "VS");
         else if (setStep == 0) textC(312, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
+    }
+    {
+        static const int fk[4] = { 6, 7, 8, 1 };
+        static const char *const fl[4] = { "ESCOLHER", "MUDAR", "ETAPA", "VOLTAR" };
+        uiFoot(4, fk, fl);                                /* por ultimo: nada cobre o rodape */
     }
 }
 
