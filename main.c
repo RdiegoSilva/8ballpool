@@ -76,11 +76,13 @@ static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", 
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
-#define GRAVE_R 15.0f                                 /* raio da COVA (buraco extra no meio da mesa) */
+#define GRAVE_R 20.0f                                 /* raio da COVA (buraco extra no meio da mesa) */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
 static const int GV_KIND[3] = { AB_ENTERRO, AB_COVA, AB_RESSUS };
 static const char *GV_NAME[3] = { "ENTERRO", "COVA", "RESSUSCITAR" };
+#define TAB_CEM 25                                    /* indice da mesa CEMITERIO em TABLES */
+static float tabPock(void) { return ((tourney && tTable >= 0) ? tTable : tableSel) == TAB_CEM ? 1.14f : 1.0f; }   /* cemiterio: cacapas um pouco mais largas */
 static int grinchPend;                                /* poder que o Grinch tem agora (0 = ainda nao sorteado); aparece na tela antes de usar */
 static float fricMul = 1.0f, pockMul = 1.0f, hackPow, fxX, fxY;   /* pockMul: CHAMINE aumenta as cacapas */
 static float hCandAng[10], hCandPow[10], hCandSc[10];   /* HACK: melhores tacadas encontradas (a mais facil primeiro) */
@@ -987,6 +989,7 @@ static float normAng(float a);
 static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
+    float tpk = tabPock();
     if (abilKind == AB_SUGAR && abilT > 0 && firstHit > 0 && b[firstHit].in && b[firstHit].z <= 0.0f) {   /* vampiro/grinch: a bola alvo CURVA suave para a cacapa que ja esta mirando (nao e mais um ima) */
         Ball *q = &b[firstHit];
         float sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
@@ -1059,7 +1062,7 @@ static int stepPhysics(float dt)
         }
         b[i].x += b[i].vx * dt; b[i].y += b[i].vy * dt;
         for (p = 0; p < 6; p++) {
-            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, prc = PRC[p] * pockMul, mouth = prc + R;
+            float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, prc = PRC[p] * pockMul * tpk, mouth = prc + R;
             if (!air && d2 < prc*prc) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; SFX(SFX_POCKET, 90); break;
@@ -2428,62 +2431,188 @@ static void tableDecoAbyss(int stage, int mt)
     }
 }
 
-/* ---------- mesa CEMITERIO (style 19): grade de ferro, lapides, nevoa, fogo-fatuo e luzes verdes nas cacapas ---------- */
-static void tombstone(float x, float y, float sc, int al)
+/* ---------- mesa CEMITERIO (style 19): moldura de pedra com musgo, grade de ferro, tumulos, corvos, lua e nevoa ---------- */
+static int farFromPocket(float x, float y, float d)
 {
-    rect(x - 5.0f * sc, y - 4.0f * sc, x + 5.0f * sc, y + 8.0f * sc, CA(120, 130, 124, al));
-    discN(x, y - 4.0f * sc, 5.0f * sc, CA(120, 130, 124, al), 10);
-    rect(x - 0.7f * sc, y - 7.0f * sc, x + 0.7f * sc, y + 0.0f, CA(40, 46, 44, al));
-    rect(x - 2.5f * sc, y - 4.5f * sc, x + 2.5f * sc, y - 3.3f * sc, CA(40, 46, 44, al));
+    int k;
+    for (k = 0; k < 6; k++) { float dx = x - PX[k], dy = y - PY[k]; if (dx * dx + dy * dy < d * d) return 0; }
+    return 1;
+}
+
+/* tumulo: type 0 arredondado com cruzinha, 1 cruz de pedra, 2 quadrado rachado e torto */
+static void tombstone(float x, float y, float sc, int al, int type)
+{
+    u64 st = CA(130, 140, 134, al), sd = CA(84, 92, 88, al), dk = CA(34, 40, 38, al);
+    if (type == 1) {
+        rect(x - 2.2f * sc, y - 11.0f * sc, x + 2.2f * sc, y + 8.0f * sc, st);
+        rect(x - 7.0f * sc, y - 6.0f * sc, x + 7.0f * sc, y - 2.6f * sc, st);
+        rect(x + 0.6f * sc, y - 11.0f * sc, x + 2.2f * sc, y + 8.0f * sc, sd);
+    } else if (type == 2) {
+        quad(x - 6.0f * sc, y - 8.0f * sc, x + 5.0f * sc, y - 9.0f * sc, x + 6.0f * sc, y + 8.0f * sc, x - 6.0f * sc, y + 8.0f * sc, st);
+        quad(x + 1.0f * sc, y - 8.5f * sc, x + 5.0f * sc, y - 9.0f * sc, x + 6.0f * sc, y + 8.0f * sc, x + 1.0f * sc, y + 8.0f * sc, sd);
+        line(x - 1.0f * sc, y - 8.0f * sc, x + 1.0f * sc, y - 2.0f * sc, dk);
+        line(x + 1.0f * sc, y - 2.0f * sc, x - 2.0f * sc, y + 3.0f * sc, dk);
+    } else {
+        rect(x - 5.5f * sc, y - 4.0f * sc, x + 5.5f * sc, y + 8.0f * sc, st);
+        discN(x, y - 4.0f * sc, 5.5f * sc, st, 12);
+        rect(x + 1.5f * sc, y - 4.0f * sc, x + 5.5f * sc, y + 8.0f * sc, sd);
+        rect(x - 0.7f * sc, y - 7.5f * sc, x + 0.7f * sc, y + 1.0f * sc, dk);
+        rect(x - 2.6f * sc, y - 4.8f * sc, x + 2.6f * sc, y - 3.4f * sc, dk);
+    }
+    rect(x - 8.0f * sc, y + 8.0f * sc, x + 8.0f * sc, y + 10.0f * sc, sd);
+    discN(x - 3.0f * sc, y + 7.0f * sc, 2.4f * sc, CA(70, 120, 60, al * 3 / 4), 8);      /* musgo */
+}
+
+/* corvo pousado (dir = +1 olha para a direita) */
+static void crowPerch(float x, float y, float sc, int dir, int mt, int k)
+{
+    float bob = (((mt / 40) + k) % 6 == 0) ? 1.2f * sc : 0.0f;                           /* de vez em quando bica */
+    u64 bk = COL(16, 16, 22), bl = COL(52, 56, 76);
+    tri(x - dir * 5.0f * sc, y - 2.0f * sc, x - dir * 13.0f * sc, y + 3.0f * sc, x - dir * 6.0f * sc, y + 3.5f * sc, bk);
+    discN(x, y, 5.5f * sc, bk, 12);
+    discN(x - dir * 0.8f * sc, y - 1.5f * sc, 3.2f * sc, bl, 10);
+    discN(x + dir * 5.0f * sc, y - 4.0f * sc + bob, 3.0f * sc, bk, 10);
+    tri(x + dir * 7.6f * sc, y - 4.8f * sc + bob, x + dir * 7.6f * sc, y - 2.6f * sc + bob, x + dir * 11.5f * sc, y - 3.4f * sc + bob, COL(150, 150, 160));
+    discN(x + dir * 5.8f * sc, y - 4.8f * sc + bob, 0.9f * sc, COL(235, 60, 60), 6);
+    line(x - 1.5f * sc, y + 5.0f * sc, x - 1.5f * sc, y + 8.0f * sc, bk);
+    line(x + 1.5f * sc, y + 5.0f * sc, x + 1.5f * sc, y + 8.0f * sc, bk);
+}
+
+/* corvo voando (fl = -1..1 bate as asas) */
+static void crowFly(float x, float y, float sc, int dir, float fl, int al)
+{
+    u64 bk = CA(10, 10, 16, al);
+    float wy = 6.0f * sc * fl;
+    tri(x, y - 1.5f * sc, x, y + 1.5f * sc, x - 10.0f * sc, y - wy, bk);
+    tri(x, y - 1.5f * sc, x, y + 1.5f * sc, x + 10.0f * sc, y - wy, bk);
+    discN(x, y, 3.0f * sc, bk, 10);
+    discN(x + dir * 3.6f * sc, y - 0.8f * sc, 1.9f * sc, bk, 8);
+    tri(x + dir * 5.0f * sc, y - 1.4f * sc, x + dir * 5.0f * sc, y - 0.2f * sc, x + dir * 8.0f * sc, y - 0.6f * sc, CA(150, 150, 160, al));
+    tri(x - dir * 2.0f * sc, y - 1.0f * sc, x - dir * 2.0f * sc, y + 1.0f * sc, x - dir * 7.0f * sc, y + 1.0f * sc, bk);
 }
 
 /* COVA do Coveiro: buraco no meio da mesa (a = 1 normal, menor = previa na mira) */
 static void drawGraveHole(float a)
 {
     int al = (int)(0x80 * a), k;
-    discN(TCX, TCY, GRAVE_R + 5.0f, CA(70, 48, 28, al * 3 / 4), 20);
-    discN(TCX, TCY, GRAVE_R + 1.0f, CA(40, 28, 16, al), 20);
-    discN(TCX, TCY, GRAVE_R - 2.0f, CA(2, 2, 4, al), 20);
-    ringN(TCX, TCY, GRAVE_R + 3.0f + 1.2f * sinf(menuT * 0.2f), 1.6f, 24, CA(150, 255, 170, al / 2));
-    for (k = 0; k < 6; k++)
-        disc(TCX + cosf(k * 1.0472f + 0.3f) * (GRAVE_R + 7.0f), TCY + sinf(k * 1.0472f + 0.3f) * (GRAVE_R + 7.0f), 2.2f, CA(96, 66, 38, al));
+    discN(TCX, TCY, GRAVE_R + 5.0f, CA(70, 48, 28, al * 3 / 4), 24);
+    discN(TCX, TCY, GRAVE_R + 1.0f, CA(40, 28, 16, al), 24);
+    discN(TCX, TCY, GRAVE_R - 2.0f, CA(2, 2, 4, al), 24);
+    ringN(TCX, TCY, GRAVE_R + 3.0f + 1.2f * sinf(menuT * 0.2f), 1.6f, 28, CA(150, 255, 170, al / 2));
+    for (k = 0; k < 8; k++)
+        disc(TCX + cosf(k * 0.7854f + 0.3f) * (GRAVE_R + 7.0f), TCY + sinf(k * 0.7854f + 0.3f) * (GRAVE_R + 7.0f), 2.4f, CA(96, 66, 38, al));
 }
 
 static void tableDecoGrave(int stage, int mt)
 {
     int k;
-    float W = TX1 - TX0, H = TY1 - TY0;
+    float W = TX1 - TX0, H = TY1 - TY0, tp = tabPock();
     if (stage == 0) {
-        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, COL(96, 106, 100));
-        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(120, 230, 150, 0x58));
-        for (k = 0; k < 16; k++) {                                   /* grade de ferro com pontas de lanca */
-            float x = TX0 + 22.0f + k * ((W - 44.0f) / 15.0f);
-            rect(x - 0.8f, TY0 - 26.0f, x + 0.8f, TY0 - 19.0f, CA(40, 44, 48, 0xa0));
-            tri(x - 2.6f, TY0 - 26.0f, x + 2.6f, TY0 - 26.0f, x, TY0 - 32.0f, CA(60, 66, 72, 0xb0));
-            rect(x - 0.8f, TY1 + 19.0f, x + 0.8f, TY1 + 26.0f, CA(40, 44, 48, 0xa0));
-            tri(x - 2.6f, TY1 + 26.0f, x + 2.6f, TY1 + 26.0f, x, TY1 + 32.0f, CA(60, 66, 72, 0xb0));
+        /* moldura de pedra: lajes, rachaduras e musgo */
+        rect(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, COL(56, 60, 60));
+        for (k = 0; k < 6 + (int)(W / 22.0f); k++) {
+            float x = TX0 - 25 + k * 22.0f;
+            if (x > TX1 + 25) break;
+            line(x, TY0 - 25, x, TY0 - 12, COL(30, 34, 34));
+            line(x + 11.0f, TY1 + 12, x + 11.0f, TY1 + 25, COL(30, 34, 34));
         }
-        for (k = 0; k < 4; k++)                                      /* lapides nos cantos */
-            tombstone((k & 1) ? TX1 + 21.0f : TX0 - 21.0f, ((k & 2) ? TY1 + 21.0f : TY0 - 21.0f) + 1.0f, 0.9f, 0x80);
+        for (k = 0; k < 14; k++) {
+            float y = TY0 - 25 + k * 22.0f;
+            if (y > TY1 + 25) break;
+            line(TX0 - 25, y, TX0 - 12, y, COL(30, 34, 34));
+            line(TX1 + 12, y + 11.0f, TX1 + 25, y + 11.0f, COL(30, 34, 34));
+        }
+        line(TX0 - 25, TY0 - 25, TX1 + 25, TY0 - 25, COL(96, 104, 102));
+        line(TX0 - 25, TY0 - 25, TX0 - 25, TY1 + 25, COL(96, 104, 102));
+        for (k = 0; k < 30; k++) {                                   /* musgo */
+            float px, py, nx, ny;
+            perim(k, 30, 14.0f + (float)((k * 7) % 9), &px, &py, &nx, &ny);
+            discN(px, py, 2.4f + (k % 3), CA(70, 126, 58, 0x58), 8);
+        }
+        for (k = 0; k < 8; k++) {                                    /* rachaduras */
+            float px, py, nx, ny;
+            perim(k * 4 + 1, 32, 18.0f, &px, &py, &nx, &ny);
+            line(px, py, px + 5.0f, py + 6.0f, COL(24, 28, 28));
+            line(px + 5.0f, py + 6.0f, px + 2.0f, py + 12.0f, COL(24, 28, 28));
+        }
+        rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, COL(16, 20, 18));      /* sulco */
+        outlineRect(TX0 - 15.5f, TY0 - 15.5f, TX1 + 15.5f, TY1 + 15.5f, CA(120, 230, 150, 0x50));
+        /* tumulos na moldura, longe das cacapas */
+        tombstone(TX0 + 99.0f, TY0 - 19.0f, 0.9f, 0x80, 0);
+        tombstone(TX0 + 165.0f, TY0 - 19.0f, 0.9f, 0x80, 1);
+        tombstone(TX1 - 165.0f, TY0 - 19.0f, 0.9f, 0x80, 2);
+        tombstone(TX1 - 99.0f, TY0 - 19.0f, 0.9f, 0x80, 0);
+        tombstone(TX0 + 99.0f, TY1 + 19.0f, 0.9f, 0x80, 2);
+        tombstone(TX0 + 165.0f, TY1 + 19.0f, 0.9f, 0x80, 0);
+        tombstone(TX1 - 165.0f, TY1 + 19.0f, 0.9f, 0x80, 1);
+        tombstone(TX1 - 99.0f, TY1 + 19.0f, 0.9f, 0x80, 2);
+        tombstone(TX0 - 19.0f, TY0 + 99.0f, 0.9f, 0x80, 1);
+        tombstone(TX1 + 19.0f, TY0 + 165.0f, 0.9f, 0x80, 0);
+        /* grade de ferro com pontas de lanca (4 lados, pulando as cacapas) */
+        for (k = 0; k < 24; k++) {
+            float x = TX0 - 10.0f + k * ((W + 20.0f) / 23.0f);
+            if (farFromPocket(x, TY0 - 29.0f, 30.0f)) {
+                rect(x - 0.8f, TY0 - 33.0f, x + 0.8f, TY0 - 26.0f, COL(30, 34, 38));
+                tri(x - 2.6f, TY0 - 33.0f, x + 2.6f, TY0 - 33.0f, x, TY0 - 39.0f, COL(58, 64, 70));
+            }
+            if (farFromPocket(x, TY1 + 29.0f, 30.0f)) {
+                rect(x - 0.8f, TY1 + 26.0f, x + 0.8f, TY1 + 33.0f, COL(30, 34, 38));
+                tri(x - 2.6f, TY1 + 33.0f, x + 2.6f, TY1 + 33.0f, x, TY1 + 39.0f, COL(58, 64, 70));
+            }
+        }
+        for (k = 0; k < 11; k++) {
+            float y = TY0 + k * (H / 10.0f);
+            if (farFromPocket(TX0 - 29.0f, y, 30.0f)) {
+                rect(TX0 - 33.0f, y - 0.8f, TX0 - 26.0f, y + 0.8f, COL(30, 34, 38));
+                tri(TX0 - 33.0f, y - 2.6f, TX0 - 33.0f, y + 2.6f, TX0 - 39.0f, y, COL(58, 64, 70));
+            }
+            if (farFromPocket(TX1 + 29.0f, y, 30.0f)) {
+                rect(TX1 + 26.0f, y - 0.8f, TX1 + 33.0f, y + 0.8f, COL(30, 34, 38));
+                tri(TX1 + 33.0f, y - 2.6f, TX1 + 33.0f, y + 2.6f, TX1 + 39.0f, y, COL(58, 64, 70));
+            }
+        }
+        line(TX0 + 24.0f, TY0 - 28.0f, TX1 - 24.0f, TY0 - 28.0f, COL(40, 44, 48));      /* travessas */
+        line(TX0 + 24.0f, TY1 + 28.0f, TX1 - 24.0f, TY1 + 28.0f, COL(40, 44, 48));
+        /* corvos pousados na grade (de vez em quando bicam) */
+        crowPerch(TX0 + 70.0f, TY0 - 38.0f, 0.95f, 1, mt, 0);
+        crowPerch(TX1 - 120.0f, TY0 - 38.0f, 0.95f, -1, mt, 2);
+        crowPerch(TCX + 40.0f, TY0 - 38.0f, 0.85f, 1, mt, 4);
+        crowPerch(TX0 + 130.0f, TY1 + 38.0f, 0.95f, -1, mt, 1);
+        crowPerch(TX1 - 80.0f, TY1 + 38.0f, 0.95f, 1, mt, 3);
     } else if (stage == 1) {
-        for (k = 0; k < 3; k++)                                      /* lapides apagadas no feltro */
-            tombstone(TX0 + 60.0f + k * 190.0f, TY0 + 30.0f + (k & 1) * 170.0f, 1.3f, 0x12);
+        discN(TX1 - 74.0f, TY0 + 52.0f, 46.0f, CA(215, 235, 205, 0x05), 30);         /* lua pálida com brilho */
+        discN(TX1 - 74.0f, TY0 + 52.0f, 32.0f, CA(215, 235, 205, 0x06), 26);
+        moonCrescent(TX1 - 74.0f, TY0 + 52.0f, 24.0f, 0x22, 225, 240, 215);
+        tombstone(TX0 + 28.0f, TY1 - 24.0f, 1.5f, 0x1c, 0);                            /* tumulos apagados nos cantos do feltro */
+        tombstone(TX0 + 56.0f, TY1 - 20.0f, 1.2f, 0x1a, 1);
+        tombstone(TX1 - 30.0f, TY1 - 24.0f, 1.5f, 0x1c, 2);
+        tombstone(TX0 + 30.0f, TY0 + 26.0f, 1.2f, 0x18, 2);
+        for (k = 0; k < 34; k++) {                                   /* grama morta no chao */
+            float gx = TX0 + 6.0f + k * ((W - 12.0f) / 33.0f);
+            tri(gx - 1.6f, TY1, gx + 1.6f, TY1, gx + (k & 1 ? 2.5f : -2.5f), TY1 - 6.0f - (float)(k % 4), CA(70, 110, 60, 0x40));
+        }
         for (k = 0; k < 4; k++) {                                    /* nevoa baixa */
             float fx = TX0 - 60.0f + fmodf(mt * (0.2f + k * 0.05f) + k * 190.0f, W + 120.0f), fy = TY1 - 26.0f - k * 16.0f;
-            discN(fx, fy, 30.0f, CA(170, 210, 190, 0x07), 14);
-            discN(fx + 32.0f, fy + 5.0f, 24.0f, CA(170, 210, 190, 0x07), 14);
+            discN(fx, fy, 30.0f, CA(170, 210, 190, 0x08), 14);
+            discN(fx + 32.0f, fy + 5.0f, 24.0f, CA(170, 210, 190, 0x08), 14);
         }
-        for (k = 0; k < 7; k++) {                                    /* fogo-fatuo subindo */
+        for (k = 0; k < 8; k++) {                                    /* fogo-fatuo subindo */
             float wx = TX0 + fmodf(k * 83.1f + 12.0f * sinf(mt * 0.03f + k), W), wy = TY1 - fmodf(mt * (0.25f + (k % 3) * 0.1f) + k * 37.0f, H), tw2 = 0.5f + 0.5f * sinf(mt * 0.1f + k);
-            discN(wx, wy, 4.0f, CA(150, 255, 170, 0x08 + (int)(0x08 * tw2)), 10);
-            disc(wx, wy, 1.4f, CA(190, 255, 200, 0x40 + (int)(0x30 * tw2)));
+            discN(wx, wy, 4.5f, CA(150, 255, 170, 0x08 + (int)(0x08 * tw2)), 10);
+            disc(wx, wy, 1.5f, CA(190, 255, 200, 0x40 + (int)(0x30 * tw2)));
+        }
+        for (k = 0; k < 3; k++) {                                    /* corvos cruzando o ceu */
+            float u = fmodf(mt * (0.7f + k * 0.25f) + k * 210.0f, W + 80.0f);
+            int dir = (k & 1) ? -1 : 1;
+            float cxp = dir > 0 ? TX0 - 40.0f + u : TX1 + 40.0f - u;
+            crowFly(cxp, TY0 + 40.0f + k * 70.0f + 10.0f * sinf(mt * 0.03f + k * 2.0f), 0.9f, dir, sinf(mt * 0.28f + k * 1.7f), 0x70);
         }
     } else {
         for (k = 0; k < 6; k++) {
             float pulse = 0.5f + 0.5f * sinf(mt * 0.09f + k * 1.3f);
-            discN(PX[k], PY[k], PR[k] + 8.0f, CA(120, 255, 160, 0x0c + (int)(0x08 * pulse)), 12);
-            ring(PX[k], PY[k], PR[k] + 4.5f, CA(150, 255, 170, 0x90));
-            ring(PX[k], PY[k], PR[k] + 6.2f + pulse * 1.4f, CA(200, 210, 200, 0x40));
+            discN(PX[k], PY[k], (PR[k] + 8.0f) * tp, CA(120, 255, 160, 0x0c + (int)(0x08 * pulse)), 14);
+            ring(PX[k], PY[k], (PR[k] + 4.5f) * tp, CA(150, 255, 170, 0x90));
+            ring(PX[k], PY[k], (PR[k] + 6.2f) * tp + pulse * 1.4f, CA(200, 210, 200, 0x40));
         }
         line(HEADX, TY0, HEADX, TY1, CA(150, 255, 170, 0x28));
     }
@@ -2823,7 +2952,7 @@ static void drawTable(void)
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
-        float ce = PRC[0] - POC + 2.0f, cm = PRC[1] + 1.0f;
+        float ce = PRC[0] * tabPock() - POC + 2.0f, cm = PRC[1] * tabPock() + 1.0f;
         cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0);
         cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0);
         cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1);
@@ -2844,7 +2973,7 @@ static void drawTable(void)
 
     /* cacapas estilo 8 Ball Pool: buraco preto grande com aro fino metalico */
     for (p = 0; p < 6; p++) {
-        float r0 = PR[p];
+        float r0 = PR[p] * tabPock();
         discN(PX[p], PY[p], r0 + 3.5f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
         discN(PX[p], PY[p], r0 + 1.5f, COL(96,100,108), 24);              /* aro metalico fino */
         discN(PX[p], PY[p], r0 + 0.8f, COL(30,32,38), 24);
@@ -2951,7 +3080,7 @@ static int nearPocket(float x, float y)
     int k;
     for (k = 0; k < 6; k++) {
         float ex = x - PX[k], ey = y - PY[k];
-        if (ex*ex + ey*ey < PRC[k] * PRC[k]) return k;
+        if (ex*ex + ey*ey < PRC[k] * PRC[k] * tabPock() * tabPock()) return k;
     }
     return -1;
 }
@@ -2964,7 +3093,7 @@ static int pocketPath(float x, float y, float nx, float ny, int ignore, float *l
     float bt = 1e9f;
     for (k = 0; k < 6; k++) {
         float fx = PX[k] - x, fy = PY[k] - y;
-        float proj = fx*nx + fy*ny, perp = fx*ny - fy*nx, lim = PRC[k] - 1.0f;
+        float proj = fx*nx + fy*ny, perp = fx*ny - fy*nx, lim = PRC[k] * tabPock() - 1.0f;
         int blocked = 0;
         if (perp < 0) perp = -perp;
         if (proj < R || perp > lim || proj >= bt) continue;
