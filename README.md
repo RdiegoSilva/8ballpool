@@ -60,7 +60,10 @@ Quando a partida termina:
 No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Quartas de final, Semifinal e Final.
 - **Perdeu, está fora!** Se o BOT vencer a sua partida, você é eliminado e vê quem ficou com o título
 - Configuração em etapas: dificuldade do BOT e modo (Bola 8 ou Sinuca Brasileira), mesa e bolas, bola branca e guia, e o seu personagem. Os 7 rivais (nomes e personagens) são sorteados
-- **Regra: todos jogam com o taco CLASSICO.** A troca de taco (SELECT) fica bloqueada durante o torneio
+- **Regras do torneio** (etapa 1 da configuração): **HABILIDADES** (padrão DESLIGADAS) e **TEMPO POR JOGADA** (SEM TEMPO, 15, 20, 25 ou 30 s; o relógio só corre nas suas jogadas e, se acabar, você perde a vez). Também vale a dificuldade do BOT e o modo (Bola 8 ou Sinuca Brasileira)
+- **Habilidades DESLIGADAS:** todos jogam com o taco CLASSICO e a troca de taco (SELECT) fica bloqueada
+- **Habilidades LIGADAS:** você começa com o taco do seu personagem, pode trocar de taco (SELECT) e usar o poder (O na mira). Os rivais controlados pelo BOT jogam sem poderes
+- O chaveamento mostra o **nome de cada personagem** (cor da raridade) embaixo do nome do jogador, o confronto da partida (ex.: PINGUIM X ROBO) e um resumo das regras ativas
 - Entre as partidas aparece o **chaveamento**: X joga a próxima partida, SELECT sai do torneio. As partidas dos outros jogadores são decididas automaticamente
 - No torneio não há revanche nem reiniciar partida; o placar do topo mostra a fase (QUARTAS, SEMI ou FINAL)
 - Ganhou a final: tela de **CAMPEÃO** com troféu
@@ -126,7 +129,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Poseidon   | Tridente   | **MARÉ ALTA**: uma onda gigante empurra **todas as bolas** (menos a branca) na direção da caçapa mais próxima de cada uma, com força fraca: só as bolas que já estão perto de uma caçapa chegam lá | Abismo |
 | Alien      | Ovni       | **RASTREIO**: a branca curva sozinha e **persegue a bola certa** mais perto da sua mira (a sua bola; mesa aberta: qualquer uma, menos a 8), até a primeira batida | Galáxia |
 | Robô       | Robô       | **ÍMÃ**: as **suas bolas** são puxadas para a caçapa mais próxima de cada uma, com força fraca (mesa aberta: todas, menos a 8) | Neon |
-| Mago       | Varinha    | **MALDIÇÃO**: amaldiçoa o adversário: na **próxima tacada dele** a barra de força anda **2x mais rápido** e a mira **treme** um pouco (o bot também erra mais). O painel do amaldiçoado ganha uma aura roxa e aparece "AMALDIÇOADO!" | Noite Lua |
+| Mago       | Varinha    | **MALDIÇÃO**: amaldiçoa o adversário: na **próxima tacada dele** os botões de mirar ficam **invertidos** (direcional, stick e L1/R1) e a **força falha** às vezes (35% de chance: marcou 100, sai 10). O bot amaldiçoado só erra mais a mira. O painel do amaldiçoado ganha uma aura roxa e aparece "AMALDIÇOADO!" | Noite Lua |
 | Gato       | Gato       | **NOVA VIDA**: se a tacada **não encaçapar** e não for falta, você **joga de novo**. Se encaçapar, a habilidade **não gasta** | Rosa |
 | Grinch     | Grinch     | **GRINCH**: ao apertar O na mira, a habilidade é **sorteada** entre Puxão verde e Bagunça conforme a situação da mesa (veja abaixo da tabela) | Grinch |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
@@ -137,7 +140,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
   - **HACK (melhorado)**: só mostra tacadas que **realmente encaçapam** (cada uma é testada na física do jogo: bola certa primeiro, branca não cai). Funciona na Bola 8 e na Sinuca Brasileira. **O de novo** troca para a próxima melhor opção (até 4) e, depois da última, libera a mira. Com o HACK ligado a mira, o efeito, o pulo e a troca de taco ficam travados, a tacada não sofre desvio de giz, a barra de força anda mais devagar e **gruda na força ideal** (±6%). Sem tacada possível, ele sugere uma jogada de segurança (acerta a bola certa sem arriscar a branca). Na quebra mira reto no triângulo com força total
   - **CHAMINÉ**: vale para a Bola 8 e para a Sinuca Brasileira; o efeito dura só a tacada e depois a recarga é de 3 tacadas
 - Depois de usar, a habilidade **recarrega em 3 tacadas** (o contador aparece ao lado do nome do taco)
-- O BOT não usa habilidades. No torneio ninguém usa (só taco Clássico)
+- O BOT não usa habilidades. No torneio só você usa habilidades, e só se a regra HABILIDADES estiver LIGADA (padrão: DESLIGADAS, taco Clássico)
 - No **versus** você escolhe na configuração se a partida é **com ou sem habilidades** (HABILIDADES: LIGADAS/DESLIGADAS). Desligadas, os tacos valem só pelos atributos
 
 ## Catálogo de tacos (SELECT na mira)

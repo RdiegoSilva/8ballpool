@@ -64,6 +64,7 @@ static char msg[64];
 static int msgTimer;
 
 /* torneio mata-mata: 8 jogadores (quartas, semifinal, final); perdeu, esta fora */
+static int tAbil;                                 /* regra do torneio: 1 = com habilidades (voce escolhe o taco), 0 = so taco CLASSICO */
 static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da partida, 1 avancou, 2 eliminado, 3 campeao */
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
@@ -264,14 +265,39 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
 static void line(float x1, float y1, float x2, float y2, u64 c)
 { gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
 
+/* tabela de cos/sin dos circulos (calculada uma vez por numero de lados): o EE nao tem seno/cosseno em hardware,
+   e o jogo desenha milhares de segmentos por quadro. t[2*i] = cos, t[2*i+1] = sin, i de 0 a n */
+#define CIRC_MAX 64
+static float circTab[CIRC_MAX + 1][2 * (CIRC_MAX + 1)];
+static unsigned char circOk[CIRC_MAX + 1];
+static const float *circ(int n)
+{
+    if (n < 1 || n > CIRC_MAX) return NULL;
+    if (!circOk[n]) {
+        int i;
+        for (i = 0; i <= n; i++) {
+            float a = i * 6.2831853f / n;
+            circTab[n][2 * i] = cosf(a); circTab[n][2 * i + 1] = sinf(a);
+        }
+        circOk[n] = 1;
+    }
+    return circTab[n];
+}
+
 static void discN(float cx, float cy, float r, u64 c, int n)
 {
     int i;
+    const float *t = circ(n);
     for (i = 0; i < n; i++) {
-        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+        float c0, s0, c1, s1;
+        if (t) { c0 = t[2*i]; s0 = t[2*i+1]; c1 = t[2*i+2]; s1 = t[2*i+3]; }
+        else {
+            float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+            c0 = cosf(a0); s0 = sinf(a0); c1 = cosf(a1); s1 = sinf(a1);
+        }
         gsKit_prim_triangle(g, cx+OX, cy+OY,
-                            cx+OX+cosf(a0)*r, cy+OY+sinf(a0)*r,
-                            cx+OX+cosf(a1)*r, cy+OY+sinf(a1)*r, 1, c);
+                            cx+OX+c0*r, cy+OY+s0*r,
+                            cx+OX+c1*r, cy+OY+s1*r, 1, c);
     }
 }
 
@@ -287,10 +313,9 @@ static void quad(float x1, float y1, float x2, float y2,
 static void ring(float cx, float cy, float r, u64 c)
 {
     int i, n = 16;
-    for (i = 0; i < n; i++) {
-        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
-        line(cx+cosf(a0)*r, cy+sinf(a0)*r, cx+cosf(a1)*r, cy+sinf(a1)*r, c);
-    }
+    const float *t = circ(n);
+    for (i = 0; i < n; i++)
+        line(cx+t[2*i]*r, cy+t[2*i+1]*r, cx+t[2*i+2]*r, cy+t[2*i+3]*r, c);
 }
 
 static void text(float x, float y, float s, u64 c, const char *t)
@@ -630,8 +655,8 @@ static int countGroup(int gr)
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
 static const char *pname(int pl) { return (pl == 1 && mode == 0) ? (tourney ? tName[tOpp] : "BOT") : pnames[pl]; }
-static int curCue(void) { return (isBot() || tourney) ? 0 : cueSel[cur]; }
-static int curAb(void) { return (abilOn && !isBot() && !tourney) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
+static int curCue(void) { return (isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]; }
+static int curAb(void) { return (abilOn && !isBot() && !(tourney && !tAbil)) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
@@ -779,6 +804,7 @@ static int grinchPick(void)
 static void grinchEnsure(void) { if (!grinchPend) grinchPend = grinchPick(); }
 static const char *grinchName(void) { grinchEnsure(); return GR_NAME[grinchPend == AB_SUGAR ? 0 : 1]; }
 
+#define CURSE_FAIL 35                                 /* % de chance da forca falhar sob a MALDICAO do mago */
 static void shoot(float p)
 {
     int cursedNow = curse[cur];                       /* MALDICAO do mago: vale so para esta tacada */
@@ -801,9 +827,11 @@ static void shoot(float p)
         else if (ch < 0.25f && (fabsf(spinSel) > 0.6f || fabsf(spinV) > 0.6f || jumpArm)) { miss *= 2.0f; pm = 0.9f; setmsg("ESCORREGOU! PASSE GIZ NO TACO"); }
         else if (ch < 0.25f) setmsg("POUCO GIZ! PASSE GIZ NO TACO");
         a += dev * miss;
-        if (cursedNow) a += ((int)(rnd() % 2001) - 1000) / 1000.0f * 0.02f;     /* maldicao: a mira treme */
         chalk[cur] -= 0.035f + 0.03f * fabsf(spinSel) + 0.02f * fabsf(spinV) + (jumpArm ? 0.03f : 0.0f);   /* gasta devagar: ~28 tacadas normais */
         if (chalk[cur] < 0.0f) chalk[cur] = 0.0f;
+    }
+    if (cursedNow && !isBot() && (int)(rnd() % 100) < CURSE_FAIL) {   /* MALDICAO: a forca falha (marcou 100, sai 10) */
+        p *= 0.10f; setmsg("MALDICAO! A FORCA FALHOU");
     }
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(hitCue) * pm;
@@ -845,7 +873,7 @@ static void shoot(float p)
 /* menu de tacos (SELECT) */
 static void openCueMenu(void)
 {
-    if (tourney) { setmsg("TORNEIO: TODOS USAM O TACO CLASSICO"); return; }
+    if (tourney && !tAbil) { setmsg("TORNEIO: TODOS USAM O TACO CLASSICO"); return; }
     cueMenuSel = cueSel[cur]; cueRet = state; charging = 0; state = S_CUES;
 }
 
@@ -2724,9 +2752,15 @@ static void glowFade(float x1, float y1, float x2, float y2, int a0, int a1, int
 static void ringN(float cx, float cy, float r, float w, int n, u64 c)
 {
     int i;
+    const float *t = circ(n);
     for (i = 0; i < n; i++) {
-        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
-        beam(cx + cosf(a0)*r, cy + sinf(a0)*r, cx + cosf(a1)*r, cy + sinf(a1)*r, w, c);
+        float c0, s0, c1, s1;
+        if (t) { c0 = t[2*i]; s0 = t[2*i+1]; c1 = t[2*i+2]; s1 = t[2*i+3]; }
+        else {
+            float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
+            c0 = cosf(a0); s0 = sinf(a0); c1 = cosf(a1); s1 = sinf(a1);
+        }
+        beam(cx + c0*r, cy + s0*r, cx + c1*r, cy + s1*r, w, c);
     }
 }
 
@@ -3238,56 +3272,78 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
 static void drawPlayerPanel(int pl)
 {
     float x1 = pl == 0 ? 70.0f : 438.0f, x2 = x1 + 160.0f, y1 = 6.0f, y2 = 64.0f;
-    float ax1 = pl == 0 ? 234.0f : 378.0f, ax2 = ax1 + 56.0f, amy = (y1 + y2) * 0.5f;
-    float c0 = x1 + (pl == 0 ? 14.0f : 10.0f);                        /* inicio do conteudo (a faixa fica na borda de fora) */
-    int act = (pl == cur), k;
+    float ax1 = pl == 0 ? 234.0f : 378.0f, ax2 = ax1 + 56.0f, amy = (y1 + y2) * 0.5f, acx = (ax1 + ax2) * 0.5f;
+    float c0 = x1 + (pl == 0 ? 14.0f : 10.0f), c1 = x2 - (pl == 0 ? 8.0f : 14.0f);   /* area util (a faixa de cor fica na borda de fora) */
+    int act = (pl == cur), k, slots = gmode == GM_BR ? 4 : 8;
     const char *nm = pname(pl);
     const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
                      (grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
-    int nb = gmode == GM_BR ? 4 : 7;
-    float sp = gmode == GM_BR ? 30.0f : 17.0f;
-    u64 edge = act ? COL(255,215,60) : COL(88,98,120);
+    u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);                 /* cor do jogador: azul (1) e vermelho (2) */
+    u64 edge = act ? COL(255,215,60) : (pl == 0 ? COL(62,96,150) : COL(150,70,74));
+    float sp = (c1 - c0 - 18.0f) / (float)(slots - 1), bx0, tx = c0;
+    if (sp > 30.0f) sp = 30.0f;
+    bx0 = (c0 + c1) * 0.5f - (slots - 1) * sp * 0.5f;
 
     hbox(x1, y1, x2, y2, act ? CA(255, 215, 60, 0x7c) : CA(70, 78, 96, 0x60),
-         act ? CA(44, 38, 10, 0x74) : CA(8, 12, 22, 0x68));
+         act ? CA(46, 40, 12, 0x78) : CA(8, 12, 22, 0x68));
     if (pl == 0) rect(x1, y1, x1 + 5, y2, edge); else rect(x2 - 5, y1, x2, y2, edge);
-    text(c0, y1 + 5, 0.42f, act ? COL(255,235,110) : COL(165,170,180), nm);
-    text(c0, y1 + 22, 0.3f, act ? COL(255,255,255) : COL(130,138,152), gn);
+    if (act) rect(pl == 0 ? x1 + 5 : x1, y1 + 1, pl == 0 ? x2 : x2 - 5, y1 + 2, CA(255, 230, 120, 0x40));   /* brilho de quem joga */
 
-    /* retrato: moldura (dourada na vez do jogador), fundo em degrade e o personagem */
+    text(c0, y1 + 5, 0.42f, act ? COL(255,235,110) : COL(175,182,196), nm);
+    rect(c0, y1 + 20, c1, y1 + 21, act ? CA(255, 215, 60, 0x40) : CA(140, 150, 170, 0x28));   /* divisoria nome / grupo */
+    if (gmode == GM_BR) {                                              /* bolinha da cor do jogador */
+        const u8 *bc = BC0[BRC[colSel[pl]]];
+        discN(c0 + 4.0f, y1 + 29.0f, 4.4f, shade(bc, 0.55f, 0), 10);
+        discN(c0 + 4.0f, y1 + 29.0f, 3.6f, shade(bc, 1.0f, 0), 10);
+        tx = c0 + 13.0f;
+    }
+    text(tx, y1 + 24, 0.3f, act ? COL(255,255,255) : COL(135,143,158), gn);
+
+    /* retrato: moldura (dourada na vez do jogador), fundo em degrade com luz e o personagem maior */
     rect(ax1 - 2.5f, y1 - 2.5f, ax2 + 2.5f, y2 + 2.5f, COL(8,10,16));
     rect(ax1 - 2.0f, y1 - 2.0f, ax2 + 2.0f, y2 + 2.0f, edge);
     rect(ax1 - 0.5f, y1 - 0.5f, ax2 + 0.5f, y2 + 0.5f, COL(8,10,16));
     rect(ax1, y1, ax2, amy, pl == 0 ? COL(52,96,150) : COL(150,62,62));
     rect(ax1, amy, ax2, y2, pl == 0 ? COL(34,66,112) : COL(110,44,48));
+    discN(acx, y1 + 30.0f, 24.0f, CA(255, 255, 255, 0x0a), 16);
+    discN(acx, y1 + 30.0f, 15.0f, CA(255, 255, 255, 0x0a), 14);
+    drawChar(charSel[pl], acx, y1 + 36.0f, 0.52f, 0, menuT, 0);          /* avatar do personagem */
+    rect(ax1, y2 - 6.0f, ax2, y2, CA(0, 0, 0, 0x1a));                    /* sombra na base da moldura */
     rect(ax1, y1, ax2, y1 + 1.0f, CA(255, 255, 255, 0x30));
-    drawChar(charSel[pl], (ax1 + ax2) * 0.5f, y1 + 32.0f, 0.48f, 0, menuT, 0);   /* avatar do personagem */
+    rect(ax1, y2 - 2.0f, ax2, y2, side);                                 /* filete com a cor do jogador */
     if (curse[pl]) frameR(ax1 - 4.0f, y1 - 4.0f, ax2 + 4.0f, y2 + 4.0f, 2.0f, ((menuT / 10) & 1) ? CA(215, 150, 255, 0x90) : CA(150, 70, 230, 0x90));   /* MALDICAO: aura roxa */
-    rect(ax1, y2 - 10.0f, ax2, y2, CA(0, 0, 0, 0x14));                           /* sombra na base da moldura */
 
-    if (act && timeSel && mode == 1 && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
+    if (act && timeSel && (mode == 1 || tourney) && !isBot() && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
         int sec = (turnT + 59) / 60;
         float fr = (float)turnT / (float)(TIME_SEC[timeSel] * 60);
         char tb[8];
         u64 tcol = sec <= 5 ? ((menuT / 8) & 1 ? COL(255,90,80) : COL(255,160,140)) : COL(255,255,255);
         if (fr < 0) fr = 0; if (fr > 1) fr = 1;
         sprintf(tb, "%dS", sec);
-        text(x2 - 14 - tw(0.4f, tb), y1 + 5, 0.4f, tcol, tb);
+        text(c1 - tw(0.4f, tb), y1 + 5, 0.4f, tcol, tb);
         rect(x1, y2 + 3, x2, y2 + 7, CA(40, 44, 56, 0x70));
         rect(x1, y2 + 3, x1 + (x2 - x1) * fr, y2 + 7, sec <= 5 ? COL(255,90,80) : (fr < 0.5f ? COL(255,200,60) : COL(110,230,130)));
     }
-    if (grp[pl] < 0) return;
-    for (k = 0; k < nb; k++) {
+    if (grp[pl] < 0) {                                                   /* mesa aberta: casinhas vazias, so para organizar */
+        for (k = 0; k < slots - 1; k++) {
+            float bx = bx0 + k * sp, by = y1 + 45.0f;
+            discN(bx, by, 7.6f, CA(14, 18, 28, 0x60), 14);
+            ring(bx, by, 7.6f, CA(58, 66, 86, 0x60));
+        }
+        return;
+    }
+    for (k = 0; k < slots - (gmode == GM_BR ? 0 : 1); k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
-        float bx = c0 + 8.0f + k * sp, by = y1 + 44.0f;
-        discN(bx, by, 8.4f, COL(14,18,28), 14);                      /* casinha da bola */
+        float bx = bx0 + k * sp, by = y1 + 45.0f;
+        discN(bx, by, 8.4f, COL(14,18,28), 14);                          /* casinha da bola */
         ring(bx, by, 8.4f, COL(58,66,86));
         if (b[id].in) drawBallAt(id, bx, by, 6.8f);
+        else discN(bx, by, 2.2f, CA(90, 100, 124, 0x50), 8);             /* bola ja encacapada: marca */
     }
-    if (gmode == GM_8BALL && countGroup(grp[pl]) == 0) {             /* so falta a bola 8 */
-        float bx = c0 + 8.0f + 7 * sp, by = y1 + 44.0f;
+    if (gmode == GM_8BALL && countGroup(grp[pl]) == 0) {                 /* so falta a bola 8 */
+        float bx = bx0 + 7 * sp, by = y1 + 45.0f;
         discN(bx, by, 8.4f, COL(14,18,28), 14);
-        ring(bx, by, 8.4f, COL(58,66,86));
+        ring(bx, by, 8.4f, act ? COL(255,215,60) : COL(58,66,86));
         drawBallAt(8, bx, by, 6.8f);
     }
 }
@@ -3309,9 +3365,12 @@ static void drawScoreBoard(void)
     hbox(296, 6, 372, 64, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x68));
     text(334 - tw(0.28f, "PLACAR") * 0.5f, 13, 0.28f, COL(150,158,175), "PLACAR");
     rect(304, 28, 364, 29, CA(120, 128, 146, 0x30));
-    sprintf(buf, "%d : %d", w[0] > 99 ? 99 : w[0], w[1] > 99 ? 99 : w[1]);
-    s = strlen(buf) <= 5 ? 0.55f : 0.4f;
-    text(334 - tw(s, buf) * 0.5f, 37, s, COL(255,235,110), buf);
+    s = (w[0] > 9 || w[1] > 9) ? 0.45f : 0.6f;
+    sprintf(buf, "%d", w[0] > 99 ? 99 : w[0]);
+    text(334 - 9 - tw(s, buf), 36, s, COL(120,175,255), buf);              /* jogador 1: azul */
+    text(334 - tw(s, ":") * 0.5f, 35, s, COL(150,158,175), ":");
+    sprintf(buf, "%d", w[1] > 99 ? 99 : w[1]);
+    text(334 + 9, 36, s, COL(255,125,120), buf);                           /* jogador 2: vermelho */
 }
 
 static void drawHUD(void)
@@ -3385,7 +3444,7 @@ static void drawHUD(void)
         text(590 - tw(0.3f, ab), 408, 0.3f, ac, ab);
     }
     if (state == S_AIM && curse[cur])                                  /* MALDICAO sobre quem esta mirando */
-        text(590 - tw(0.3f, "AMALDICOADO!"), 398, 0.3f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), "AMALDICOADO!");
+        text(590 - tw(0.3f, "AMALDICOADO: MIRA INVERTIDA!"), 398, 0.3f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), "AMALDICOADO: MIRA INVERTIDA!");
 }
 
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
@@ -3406,10 +3465,9 @@ static int effTable(void) { return (tableAuto && CHAR_TAB[charSel[0]] >= 0) ? CH
 static void ell(float cx, float cy, float rx, float ry, u64 c)
 {
     int i, n = 16;
-    for (i = 0; i < n; i++) {
-        float a0 = i * 6.2831853f / n, a1 = (i + 1) * 6.2831853f / n;
-        tri(cx, cy, cx + cosf(a0) * rx, cy + sinf(a0) * ry, cx + cosf(a1) * rx, cy + sinf(a1) * ry, c);
-    }
+    const float *t = circ(n);
+    for (i = 0; i < n; i++)
+        tri(cx, cy, cx + t[2*i] * rx, cy + t[2*i+1] * ry, cx + t[2*i+2] * rx, cy + t[2*i+3] * ry, c);
 }
 
 /* fatia de elipse (a0..a1 em rad; y cresce para baixo: 0..PI = metade de baixo, PI..2PI = metade de cima) */
@@ -4061,7 +4119,7 @@ static void drawCueMenu(void)
         { "UMA ONDA GIGANTE EMPURRA TODAS AS BOLAS DA MESA", "NA DIRECAO DA CACAPA MAIS PROXIMA (FORCA FRACA)." },
         { "A BRANCA CURVA SOZINHA E PERSEGUE A BOLA CERTA MAIS", "PERTO DA SUA MIRA, ATE A PRIMEIRA BATIDA." },
         { "AS SUAS BOLAS SAO PUXADAS PARA A CACAPA MAIS PROXIMA", "(FORCA FRACA). MESA ABERTA: TODAS, MENOS A 8." },
-        { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE A", "BARRA DE FORCA ANDA 2X MAIS RAPIDO E A MIRA TREME." },
+        { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE", "OS BOTOES DE MIRAR FICAM INVERTIDOS E A FORCA FALHA AS VEZES." },
         { "SE NAO ENCACAPAR E NAO FOR FALTA, VOCE JOGA DE NOVO.", "SE ENCACAPAR, A HABILIDADE NAO GASTA." } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
@@ -4427,8 +4485,8 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
     switch (setStep) {
     case 0:
         if (!tourney) v[n++] = SR_OPP;
-        v[n++] = (oppSel == 0) ? SR_LVL : SR_TIME;      /* tempo por jogada so contra outro jogador */
-        if (oppSel == 1 && !tourney) v[n++] = SR_ABIL;          /* versus: escolhe se tem habilidades */
+        if (oppSel == 0) v[n++] = SR_LVL;
+        if (oppSel == 1 || tourney) { v[n++] = SR_TIME; v[n++] = SR_ABIL; }   /* tempo e habilidades: versus e torneio */
         v[n++] = SR_MODE;
         v[n++] = SR_NEXT;
         break;
@@ -4488,7 +4546,8 @@ static void tourneyBegin(void)                   /* sorteia rivais, personagens 
     for (i = 7; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
     for (i = 0; i < 8; i++) tSlot[0][i] = ord[i];
     tRound = 0; tRes = 0; tChamp = -1; mode = 0;
-    cueSel[0] = cueSel[1] = 0;                   /* regra: so o taco CLASSICO */
+    cueSel[0] = (tAbil && CHAR_CUE[charSel[0]] >= 0) ? CHAR_CUE[charSel[0]] : 0;   /* regra: so o taco CLASSICO (ou, com habilidades, o taco do seu personagem) */
+    cueSel[1] = 0;
     tourneyPrepare();
     state = S_BRACKET;
 }
@@ -4496,7 +4555,8 @@ static void tourneyBegin(void)                   /* sorteia rivais, personagens 
 static void tourneyPlay(void)                    /* comeca a partida da rodada atual */
 {
     charSel[1] = tChar[tOpp];
-    cueSel[0] = cueSel[1] = 0;
+    if (!tAbil) cueSel[0] = 0;
+    cueSel[1] = 0;
     rs += 7919 + menuT;
     newGame(0);
 }
@@ -4583,7 +4643,7 @@ static void setupInput(u32 pr)
     case SR_TIME:  timeSel = (timeSel + d + NTIMES) % NTIMES; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
     case SR_TABLE: tableSel = (tableSel + d + NTABLES) % NTABLES; tableAuto = 0; break;
-    case SR_ABIL:  abilSel = !abilSel; break;
+    case SR_ABIL:  if (tourney) tAbil = !tAbil; else abilSel = !abilSel; break;
     case SR_TAUTO: tableAuto = !tableAuto; break;
     case SR_BALLS: ballTheme = (ballTheme + d + NTHEMES) % NTHEMES; break;
     case SR_C0:    cycleColor(0, d); break;
@@ -4678,7 +4738,7 @@ static void drawSetupScreen(void)
                        vc = timeSel ? COL(255,230,110) : COL(255,255,255); break;
         case SR_MODE:  sprintf(buf, "< %s >", GMN[gmode]); break;
         case SR_TABLE: sprintf(buf, "< %s >", TABLES[effTable()].name); break;
-        case SR_ABIL:  strcpy(buf, abilSel ? "< DESLIGADAS >" : "< LIGADAS >"); vc = abilSel ? COL(255,130,120) : COL(110,255,140); break;
+        case SR_ABIL:  { int off = tourney ? !tAbil : abilSel; strcpy(buf, off ? "< DESLIGADAS >" : "< LIGADAS >"); vc = off ? COL(255,130,120) : COL(110,255,140); } break;
         case SR_TAUTO: if (tableAuto && CHAR_TAB[charSel[0]] >= 0) sprintf(buf, "< SIM: %s >", TABLES[CHAR_TAB[charSel[0]]].name);
                        else strcpy(buf, tableAuto ? "< SIM (SEM MESA) >" : "< NAO >");
                        vc = tableAuto ? COL(110,255,140) : COL(255,255,255); break;
@@ -4720,6 +4780,8 @@ static void drawSetupScreen(void)
                               : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
     else if (v[setSel] == SR_TIME)
         hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
+    else if (v[setSel] == SR_ABIL && tourney)
+        hint = tAbil ? "LIGADAS: VOCE ESCOLHE O TACO (SELECT) E USA PODERES (O). OS RIVAIS JOGAM SEM PODERES" : "DESLIGADAS: TODOS JOGAM SO COM O TACO CLASSICO";
     else if (v[setSel] == SR_ABIL)
         hint = "LIGADAS: TACOS DE PERSONAGEM TEM PODERES (O NA MIRA). DESLIGADAS: SO OS ATRIBUTOS";
     else if (v[setSel] == SR_TAUTO)
@@ -4930,19 +4992,28 @@ static void drawBracketScreen(void)
             rect(x, y, x + 124, y + 34, me ? COL(58,46,10) : COL(10,18,30));
             if (comp < 0) { text(x + 56, y + 6, 0.5f, COL(80,92,112), "?"); continue; }
             drawChar(tChar[comp], x + 19, y + 19, 0.3f, 0, menuT, 0);
-            text(x + 40, y + 10, 0.3f, lost ? COL(105,110,122) : (me ? COL(255,240,150) : COL(220,228,240)), tName[comp]);
+            text(x + 40, y + 4, 0.3f, lost ? COL(105,110,122) : (me ? COL(255,240,150) : COL(220,228,240)), tName[comp]);
+            text(x + 40, y + 19, 0.22f, lost ? COL(90,96,108) : rarCol(CHAR_RAR[tChar[comp]]), CHAR_NAME[tChar[comp]]);   /* nome do personagem */
             if (lost) rect(x, y, x + 124, y + 34, CA(0, 0, 0, 0x48));
             if (now) frameR(x - 3, y - 3, x + 127, y + 37, 1.6f, me ? CA(255, 230, 90, 0x50 + (int)(0x30 * pulse)) : CA(255, 255, 255, 0x40));
         }
     }
     if (tRes == 3) drawTrophy(tCx(3) + 62.0f, 126.0f, 0.7f, menuT);
 
-    if (tRes == 0)      sprintf(buf, "%s: %s X %s", tRoundName(tRound), pname(0), tName[tOpp]);
-    else if (tRes == 1) sprintf(buf, "VOCE AVANCOU! %s CONTRA %s", tRoundName(tRound), tName[tOpp]);
-    else if (tRes == 2) sprintf(buf, "VOCE FOI ELIMINADO! CAMPEAO: %s", tName[tChamp]);
+    if (tRes == 0)      sprintf(buf, "%s: %s X %s", tRound == 0 ? "QUARTAS" : (tRound == 1 ? "SEMI" : "FINAL"), pname(0), tName[tOpp]);
+    else if (tRes == 1) sprintf(buf, "VOCE AVANCOU! %s CONTRA %s", tRound == 0 ? "QUARTAS" : (tRound == 1 ? "SEMI" : "FINAL"), tName[tOpp]);
+    else if (tRes == 2) sprintf(buf, "VOCE FOI ELIMINADO! CAMPEAO: %s (%s)", tName[tChamp], CHAR_NAME[tChar[tChamp]]);
     else                sprintf(buf, "PARABENS, %s! VOCE E O CAMPEAO!", pname(0));
-    textC(398, 0.38f, tRes == 2 ? COL(255,160,140) : COL(255,240,170), buf);
-    textC(420, 0.3f, COL(170,180,195), tRes <= 1 ? "X: JOGAR   SELECT: SAIR DO TORNEIO   TODOS USAM O TACO CLASSICO" : "X: VOLTAR AO MENU");
+    textC(396, 0.38f, tRes == 2 ? COL(255,160,140) : COL(255,240,170), buf);
+    if (tRes <= 1) {
+        char rl[96];
+        sprintf(buf, "%s X %s", CHAR_NAME[tChar[0]], CHAR_NAME[tChar[tOpp]]);
+        textC(409, 0.3f, COL(150,220,255), buf);                                                  /* personagens da partida */
+        textC(421, 0.3f, COL(170,180,195), "X: JOGAR   SELECT: SAIR DO TORNEIO");
+        if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", gmode == GM_BR ? "SINUCA BRASILEIRA" : "BOLA 8", tAbil ? "COM HABILIDADES" : "TACO CLASSICO", TIME_SEC[timeSel], LVL_NAME[botLevel]);
+        else         sprintf(rl, "REGRAS: %s | %s | SEM TEMPO | %s", gmode == GM_BR ? "SINUCA BRASILEIRA" : "BOLA 8", tAbil ? "COM HABILIDADES" : "TACO CLASSICO", LVL_NAME[botLevel]);
+        textC(434, 0.26f, COL(130,140,158), rl);
+    } else textC(420, 0.3f, COL(170,180,195), "X: VOLTAR AO MENU");
 }
 
 static void drawMenuScreen(void)
@@ -5813,15 +5884,15 @@ int main(int argc, char *argv[])
                     float ds;
                     if (dpadHold < 60) dpadHold++;
                     ds = 0.010f + 0.020f * (dpadHold > 24 ? 1.0f : dpadHold / 24.0f);
-                    ang += (in & PAD_RIGHT) ? ds : -ds;
+                    ang += ((in & PAD_RIGHT) ? ds : -ds) * (curse[cur] ? -1.0f : 1.0f);   /* MALDICAO: botoes invertidos */
                 } else dpadHold = 0;
-                if (anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f;   /* analogico: quanto mais inclina, mais gira */
+                if (anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f * (curse[cur] ? -1.0f : 1.0f);   /* analogico: quanto mais inclina, mais gira */
                 if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
                     float st;                                   /* ajuste fino: comeca bem devagar e so acelera um pouco segurando */
                     if (fineHold < 600) fineHold++;
                     st = 0.0007f + (fineHold > 20 ? (fineHold - 20) * 0.00002f : 0.0f);
                     if (st > 0.0028f) st = 0.0028f;
-                    ang += (in & PAD_R1) ? st : -st;
+                    ang += ((in & PAD_R1) ? st : -st) * (curse[cur] ? -1.0f : 1.0f);
                 } else fineHold = 0;
                 if (in & PAD_L2) { spinSel -= 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; }
                 if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
@@ -5844,7 +5915,7 @@ int main(int argc, char *argv[])
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
                 } else {
-                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f) * (curse[cur] ? 2.0f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
+                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
                     if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
                     if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
                     if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
@@ -5971,8 +6042,8 @@ int main(int argc, char *argv[])
 
         /* tempo por jogada (so no versus): passou o tempo, perde a vez */
         {
-            int inTurn = (state == S_AIM || state == S_PLACE || state == S_TAKE || state == S_CUES);
-            if (!(timeSel && mode == 1)) { turnReset = 1; turnT = -1; }
+            int inTurn = (state == S_AIM || state == S_PLACE || state == S_TAKE || state == S_CUES) && !isBot();   /* torneio: o relogio so corre nas jogadas do jogador */
+            if (!(timeSel && (mode == 1 || tourney))) { turnReset = 1; turnT = -1; }
             else if (!inTurn) turnReset = 1;
             else {
                 if (turnReset || cur != turnCur) { turnT = TIME_SEC[timeSel] * 60; turnCur = cur; turnReset = 0; }
