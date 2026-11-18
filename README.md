@@ -63,6 +63,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - **Regras do torneio** (etapa 1 da configuração): **HABILIDADES** (padrão DESLIGADAS) e **TEMPO POR JOGADA** (SEM TEMPO, 15, 20, 25 ou 30 s; o relógio só corre nas suas jogadas e, se acabar, você perde a vez). Também vale a dificuldade do BOT e o modo (Bola 8 ou Sinuca Brasileira)
 - **Habilidades DESLIGADAS:** todos jogam com o taco CLASSICO e a troca de taco (SELECT) fica bloqueada
 - **Habilidades LIGADAS:** você começa com o taco do seu personagem, pode trocar de taco (SELECT) e usar o poder (O na mira). Os rivais controlados pelo BOT jogam sem poderes
+- **A mesa muda a cada partida** do torneio (sorteada, nunca a mesma da partida anterior) e aparece no chaveamento; por isso não há escolha de mesa na configuração do torneio
 - O chaveamento mostra o **nome de cada personagem** (cor da raridade) embaixo do nome do jogador, o confronto da partida (ex.: PINGUIM X ROBO) e um resumo das regras ativas
 - Entre as partidas aparece o **chaveamento**: X joga a próxima partida, SELECT sai do torneio. As partidas dos outros jogadores são decididas automaticamente
 - No torneio não há revanche nem reiniciar partida; o placar do topo mostra a fase (QUARTAS, SEMI ou FINAL)

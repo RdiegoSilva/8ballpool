@@ -64,6 +64,7 @@ static char msg[64];
 static int msgTimer;
 
 /* torneio mata-mata: 8 jogadores (quartas, semifinal, final); perdeu, esta fora */
+static int tTable = -1;                           /* torneio: mesa da partida atual (muda a cada partida) */
 static int tAbil;                                 /* regra do torneio: 1 = com habilidades (voce escolhe o taco), 0 = so taco CLASSICO */
 static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da partida, 1 avancou, 2 eliminado, 3 campeao */
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
@@ -2609,7 +2610,7 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
 
 static void drawTable(void)
 {
-    const TableDef *T = &TABLES[tableSel];
+    const TableDef *T = &TABLES[(tourney && tTable >= 0) ? tTable : tableSel];
     u64 w0 = shade(T->wood, 0.36f, 0), w1 = shade(T->wood, 0.80f, 0), w2 = shade(T->wood, 1.0f, 0);
     u64 whi = shade(T->wood, 1.28f, 14), wlo = shade(T->wood, 0.48f, 0), wgr = shade(T->wood, 0.42f, 0);
     u64 ga = shade(T->wood, 0.90f, 0), gb = shade(T->wood, 1.10f, 5);
@@ -4494,8 +4495,7 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
         v[n++] = SR_CH0; if (!tourney) v[n++] = SR_CH1; v[n++] = SR_NEXT;
         break;
     case 2:
-        v[n++] = SR_TABLE;
-        v[n++] = SR_TAUTO;
+        if (!tourney) { v[n++] = SR_TABLE; v[n++] = SR_TAUTO; }      /* torneio: a mesa muda a cada partida */
         if (gmode == GM_BR) { v[n++] = SR_C0; v[n++] = SR_C1; }
         else                { v[n++] = SR_BALLS; }
         v[n++] = SR_NEXT;
@@ -4524,7 +4524,9 @@ static const char *TBOT[12] = { "BRUNO", "LUCAO", "TONHO", "DUDU", "MARCOS", "PE
 
 static void tourneyPrepare(void)                 /* simula as outras partidas da rodada e acha o rival do jogador */
 {
-    int n = 8 >> tRound, m;
+    int n = 8 >> tRound, m, t;
+    do { t = (int)(rnd() % NTABLES); } while (t == tTable);   /* a mesa muda a cada partida do torneio */
+    tTable = t;
     for (m = 0; m < n / 2; m++) {
         int a = tSlot[tRound][2 * m], c = tSlot[tRound][2 * m + 1];
         if (a == 0 || c == 0) { tOpp = (a == 0) ? c : a; tPM = m; }
@@ -4545,7 +4547,7 @@ static void tourneyBegin(void)                   /* sorteia rivais, personagens 
     for (i = 0; i < 8; i++) ord[i] = i;
     for (i = 7; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
     for (i = 0; i < 8; i++) tSlot[0][i] = ord[i];
-    tRound = 0; tRes = 0; tChamp = -1; mode = 0;
+    tRound = 0; tRes = 0; tChamp = -1; mode = 0; tTable = -1;
     cueSel[0] = (tAbil && CHAR_CUE[charSel[0]] >= 0) ? CHAR_CUE[charSel[0]] : 0;   /* regra: so o taco CLASSICO (ou, com habilidades, o taco do seu personagem) */
     cueSel[1] = 0;
     tourneyPrepare();
@@ -4803,7 +4805,8 @@ static void drawSetupScreen(void)
     textC(y2 + 10, 0.3f, COL(170,180,195), hint);
 
     if (setStep == 2) {                                   /* previa grande da mesa */
-        drawTablePreview(320.0f, 362.0f, 250.0f, &TABLES[effTable()]);
+        if (tourney) textC(184, 0.4f, COL(255,215,70), "A MESA MUDA A CADA PARTIDA DO TORNEIO");
+        drawTablePreview(320.0f, 362.0f, 250.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
     } else if (setStep == 3) {                            /* bola branca e linha guia em destaque */
         const u8 *c = WB_COL[wbSel[0]];
         float bx = 118.0f, by = 358.0f;
@@ -4815,7 +4818,7 @@ static void drawSetupScreen(void)
         discN(bx - 1.0f, by - 1.0f, 27.5f, shade(c, 1.0f, 0), 20);
         discN(bx - 10.0f, by - 11.0f, 7.0f, CA(255, 255, 255, 0x58), 10);
         text(bx - tw(0.3f, "BOLA BRANCA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "BOLA BRANCA");
-        drawTablePreview(320.0f, 360.0f, 200.0f, &TABLES[effTable()]);
+        drawTablePreview(320.0f, 360.0f, 200.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
         beam(432.0f, by, 560.0f, by, 8.0f, CA(r, gg, bb, 0x18));
         beam(432.0f, by, 560.0f, by, 4.0f, CA(r, gg, bb, 0x34));
         beam(432.0f, by, 560.0f, by, 1.8f, COL(r, gg, bb));
@@ -5007,7 +5010,7 @@ static void drawBracketScreen(void)
     textC(396, 0.38f, tRes == 2 ? COL(255,160,140) : COL(255,240,170), buf);
     if (tRes <= 1) {
         char rl[96];
-        sprintf(buf, "%s X %s", CHAR_NAME[tChar[0]], CHAR_NAME[tChar[tOpp]]);
+        sprintf(buf, "%s X %s   MESA: %s", CHAR_NAME[tChar[0]], CHAR_NAME[tChar[tOpp]], TABLES[tTable].name);
         textC(409, 0.3f, COL(150,220,255), buf);                                                  /* personagens da partida */
         textC(421, 0.3f, COL(170,180,195), "X: JOGAR   SELECT: SAIR DO TORNEIO");
         if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", gmode == GM_BR ? "SINUCA BRASILEIRA" : "BOLA 8", tAbil ? "COM HABILIDADES" : "TACO CLASSICO", TIME_SEC[timeSel], LVL_NAME[botLevel]);
