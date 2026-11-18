@@ -40,7 +40,7 @@ IRX(usbhdfsd);
 typedef struct { char path[PATH_LEN]; char name[NAME_LEN]; } Track;
 
 static Track tr[MUS_MAX];
-static int dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
+static int dbgN, dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
 static int nTr, cur = -1, state, audioOK, volume = 8, enabled = 1;
 static int scanTries, scanWait = 120, scanDone, wantAuto = 1, ending, failStreak, toastT;
 static char elfDir[PATH_LEN], srcDir[PATH_LEN];
@@ -367,7 +367,7 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
 {
     int avail, n, want;
     if (!nVoice) return;
-    if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) return;
+    if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { if (dbgN++ < 5) printf("pool8: ensureFmt falhou\n"); return; }
     avail = audsrv_available();
     want = IDLE_QUEUE - audsrv_queued();
     n = avail < want ? avail : want;
@@ -375,7 +375,11 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     n -= n % (outCh * (outBits / 8));
     if (n <= 0) return;
     mixOut(mixbuf, NULL, n, 0);
-    FlushCache(0); audsrv_play_audio((const char *)mixbuf, n);
+    FlushCache(0);
+    {
+        int r = audsrv_play_audio((const char *)mixbuf, n);
+        if (dbgN++ < 8) printf("pool8: sfxIdle avail=%d want=%d n=%d voices=%d play=%d\n", avail, want, n, nVoice, r);
+    }
 }
 
 static int decodeNext(void)                      /* enche pcm[]; 0 = fim da faixa ou erro */
