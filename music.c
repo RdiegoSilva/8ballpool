@@ -370,7 +370,7 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     if (!nVoice) return;
     if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { if (dbgN++ < 5) printf("pool8: ensureFmt falhou\n"); return; }
     avail = audsrv_available();
-    want = IDLE_QUEUE - audsrv_queued();
+    want = 4096;                                  /* nao usa audsrv_queued(): em alguns audsrv/PCSX2 ele devolve o mesmo valor de available */
     n = avail < want ? avail : want;
     if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
     n -= n % (outCh * (outBits / 8));
