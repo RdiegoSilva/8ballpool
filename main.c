@@ -75,9 +75,9 @@ static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", 
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
-#define ENTERRO_SO_ULTIMA 1                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
+#define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 15.0f                                 /* raio da COVA (buraco extra no meio da mesa) */
-static int graveSel, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
+static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
 static const int GV_KIND[3] = { AB_ENTERRO, AB_COVA, AB_RESSUS };
 static const char *GV_NAME[3] = { "ENTERRO", "COVA", "RESSUSCITAR" };
@@ -237,8 +237,8 @@ static CueDef CUES[NCUES] = {
     { "ROBO",       62,  35,  65,  65, {255,200, 60}, {150,158,170}, { 70, 76, 90}, {255,200, 60}, { 40, 44, 54}, 14 },
     { "VARINHA",    48,  70,  55,  55, {255,240,150}, { 80, 40,130}, { 40, 20, 76}, {255,214, 90}, {160, 90,230}, 15 },
     { "GATO",       52,  58,  55,  62, {255,150,190}, {255,184,210}, {120, 70,100}, {255,240,250}, {255,120,170}, 16 },
-    /* COVEIRO (lendario): madeira de caixao, ponta de osso, ectoplasma verde e cruzinha de prata */
-    { "COVEIRO",    58,  55,  58,  60, {150,255,170}, { 54, 38, 30}, { 26, 20, 28}, {200,210,200}, { 60, 70, 64}, 17 },
+    /* COVEIRO (lendario): o taco e uma pa (lamina de aco, cabo de madeira e punho em T) com ectoplasma verde */
+    { "COVEIRO",    58,  55,  58,  60, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
 };
 
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
@@ -732,7 +732,7 @@ static void newGame(int m)
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
-    graveSel = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
+    graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
@@ -840,7 +840,7 @@ static const char *graveWhy(int k)                    /* NULL = o poder pode ser
 static const char *abLabel(int ab)                    /* nome mostrado na tela (Grinch: poder sorteado; Coveiro: poder escolhido) */
 {
     if (ab == AB_GRINCH) return grinchName();
-    if (ab == AB_COVEIRO && abilArm) return GV_NAME[graveSel];
+    if (ab == AB_COVEIRO && graveOpen) return GV_NAME[graveSel];
     return AB_NAME[ab];
 }
 
@@ -909,7 +909,7 @@ static void shoot(float p)
         default: break;
         }
     }
-    abilArm = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
+    abilArm = 0; graveOpen = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
     if (jumpArm && !isBot()) {                        /* pulo: a branca sobe e passa por cima das outras bolas */
         b[0].vz = (150.0f + 90.0f * p) * cueJumpMul(hitCue);
         b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
@@ -962,11 +962,12 @@ static void abilOnFirstHit(int j)
 #if ENTERRO_SO_ULTIMA
         ok = grp[cur] >= 0 && grp[cur] < 2 && ballGroup(j) == grp[cur] && countGroup(grp[cur]) == 1;
 #endif
+        if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) ok = 0;   /* nao enterra a 8 antes da hora (seria derrota) */
         if (ok) {
             float bd = 1e9f; int pp;
             for (pp = 0; pp < 6; pp++) { float ddx = PX[pp] - b[j].x, ddy = PY[pp] - b[j].y, d2 = ddx * ddx + ddy * ddy; if (d2 < bd) { bd = d2; buryP = pp; } }
             buryBall = j; buryT = 1500; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
-        } else setmsg("ENTERRO FALHOU: NAO ERA A SUA ULTIMA BOLA");
+        } else setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA");
     }
     else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* marreta bionica */
     else if (abilKind == AB_CORTE) { b[0].vx = b[0].vy = 0; abilFx = 36; fxX = b[0].x; fxY = b[0].y; }
@@ -1072,10 +1073,10 @@ static int stepPhysics(float dt)
                 }
             }
         }
-        if (b[i].in && i > 0 && abilKind == AB_COVA && !air) {       /* coveiro: a bola que cai na cova some e volta ao lugar de origem no fim da tacada */
+        if (b[i].in && i > 0 && abilKind == AB_COVA && !air) {       /* coveiro: a cova e uma cacapa extra no meio da mesa; a bola que cai conta como encacapada */
             float gdx = b[i].x - TCX, gdy = b[i].y - TCY;
             if (gdx * gdx + gdy * gdy < GRAVE_R * GRAVE_R) {
-                graveIn[i] = 1; fallT[i] = FALLN; fallP[i] = 6; fallX[i] = b[i].x; fallY[i] = b[i].y;
+                pocketed[i] = 1; fallT[i] = FALLN; fallP[i] = 6; fallX[i] = b[i].x; fallY[i] = b[i].y;
                 b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; SFX(SFX_POCKET, 60);
             }
         }
@@ -1193,7 +1194,7 @@ static void endTurn(int foul, int ownPocket)
     int forgiven = 0, saved = 0, keep = abilExtra, kept = 0;   /* keep: NOVA VIDA do gato */
     abilExtra = 0;
     botTimer = 0; botPlanned = 0;
-    abilArm = 0; hackOn = 0;
+    abilArm = 0; graveOpen = 0; hackOn = 0;
     if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
         foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
         if (!b[0].in) {
@@ -3116,6 +3117,13 @@ static void cueSeg(float u1, float u2, const u8 *c)
     quad(dx, dy, cx, cy, ex, ey, fx, fy, shadeA(c, 0.66f, 0, cueAl));   /* lado escuro */
 }
 
+static void shovelTri(float u1, float s1, float u2, float s2, float u3, float s3, u64 c)
+{
+    float ax, ay, bx, by, cx, cy;
+    cuePt(u1, s1, &ax, &ay); cuePt(u2, s2, &bx, &by); cuePt(u3, s3, &cx, &cy);
+    tri(ax, ay, bx, by, cx, cy, c);
+}
+
 static void drawCue(float px, float py, float d0, int al, float a, int ci)
 {
     static const u8 FER[3]   = { 238, 238, 228 };
@@ -3137,6 +3145,26 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
     quad(ax + 4, ay + 5, bx + 6, by + 7, cx + 6, cy + 7, ex + 4, ey + 5,
          GS_SETREG_RGBAQ(0, 12, 5, (al * 30) / 128, 0x00));
 
+    if (cd->fx == 17) {                                       /* COVEIRO: o taco e uma pa (lamina na ponta, cabo de madeira e punho em T) */
+        static const u8 STL[3] = { 176, 184, 192 };
+        u64 lt = shadeA(STL, 1.15f, 10, al), dk = shadeA(STL, 0.62f, 0, al);
+        static const float L[5][2] = { {0.0f, 0.0f}, {4.0f, -7.0f}, {16.0f, -9.0f}, {40.0f, -3.0f}, {40.0f, 0.0f} };
+        int k2;
+        for (k2 = 0; k2 < 3; k2++) {                          /* lamina: metade clara e metade escura */
+            shovelTri(L[0][0], L[0][1], L[k2 + 1][0], L[k2 + 1][1], L[k2 + 2][0], L[k2 + 2][1], lt);
+            shovelTri(L[0][0], -L[0][1], L[k2 + 1][0], -L[k2 + 1][1], L[k2 + 2][0], -L[k2 + 2][1], dk);
+        }
+        cuePt(6.0f, 0.0f, &ax, &ay); cuePt(38.0f, 0.0f, &bx, &by);
+        line(ax, ay, bx, by, shadeA(STL, 0.8f, 0, al));       /* nervura da lamina */
+        cueSeg(40.0f, 50.0f, JOINT);                          /* encaixe */
+        cueSeg(50.0f, 262.0f, cd->wood);                      /* cabo */
+        cueSeg(262.0f, 284.0f, cd->butt);
+        cuePt(280.0f, -11.0f, &ax, &ay); cuePt(290.0f, -11.0f, &bx, &by);
+        cuePt(290.0f, 11.0f, &cx, &cy);  cuePt(280.0f, 11.0f, &ex, &ey);
+        quad(ax, ay, bx, by, cx, cy, ex, ey, shadeA(cd->butt, 1.0f, 0, al));   /* punho em T */
+        cuePt(50.0f, -1.2f, &ax, &ay); cuePt(258.0f, -3.0f, &bx, &by);
+        line(ax, ay, bx, by, shadeA(cd->wood, 1.3f, 40, al));
+    } else {
     cueSeg(0.0f,   3.5f,   tipc);
     cueSeg(3.5f,   13.0f,  FER);
     cueSeg(13.0f,  166.0f, cd->wood);
@@ -3153,6 +3181,7 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
     line(ax, ay, bx, by, shadeA(cd->wood, 1.3f, 40, al));
     cuePt(174.0f, -2.4f, &ax, &ay); cuePt(284.0f, -3.9f, &bx, &by);
     line(ax, ay, bx, by, shadeA(cd->butt, 1.7f, 30, al));
+    }
 
     if (cd->fx) {
         int mt = fxOn ? menuT : 0, k;
@@ -3251,9 +3280,6 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
                 cuePt(u, -2.0f - 2.0f * tw2, &ax, &ay);
                 disc(ax, ay, 1.2f + tw2, CA(170, 255, 190, (al * (0x28 + (int)(0x40 * tw2))) / 128));
             }
-            cuePt(234.0f, 0.0f, &ax, &ay);
-            rect(ax - 0.8f, ay - 3.5f, ax + 0.8f, ay + 3.5f, CA(220, 225, 220, (al * 0x70) / 128));
-            rect(ax - 2.5f, ay - 1.5f, ax + 2.5f, ay - 0.3f, CA(220, 225, 220, (al * 0x70) / 128));
         } else if (cd->fx == 10) {                                /* chipote: bola amarela pulsando e coracoes */
             float p = 0.5f + 0.5f * sinf(mt * 0.16f);
             cuePt(0.0f, 0.0f, &ax, &ay);
@@ -3606,10 +3632,22 @@ static void drawHUD(void)
         char ab[40];
         u64 ac;
         if (hackOn)                 { sprintf(ab, "HACK %d/%d  O: OUTRA", hCandI + 1, hCandN); ac = COL(0,255,220); }
+        else if (curAb() == AB_COVEIRO && graveOpen && !abilArm) { sprintf(ab, "%s INDISPONIVEL  O: TROCAR", GV_NAME[graveSel]); ac = COL(255,120,110); }
         else if (abilArm)           { sprintf(ab, "%s ARMADO!%s", abLabel(curAb()), curAb() == AB_COVEIRO ? " O: TROCAR" : ""); ac = COL(110,255,140); }
         else if (abilCD[cur] > 0)   { sprintf(ab, "%s: %d", AB_NAME[curAb()], abilCD[cur]); ac = COL(150,155,170); }
         else                        { sprintf(ab, "O: %s", abLabel(curAb())); ac = COL(255,230,60); }
         text(590 - tw(0.3f, ab), 408, 0.3f, ac, ab);
+    }
+    if (state == S_AIM && !isBot() && curAb() == AB_COVEIRO && abilCD[cur] == 0) {   /* mini seletor do Coveiro */
+        static const char *SH[3] = { "ENTERRO", "COVA", "RESSUSC." };
+        int k;
+        for (k = 0; k < 3; k++) {
+            float x1 = 590.0f - 186.0f + k * 62.0f, y1 = 376.0f;
+            int ok = graveWhy(k) == NULL, sel = graveOpen && graveSel == k;
+            rect(x1, y1, x1 + 60.0f, y1 + 13.0f, sel ? CA(20, 40, 28, 0x70) : CA(10, 14, 22, 0x60));
+            outlineRect(x1, y1, x1 + 60.0f, y1 + 13.0f, sel ? (ok ? COL(110,255,140) : COL(255,110,100)) : COL(80,88,100));
+            text(x1 + 30.0f - tw(0.24f, SH[k]) * 0.5f, y1 + 1.0f, 0.24f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH[k]);
+        }
     }
     if (state == S_AIM && curse[cur])                                  /* MALDICAO sobre quem esta mirando */
         text(590 - tw(0.3f, "AMALDICOADO: MIRA INVERTIDA!"), 398, 0.3f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), "AMALDICOADO: MIRA INVERTIDA!");
@@ -4401,8 +4439,8 @@ static void drawCueMenu(void)
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
         textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
         if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: A PA ENTERRA A BOLA ALVO NA CACAPA (SO NA ULTIMA BOLA)", 375.0f);
-            textFit(236, 322, 0.25f, COL(215,220,232), "COVA: BURACO NO MEIO DA MESA; BOLA QUE CAI VOLTA AO LUGAR", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: A PA ENTERRA A BOLA ALVO NA CACAPA (QUALQUER BOLA)", 375.0f);
+            textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A MESA A ULTIMA BOLA DO ADVERSARIO", 375.0f);
         } else {
             textFit(236, 316, 0.28f, COL(215,220,232), AD[ab][0], 345.0f);
@@ -4729,6 +4767,7 @@ static void cycleChar(int pl, int d)       /* cada jogador usa um personagem dif
 {
     int o = charSel[1 - pl];
     do { charSel[pl] = (charSel[pl] + d + NCHARS) % NCHARS; } while (charSel[pl] == o);
+    if (pl == 0 && charSel[0] == 16) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
 }
 
 /* ---------- torneio mata-mata ---------- */
@@ -5980,13 +6019,15 @@ static void useAbility(void)
         hackSolve(); hackApply(); abilCD[cur] = AB_COOL + 1; SFX(SFX_ABIL, 70);
         return;
     }
-    if (ab == AB_COVEIRO) {                               /* O: arma ENTERRO > COVA > RESSUSCITAR > cancela */
-        int wasArmed = abilArm, n = abilArm ? graveSel + 1 : 0;
-        const char *why = NULL, *w;
-        while (n < 3 && (w = graveWhy(n)) != NULL) { if (!why) why = w; n++; }
-        if (n >= 3) { abilArm = 0; graveSel = 0; setmsg(wasArmed ? "HABILIDADE CANCELADA: COVEIRO" : (why ? why : "COVEIRO INDISPONIVEL")); return; }
-        graveSel = n; abilArm = 1; SFX(SFX_ABIL, 70);
-        sprintf(tb, "COVEIRO: %s (O: TROCAR)", GV_NAME[n]); setmsg(tb);
+    if (ab == AB_COVEIRO) {                               /* O: abre o seletor e passa ENTERRO > COVA > RESSUSCITAR > fechar */
+        const char *why;
+        if (!graveOpen) { graveOpen = 1; graveSel = 0; } else graveSel++;
+        if (graveSel > 2) { graveOpen = 0; graveSel = 0; abilArm = 0; setmsg("HABILIDADE CANCELADA: COVEIRO"); return; }
+        why = graveWhy(graveSel);
+        abilArm = (why == NULL);                          /* poder indisponivel: fica so selecionado (nao arma) */
+        SFX(SFX_ABIL, 70);
+        if (why) setmsg(why);
+        else { sprintf(tb, "COVEIRO: %s PRONTO (O: TROCAR)", GV_NAME[graveSel]); setmsg(tb); }
         return;
     }
     abilArm = !abilArm;
@@ -6203,7 +6244,7 @@ int main(int argc, char *argv[])
                 if (tmSel == 0) {                                   /* SIM: volta a mesa para antes da tacada */
                     memcpy(b, tmB, sizeof(b)); grp[0] = tmGrp[0]; grp[1] = tmGrp[1];
                     memset(pocketed, 0, sizeof(pocketed)); memset(fallT, 0, sizeof(fallT));
-                    firstHit = -1; b[0].vx = b[0].vy = 0; pwr = 0; charging = 0; abilArm = 0; hackOn = 0;
+                    firstHit = -1; b[0].vx = b[0].vy = 0; pwr = 0; charging = 0; abilArm = 0; graveOpen = 0; hackOn = 0;
                     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; memset(graveIn, 0, sizeof(graveIn)); buryBall = 0; buryT = 0;
                     overNote[0] = 0; botTimer = 0; botPlanned = 0; state = S_AIM;
                     setmsg("VOLTOU NO TEMPO! JOGUE DE NOVO");
@@ -6299,7 +6340,7 @@ int main(int argc, char *argv[])
                         }
                     }
                     sprintf(tb, "TEMPO ESGOTADO! %s PERDE A VEZ", pname(cur));
-                    charging = 0; pwr = 0; spinSel = 0; spinV = 0; jumpArm = 0; chalkAnim = 0; abilArm = 0; hackOn = 0;
+                    charging = 0; pwr = 0; spinSel = 0; spinV = 0; jumpArm = 0; chalkAnim = 0; abilArm = 0; graveOpen = 0; hackOn = 0;
                     cur = 1 - cur; state = S_AIM; botTimer = 0; botPlanned = 0;
                     turnCur = cur; turnT = TIME_SEC[timeSel] * 60;
                     setmsg(tb);

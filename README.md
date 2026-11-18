@@ -246,8 +246,8 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
-- **ENTERRO**: a bola alvo é enterrada na caçapa mais próxima com uma pá. Se cair, conta para você; se errar, volta/fica na mesa. Só funciona na sua **última bola antes da 8** (para liberar em qualquer bola, troque `ENTERRO_SO_ULTIMA` para 0 no `main.c`).
-- **COVA**: abre um buraco no meio da mesa durante a tacada. Bola que cair lá (menos a branca) volta ao lugar de origem no fim da tacada; serve de defesa.
+- **ENTERRO**: a bola alvo (a primeira que a branca toca) é enterrada na caçapa mais próxima com uma pá, em **qualquer momento e qualquer bola**. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **COVA**: abre uma caçapa extra no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
 - **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque).
 
 ## Vampiro e Grinch (PUXÃO)
