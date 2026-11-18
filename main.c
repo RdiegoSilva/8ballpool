@@ -4099,6 +4099,15 @@ static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) r
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
 
+
+/* texto que encolhe para caber em maxw pixels (evita sair da caixa / encostar em outro texto) */
+static void textFit(float x, float y, float sc, u64 c, const char *t, float maxw)
+{
+    float w = tw(sc, t);
+    if (w > maxw && w > 0.0f) sc *= maxw / w;
+    text(x, y, sc, c, t);
+}
+
 static void drawCueMenu(void)
 {
     static const char *SN[4] = { "FORCA", "EFEITO", "MIRA", "CONTROLE" };
@@ -4185,19 +4194,19 @@ static void drawCueMenu(void)
     if (ch >= 0) {                                              /* caricatura do personagem */
         float bob = 3.0f * fabsf(sinf(menuT * 0.1f));
         drawChar(ch, 566.0f, 196.0f - bob, 0.72f, 1, menuT, 1);
-        text(566.0f - tw(0.3f, CHAR_NAME[ch]) * 0.5f, 272.0f, 0.3f, COL(255,235,150), CHAR_NAME[ch]);
-        text(566.0f - tw(0.28f, RAR_NAME[CHAR_RAR[ch]]) * 0.5f, 285.0f, 0.28f, rarCol(CHAR_RAR[ch]), RAR_NAME[CHAR_RAR[ch]]);
+        text(566.0f - tw(0.3f, CHAR_NAME[ch]) * 0.5f, 262.0f, 0.3f, COL(255,235,150), CHAR_NAME[ch]);
+        text(566.0f - tw(0.28f, RAR_NAME[CHAR_RAR[ch]]) * 0.5f, 275.0f, 0.28f, rarCol(CHAR_RAR[ch]), RAR_NAME[CHAR_RAR[ch]]);
     }
 
     /* habilidade */
     hbox(226, 290, 616, 362, ab ? CA(255, 215, 60, 0x70) : CA(90, 96, 112, 0x60), CA(14, 18, 32, 0x70));
     if (ab) {
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
-        text(236, 295, 0.42f, COL(255,215,70), buf);
-        text(236, 316, 0.28f, COL(215,220,232), AD[ab][0]);
-        text(236, 329, 0.28f, COL(215,220,232), AD[ab][1]);
+        textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
+        textFit(236, 316, 0.28f, COL(215,220,232), AD[ab][0], 345.0f);
+        textFit(236, 329, 0.28f, COL(215,220,232), AD[ab][1], 345.0f);
         sprintf(buf, "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
-        text(236, 344, 0.26f, COL(0,255,200), buf);
+        textFit(236, 344, 0.26f, COL(0,255,200), buf, 345.0f);
     } else {
         text(236, 303, 0.4f, COL(130,138,155), "SEM HABILIDADE ESPECIAL");
         text(236, 328, 0.28f, COL(120,128,145), "TACO DE ATRIBUTOS (FORCA, EFEITO, MIRA, CONTROLE)");
@@ -4208,13 +4217,13 @@ static void drawCueMenu(void)
         rect(228, 372, 252, 386, shade(TABLES[tb].wood, 0.95f, 0));
         rect(230, 374, 250, 384, shade(TABLES[tb].felt, 1.0f, 0));
         sprintf(buf, "MESA DO PERSONAGEM: %s", TABLES[tb].name);
-        text(260, 373, 0.32f, COL(190,200,215), buf);
+        textFit(260, 373, 0.32f, COL(190,200,215), buf, 195.0f);
     } else text(228, 373, 0.32f, COL(120,128,145), "MESA: LIVRE (ESCOLHA NA CONFIGURACAO)");
     if (cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23)) text(228, 392, 0.3f, COL(120,235,150), "TACO COM AS CORES DA BANDEIRA - SO ATRIBUTOS");
 
     if (ab && !abilOn) text(228, 392, 0.3f, COL(255,120,110), "HABILIDADES DESLIGADAS NESTA PARTIDA");
-    if (cueSel[cur] == cueMenuSel) text(500, 372, 0.4f, COL(110,230,130), "EM USO");
-    else text(470, 372, 0.4f, COL(255,230,60), "X: EQUIPAR");
+    if (cueSel[cur] == cueMenuSel) text(616.0f - tw(0.4f, "EM USO"), 372, 0.4f, COL(110,230,130), "EM USO");
+    else text(616.0f - tw(0.4f, "X: EQUIPAR"), 372, 0.4f, COL(255,230,60), "X: EQUIPAR");
     text(24, 418, 0.3f, COL(170,170,180), "CIMA/BAIXO: ESCOLHER   X: EQUIPAR   O/SELECT: VOLTAR");
 }
 
