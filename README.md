@@ -45,7 +45,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
-Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 16 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho), **Mestre do Tempo**, **Grinch** (pelo verde, olhos amarelos e gorro roubado do Noel) e **Poseidon** (cabelo e barba azuis, coroa de coral e tridente dourado). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 17 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho), **Mestre do Tempo**, **Grinch** (pelo verde, olhos amarelos e gorro roubado do Noel) **Poseidon** (cabelo e barba azuis, coroa de coral e tridente dourado) e **Coveiro** (chapéu preto, rosto pálido e pá). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
@@ -106,7 +106,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 
 ## Raridade dos personagens
 Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
-- **LENDÁRIO**: Grinch
+- **LENDÁRIO**: Grinch e Coveiro
 - **MÍSTICO**: Vampiro, Mago, Papai Noel e Mestre do Tempo
 - **ÉPICO**: Hacker e Poseidon
 - **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
@@ -241,3 +241,15 @@ make
 Gera `pool8.elf` (requer PS2SDK e gsKit; rode no PCSX2 ou no PS2).
 O player de músicas usa audsrv, fileXio, USB (BDM) e o decodificador MP3 minimp3 (domínio público, já incluso em `minimp3.h`). Os módulos `.irx` do PS2SDK são embutidos no `.elf` pelo Makefile.
 Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
+
+## Coveiro (lendário) e mesa Cemitério
+
+Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
+
+- **ENTERRO**: a bola alvo é enterrada na caçapa mais próxima com uma pá. Se cair, conta para você; se errar, volta/fica na mesa. Só funciona na sua **última bola antes da 8** (para liberar em qualquer bola, troque `ENTERRO_SO_ULTIMA` para 0 no `main.c`).
+- **COVA**: abre um buraco no meio da mesa durante a tacada. Bola que cair lá (menos a branca) volta ao lugar de origem no fim da tacada; serve de defesa.
+- **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque).
+
+## Vampiro e Grinch (PUXÃO)
+
+O puxão ficou mais suave: em vez de um ímã que arrastava a bola para a caçapa mais próxima, a bola alvo agora **curva aos poucos** para a caçapa que ela já está mirando (até ~57°), sem ganhar velocidade extra.
