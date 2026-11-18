@@ -220,7 +220,7 @@ static float nz(void) { nzSeed = nzSeed * 1664525u + 1013904223u; return ((nzSee
 
 static int build(int id)                         /* sintetiza o efeito (mono, 16 bits, SFX_HZ) */
 {
-    static const float DUR[SFX_COUNT] = { 0.12f, 0.09f, 0.15f, 0.45f, 0.04f, 0.14f, 0.14f, 1.00f, 1.00f, 0.40f, 0.28f, 0.50f };
+    static const float DUR[SFX_COUNT] = { 0.12f, 0.09f, 0.15f, 0.45f, 0.07f, 0.22f, 0.22f, 1.00f, 1.00f, 0.40f, 0.28f, 0.50f };
     const float TP = 6.2831853f;
     int i, n = (int)(DUR[id] * SFX_HZ);
     short *o = (short *)malloc((size_t)n * sizeof(short));
@@ -247,9 +247,19 @@ static int build(int id)                         /* sintetiza o efeito (mono, 16
             v = 0.8f * expf(-t * 14.0f) * sinf(ph) + 2.2f * lp * expf(-t * 5.0f) * (t < 0.03f ? t / 0.03f : 1.0f)
               + 0.4f * nz() * expf(-t * 200.0f);
             break;
-        case SFX_MOVE:   v = 0.5f * expf(-t * 90.0f) * sinf(TP * 1200.0f * t); break;
-        case SFX_OK:     v = 0.55f * expf(-(t < 0.05f ? t : t - 0.05f) * 28.0f) * sinf(TP * (t < 0.05f ? 880.0f : 1320.0f) * t); break;
-        case SFX_BACK:   v = 0.55f * expf(-(t < 0.05f ? t : t - 0.05f) * 28.0f) * sinf(TP * (t < 0.05f ? 660.0f : 440.0f) * t); break;
+        case SFX_MOVE:                                       /* "tic" suave de navegacao */
+            v = 0.45f * expf(-t * 65.0f) * (sinf(TP * 980.0f * t) + 0.3f * sinf(TP * 1960.0f * t));
+            break;
+        case SFX_OK: {                                       /* confirmacao: duas notas limpas subindo (la -> mi) */
+            float t2 = t - 0.07f, a2 = t2 < 0.0f ? 0.0f : (t2 < 0.004f ? t2 / 0.004f : 1.0f);
+            v = 0.42f * expf(-t * 26.0f) * (sinf(TP * 880.0f * t) + 0.25f * sinf(TP * 1760.0f * t));
+            if (t2 > 0.0f) v += 0.42f * a2 * expf(-t2 * 20.0f) * (sinf(TP * 1320.0f * t2) + 0.25f * sinf(TP * 2640.0f * t2));
+            break; }
+        case SFX_BACK: {                                     /* voltar: duas notas descendo */
+            float t2 = t - 0.07f, a2 = t2 < 0.0f ? 0.0f : (t2 < 0.004f ? t2 / 0.004f : 1.0f);
+            v = 0.42f * expf(-t * 26.0f) * (sinf(TP * 660.0f * t) + 0.25f * sinf(TP * 1320.0f * t));
+            if (t2 > 0.0f) v += 0.42f * a2 * expf(-t2 * 20.0f) * (sinf(TP * 440.0f * t2) + 0.25f * sinf(TP * 880.0f * t2));
+            break; }
         case SFX_WIN: {                                      /* arpejo subindo: do-mi-sol-do */
             static const float F[4] = { 523.25f, 659.25f, 783.99f, 1046.5f };
             int k = (int)(t / 0.17f); float tt;
@@ -283,8 +293,8 @@ static int build(int id)                         /* sintetiza o efeito (mono, 16
             if (fi < 1.0f) v *= fi;
             if (fo < 1.0f) v *= fo;
         }
-        if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
-        o[i] = (short)(v * 30000.0f);
+        v = v / (1.0f + 0.6f * fabsf(v));                    /* saturacao suave: picos nao estouram */
+        o[i] = (short)(v * 26000.0f);
     }
     sfx[id].d = o; sfx[id].len = n;
     return 1;
@@ -329,10 +339,15 @@ static void mixOut(unsigned char *dst, const unsigned char *src, int nbytes, int
         for (k = 0; k < nVoice; k++) {
             Voice *v = &vc[k];
             unsigned idx = v->pos >> 16;
-            int a, b, s;
+            int s;
             if ((int)idx >= v->len) { vc[k--] = vc[--nVoice]; continue; }
-            a = v->d[idx]; b = ((int)idx + 1 < v->len) ? v->d[idx + 1] : 0;
-            s = a + (((b - a) * (int)((v->pos & 0xFFFF) >> 1)) >> 15);      /* interpolacao linear */
+            {   /* interpolacao cubica (Catmull-Rom): mais nitida que a linear */
+                float y0 = idx > 0 ? (float)v->d[idx - 1] : 0.0f, y1 = (float)v->d[idx];
+                float y2 = (int)idx + 1 < v->len ? (float)v->d[idx + 1] : 0.0f, y3 = (int)idx + 2 < v->len ? (float)v->d[idx + 2] : 0.0f;
+                float fr = (float)(v->pos & 0xFFFF) * (1.0f / 65536.0f);
+                float c1 = 0.5f * (y2 - y0), c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+                s = (int)(((c3 * fr + c2) * fr + c1) * fr + y1);
+            }
             s = (s * v->gain) >> 8;
             l += (s * v->gl) >> 8; r += (s * v->gr) >> 8;
             v->pos += (step * (unsigned)v->pr) >> 8;
