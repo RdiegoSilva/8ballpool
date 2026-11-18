@@ -40,6 +40,7 @@ IRX(usbhdfsd);
 typedef struct { char path[PATH_LEN]; char name[NAME_LEN]; } Track;
 
 static Track tr[MUS_MAX];
+static int dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
 static int nTr, cur = -1, state, audioOK, volume = 8, enabled = 1;
 static int scanTries, scanWait = 120, scanDone, wantAuto = 1, ending, failStreak, toastT;
 static char elfDir[PATH_LEN], srcDir[PATH_LEN];
@@ -75,11 +76,12 @@ int musicInit(const char *argv0)
 #else
     SifExecModuleBuffer(usbhdfsd_irx, size_usbhdfsd_irx, 0, NULL, NULL);
 #endif
-    SifLoadModule("rom0:LIBSD", 0, NULL);
-    SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, NULL);
+    dbgLibsd = SifLoadModule("rom0:LIBSD", 0, NULL);
+    dbgAud = SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, NULL);
     for (i = 0; i < 30 && !audioOK; i++) {   /* no PS2 real o audsrv demora a subir: tenta de novo */
         volatile int w;
-        audioOK = (audsrv_init() == 0);
+        dbgInit = audsrv_init();
+        audioOK = (dbgInit == 0);
         if (!audioOK) for (w = 0; w < 4000000; w++) ;
     }
     if (audioOK) audsrv_set_volume(100);         /* o volume da musica e aplicado no mixer (efeitos nao sao afetados) */
@@ -472,7 +474,16 @@ void musicSetEnabled(int on)
 void musicUpdate(void)
 {
     int it, fed = 0;
-    if (!audioOK) return;
+    if (!audioOK) {                               /* o audsrv pode subir tarde no console: continua tentando */
+        if (lateTries < 20 && --lateWait <= 0) {
+            lateWait = 120; lateTries++;
+            if (dbgAud < 0)                       /* o modulo nem carregou: carrega de novo */
+                dbgAud = SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, NULL);
+            dbgInit = audsrv_init();
+            if (dbgInit == 0) { audioOK = 1; audsrv_set_volume(100); }
+        }
+        if (!audioOK) return;
+    }
     if (toastT > 0) toastT--;
     if (sfxBuilt < SFX_COUNT) { if (!sfx[sfxBuilt].d) build(sfxBuilt); sfxBuilt++; }   /* gera um efeito por quadro */
 
@@ -521,7 +532,11 @@ const char *musicSource(void) { return srcDir; }
 const char *musicToast(void)  { return (toastT > 0 && cur >= 0 && cur < nTr) ? tr[cur].name : NULL; }
 const char *musicStatus(void)
 {
-    if (!audioOK) return "AUDIO INDISPONIVEL";
+    if (!audioOK) {
+        static char dbg[64];
+        sprintf(dbg, "AUDIO INDISPONIVEL (L%d A%d I%d)", dbgLibsd, dbgAud, dbgInit);
+        return dbg;
+    }
     if (nTr > 0) return state == 1 ? "TOCANDO" : (state == 2 ? "PAUSADO" : "PARADO");
     return scanDone ? "NENHUMA MUSICA ENCONTRADA" : "PROCURANDO MUSICAS...";
 }

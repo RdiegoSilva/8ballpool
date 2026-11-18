@@ -4954,9 +4954,9 @@ static void drawOptionsScreen(void)
         text(520 - tw(0.5f, buf), y, 0.5f, i == OP_CRED ? COL(255,230,60) : COL(255,255,255), buf);
     }
     if (optSel == OP_SND)
-        textC(390, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : "AUDIO INDISPONIVEL NESTE CONSOLE");
+        textC(390, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
     else if (optSel == OP_MUS || optSel == OP_VOL)
-        textC(390, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
+        textC(390, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : musicStatus());
     textC(412, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   O: VOLTAR");
 }
 
@@ -5285,9 +5285,9 @@ static void drawPause(void)
         }
         row = pv[pauseSel];
         if (row == PI_SND)
-            textC(388, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : "AUDIO INDISPONIVEL NESTE CONSOLE");
+            textC(388, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
-            textC(388, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : "AUDIO INDISPONIVEL NESTE APARELHO");
+            textC(388, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : musicStatus());
         else if (row == PI_GD0 || row == PI_GD1) {
             int w = (row == PI_GD0) ? 0 : 1;
             char hb[64];
