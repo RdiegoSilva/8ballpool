@@ -77,8 +77,12 @@ int musicInit(const char *argv0)
 #endif
     SifLoadModule("rom0:LIBSD", 0, NULL);
     SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, NULL, NULL);
-    audioOK = (audsrv_init() == 0);
-    if (audioOK) audsrv_set_volume(100);          /* o volume da musica e aplicado no mixer (efeitos nao sao afetados) */
+    for (i = 0; i < 30 && !audioOK; i++) {   /* no PS2 real o audsrv demora a subir: tenta de novo */
+        volatile int w;
+        audioOK = (audsrv_init() == 0);
+        if (!audioOK) for (w = 0; w < 4000000; w++) ;
+    }
+    if (audioOK) audsrv_set_volume(100);         /* o volume da musica e aplicado no mixer (efeitos nao sao afetados) */
     return audioOK;
 }
 
