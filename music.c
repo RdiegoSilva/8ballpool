@@ -84,7 +84,8 @@ int musicInit(const char *argv0)
         audioOK = (dbgInit == 0);
         if (!audioOK) for (w = 0; w < 4000000; w++) ;
     }
-    if (audioOK) audsrv_set_volume(100);         /* o volume da musica e aplicado no mixer (efeitos nao sao afetados) */
+    printf("pool8: LIBSD=%d audsrv=%d init=%d\n", dbgLibsd, dbgAud, dbgInit);
+    if (audioOK) { audsrv_set_volume(100); sfxPlay(SFX_OK, 100); }   /* bipe de teste ao iniciar */
     return audioOK;
 }
 
@@ -212,7 +213,7 @@ static Voice vc[NVOICE];
 static int   nVoice, sfxBuilt;
 static int   outHz, outCh, outBits;              /* formato que o audsrv esta usando agora */
 static unsigned nzSeed = 12345u;
-static unsigned char mixbuf[8192];
+static unsigned char mixbuf[8192] __attribute__((aligned(64)));   /* alinhado: o audsrv copia por DMA */
 
 static float nz(void) { nzSeed = nzSeed * 1664525u + 1013904223u; return ((nzSeed >> 8) & 0xFFFF) / 32768.0f - 1.0f; }
 
@@ -374,7 +375,7 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     n -= n % (outCh * (outBits / 8));
     if (n <= 0) return;
     mixOut(mixbuf, NULL, n, 0);
-    audsrv_play_audio((const char *)mixbuf, n);
+    FlushCache(0); audsrv_play_audio((const char *)mixbuf, n);
 }
 
 static int decodeNext(void)                      /* enche pcm[]; 0 = fim da faixa ou erro */
@@ -515,7 +516,7 @@ void musicUpdate(void)
             n -= n % fb;
             if (n <= 0) { if (pcmLen - pcmPos < fb) pcmPos = pcmLen; break; }
             mixOut(mixbuf, (const unsigned char *)pcm + pcmPos, n, volume * 256 / 10);
-            audsrv_play_audio((const char *)mixbuf, n);
+            FlushCache(0); audsrv_play_audio((const char *)mixbuf, n);
             pcmPos += n; fed = 1;
         }
     }
