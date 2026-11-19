@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.3.0
+- Versão: 2.5.0
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
@@ -29,7 +29,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
   - **MESA DO PERSONAGEM** (SIM/NÃO): usa automaticamente a mesa do personagem do Jogador 1 (veja a tabela de kits abaixo). Escolher uma mesa na mão desliga essa opção
   - **HABILIDADES** (só no versus): LIGADAS ou DESLIGADAS. Contra o BOT as habilidades ficam sempre ligadas para você
-  - MESA (25 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (27 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -53,7 +53,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
   - Embaixo aparece a **prévia da mesa** escolhida (com as bolas na posição inicial do modo, a cor da bola branca escolhida e as animações das mesas)
 
 ## Personagens (caricaturas)
-Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 17 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho), **Mestre do Tempo**, **Grinch** (pelo verde, olhos amarelos e gorro roubado do Noel) **Poseidon** (cabelo e barba azuis, coroa de coral e tridente dourado) e **Coveiro** (chapéu preto, rosto pálido e pá). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
+Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAGEM DO BOT** (ou **JOGADOR 1 / JOGADOR 2** no versus). São 18 caricaturas desenhadas no próprio jogo: **Pinguim**, Robô, Pirata, Ninja, Alien, Cowboy, Vampiro, Mago, Viking, Gato, **Chapolin**, **Hacker** (capuz escuro, óculos ciano e moletom com 01) e **Papai Noel** (gorro, barba e traje vermelho), **Mestre do Tempo**, **Grinch** (pelo verde, olhos amarelos e gorro roubado do Noel) **Poseidon** (cabelo e barba azuis, coroa de coral e tridente dourado) **Coveiro** (chapéu preto, rosto pálido e pá) e **Policial** (boné azul com distintivo dourado, bigode e algemas no cinto). Cada jogador usa um personagem diferente (padrão: Pinguim x Robô).
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
@@ -115,7 +115,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 ## Raridade dos personagens
 Cada personagem tem uma raridade, mostrada na escolha de personagens e no catálogo de tacos (os tacos de personagem ficam agrupados por raridade):
 - **ULTRA LENDÁRIO** (nova raridade, a mais alta; o nome muda de cor em arco-íris): Coveiro
-- **LENDÁRIO**: Grinch
+- **LENDÁRIO**: Grinch e Policial
 - **MÍSTICO**: Vampiro, Mago, Papai Noel e Mestre do Tempo
 - **ÉPICO**: Hacker e Poseidon
 - **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
@@ -253,11 +253,18 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 ## Coveiro (ultra lendário) e mesa Cemitério
 
-Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
+Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas (o ENTERRO recarrega em **5**).
 
-- **ENTERRO**: a bola alvo (a primeira que a branca toca) é enterrada na caçapa mais próxima com uma pá, em **qualquer momento e qualquer bola**. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
-- **COVA**: abre uma caçapa extra no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
-- **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque).
+- **ENTERRO** (nerfado): a bola alvo (a primeira que a branca toca) é enterrada na caçapa mais próxima com uma pá, mas **só se estiver a até 100 px de uma caçapa** (`ENTERRO_ALCANCE`); se estiver longe, o poder não é gasto. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **COVA**: abre uma caçapa extra (agora bem menor, raio 12 em vez de 20) no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
+- **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque). A bola que volta é um **fantasma**: nesta jogada a branca e as outras bolas **passam por ela, sem física**; na rodada seguinte ela volta ao normal.
+
+## Policial (lendário) e mesa Delegacia
+
+Combo **POLICIAL** (personagem + taco **Cassetete** + mesa **Delegacia**: fita de isolamento, sirenes vermelha/azul e holofotes). Como o Coveiro, **você escolhe** o poder: na mira, **O** arma e **O de novo troca** (ALGEMAS > SIRENE > cancelar). Recarrega em 3 tacadas.
+
+- **ALGEMAS**: prende **qualquer bola do adversário** por 1 jogada (até o fim da próxima tacada dele). A bola presa **não se mexe de jeito nenhum**: nenhum poder a move, não cai na caçapa e quem bate nela rebate como em uma parede. **QUADRADO** troca a bola que será presa (começa pela mais perto de uma caçapa). O BOT não usa a bola presa como alvo.
+- **SIRENE**: na próxima jogada o adversário joga **sem linha guia** (o BOT erra mais a mira).
 
 ## Vampiro e Grinch (PUXÃO)
 

@@ -70,17 +70,24 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, AB_POLICIAL, AB_PRENDER, AB_SIRENE, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
-#define GRAVE_R 20.0f                                 /* raio da COVA (buraco extra no meio da mesa) */
+#define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
+#define ENTERRO_ALCANCE 100.0f                        /* NERF: o ENTERRO so pega a bola que estiver a ate esta distancia de uma cacapa */
+#define ENTERRO_RECARGA 5                             /* NERF: o ENTERRO recarrega em 5 tacadas (os outros poderes: AB_COOL) */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
 static const int GV_KIND[3] = { AB_ENTERRO, AB_COVA, AB_RESSUS };
 static const char *GV_NAME[3] = { "ENTERRO", "COVA", "RESSUSCITAR" };
+/* POLICIAL (lendario): 2 poderes que o jogador escolhe (ALGEMAS, SIRENE). lockBall = bola presa (nao se mexe de jeito nenhum) */
+static int copSel, copOpen, copTgt, lockBall, lockOwner, sirenT[2], ghostBall;   /* ghostBall: bola ressuscitada (sem fisica ate o fim da jogada) */
+static float lockX, lockY;
+static const int CP_KIND[2] = { AB_PRENDER, AB_SIRENE };
+static const char *CP_NAME[2] = { "ALGEMAS", "SIRENE" };
 #define TAB_CEM 25                                    /* indice da mesa CEMITERIO em TABLES */
 static float tabPock(void) { return ((tourney && tTable >= 0) ? tTable : tableSel) == TAB_CEM ? 1.14f : 1.0f; }   /* cemiterio: cacapas um pouco mais largas */
 static int grinchPend;                                /* poder que o Grinch tem agora (0 = ainda nao sorteado); aparece na tela antes de usar */
@@ -196,7 +203,7 @@ typedef struct {
     u8 tip[3], wood[3], butt[3], inlay[3], wrap[3];
     int fx;                               /* animacao: 0 nenhuma, 1 brilho, 2 arco-iris, 3 faiscas */
 } CueDef;
-#define NCUES 31
+#define NCUES 32
 #define CUE_SNIPER 5
 static CueDef CUES[NCUES] = {
     { "CLASSICO",   55,  30,  60,  60, { 58,104,172}, {228,192,130}, { 94, 48, 22}, {208,168, 72}, { 30, 24, 24} },
@@ -241,15 +248,17 @@ static CueDef CUES[NCUES] = {
     { "GATO",       52,  58,  55,  62, {255,150,190}, {255,184,210}, {120, 70,100}, {255,240,250}, {255,120,170}, 16 },
     /* COVEIRO (lendario): o taco e uma pa (lamina de aco, cabo de madeira e punho em T) com ectoplasma verde */
     { "COVEIRO",    58,  55,  58,  60, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
+    /* CASSETETE (Policial, lendario): azul-marinho com detalhe dourado e a sirene vermelha/azul piscando na ponta */
+    { "CASSETETE",  60,  50,  60,  62, { 70,140,255}, { 26, 40, 92}, { 16, 22, 52}, {255,205, 50}, {220, 40, 52}, 18 },
 };
 
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
    NOEL-Papai Noel, HACK-Hacker, DRAGAO-Viking, SAMURAI-Ninja, OCEANO-Pirata, MARRETA BIONICA-Chapolin */
 static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_CORTE, [11] = AB_MARE,
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
-                                   [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
+                                   [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "2.4.0"
+#define GAME_VERSION "2.5.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -735,6 +744,7 @@ static void newGame(int m)
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
     graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
+    copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
@@ -839,10 +849,44 @@ static const char *graveWhy(int k)                    /* NULL = o poder pode ser
     } else if (k == 2 && graveFindRevive() < 0) return "RESSUSCITAR: NENHUMA BOLA DO ADVERSARIO NO CEMITERIO";
     return NULL;
 }
+/* POLICIAL: bola do adversario que pode ser presa (mesa aberta: qualquer uma, menos a 8; so sobrou a 8: ela tambem) */
+static int copCand(int k)
+{
+    int og = grp[1 - cur];
+    if (k < 1 || k > 15 || !b[k].in) return 0;
+    if (og < 0 && grp[cur] >= 0 && grp[cur] < 2) og = 1 - grp[cur];
+    if (og < 0) return k != 8;
+    return countGroup(og) > 0 ? ballGroup(k) == og : k == 8;
+}
+static int copNext(int from, int dir)                 /* proxima bola presavel (QUADRADO troca o alvo) */
+{
+    int n, k = from;
+    for (n = 0; n < 16; n++) { k = (k + dir + 16) % 16; if (copCand(k)) return k; }
+    return -1;
+}
+static int copBest(void)                              /* alvo inicial: a bola do adversario mais perto de uma cacapa */
+{
+    int k, p, best = -1;
+    float bd = 1e9f;
+    for (k = 1; k < 16; k++) {
+        if (!copCand(k)) continue;
+        for (p = 0; p < 6; p++) {
+            float dx = b[k].x - PX[p], dy = b[k].y - PY[p], d2 = dx * dx + dy * dy;
+            if (d2 < bd) { bd = d2; best = k; }
+        }
+    }
+    return best;
+}
+static const char *copWhy(int k)                      /* NULL = o poder pode ser usado agora; senao o motivo */
+{
+    if (k == 0 && copBest() < 0) return "ALGEMAS: NENHUMA BOLA DO ADVERSARIO NA MESA";
+    return NULL;
+}
 static const char *abLabel(int ab)                    /* nome mostrado na tela (Grinch: poder sorteado; Coveiro: poder escolhido) */
 {
     if (ab == AB_GRINCH) return grinchName();
     if (ab == AB_COVEIRO && graveOpen) return GV_NAME[graveSel];
+    if (ab == AB_POLICIAL && copOpen) return CP_NAME[copSel];
     return AB_NAME[ab];
 }
 
@@ -882,7 +926,7 @@ static void shoot(float p)
     spinVCur = spinV * (0.8f + 0.2f * ch); spinVK = cueVSpin(hitCue); spinV = 0;
     if (abilCD[cur] > 0) abilCD[cur]--;
     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; hackOn = 0; grinchOn = 0; abilExtra = 0; rastT = -1;
-    graveOn = 0; buryBall = 0; buryT = 0;
+    graveOn = 0; buryBall = 0; buryT = 0; ghostBall = 0;
     if (abilArm && curAb() != AB_NONE) {                 /* habilidade do taco de personagem */
         abilKind = curAb(); abilCD[cur] = AB_COOL; abilFx = 36; fxX = hitX; fxY = hitY;
         if (abilKind == AB_GRINCH) {                      /* vira o poder que ja estava sorteado e mostrado na tela */
@@ -893,11 +937,19 @@ static void shoot(float p)
         if (abilKind == AB_COVEIRO) {                     /* vira o poder escolhido */
             char tb[64];
             abilKind = GV_KIND[graveSel]; graveOn = 1;
+            if (graveSel == 0) abilCD[cur] = ENTERRO_RECARGA;      /* NERF: o enterro demora mais para recarregar */
             sprintf(tb, "COVEIRO USOU: %s!", GV_NAME[graveSel]); setmsg(tb);
+        }
+        if (abilKind == AB_POLICIAL) {                    /* vira o poder escolhido */
+            char tb[64];
+            abilKind = CP_KIND[copSel];
+            sprintf(tb, "POLICIAL USOU: %s!", CP_NAME[copSel]); setmsg(tb);
         }
         switch (abilKind) {
         case AB_COVA:     { int q; memset(graveIn, 0, sizeof(graveIn)); for (q = 1; q < 16; q++) { graveOX[q] = b[q].x; graveOY[q] = b[q].y; } fxX = TCX; fxY = TCY; } break;
-        case AB_RESSUS:   { int id = graveFindRevive(); if (id > 0) { respot(id, TCX, TCY); fxX = b[id].x; fxY = b[id].y; } } break;
+        case AB_RESSUS:   { int id = graveFindRevive(); if (id > 0) { respot(id, TCX, TCY); ghostBall = id; fxX = b[id].x; fxY = b[id].y; } } break;   /* a ressuscitada e um fantasma: sem fisica ate o fim desta jogada */
+        case AB_PRENDER:  if (copTgt > 0 && b[copTgt].in) { lockBall = copTgt; lockOwner = cur; lockX = b[copTgt].x; lockY = b[copTgt].y; fxX = lockX; fxY = lockY; } break;   /* POLICIAL: prende a bola */
+        case AB_SIRENE:   sirenT[1 - cur] = 1; fxX = TCX; fxY = TCY; break;                                                                        /* POLICIAL: o adversario joga sem linha guia */
         case AB_TIRO:     b[0].vx *= 1.5f; b[0].vy *= 1.5f; spinCur = 0.0f; spinVCur = 0.0f; jumpArm = 0; break;
         case AB_CORTE:    b[0].vx *= 1.2f; b[0].vy *= 1.2f; break;
         case AB_MARE:     spinK *= 2.6f; if (fabsf(spinCur) < 0.3f) spinCur = spinCur < 0.0f ? -0.8f : 0.8f; break;
@@ -911,7 +963,7 @@ static void shoot(float p)
         default: break;
         }
     }
-    abilArm = 0; graveOpen = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
+    abilArm = 0; graveOpen = 0; copOpen = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
     if (jumpArm && !isBot()) {                        /* pulo: a branca sobe e passa por cima das outras bolas */
         b[0].vz = (150.0f + 90.0f * p) * cueJumpMul(hitCue);
         b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
@@ -959,17 +1011,19 @@ static void abilOnFirstHit(int j)
 {
     int k;
     if (abilKind == AB_SUGAR) abilT = 600;
-    else if (abilKind == AB_ENTERRO) {                /* COVEIRO: a pa enterra a bola alvo na cacapa mais proxima */
+    else if (abilKind == AB_ENTERRO) {                /* COVEIRO: a pa enterra a bola alvo na cacapa mais proxima (NERF: so se estiver perto dela) */
         int ok = 1;
+        float bd = 1e9f; int pp, bpp = 0;
 #if ENTERRO_SO_ULTIMA
         ok = grp[cur] >= 0 && grp[cur] < 2 && ballGroup(j) == grp[cur] && countGroup(grp[cur]) == 1;
 #endif
-        if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) ok = 0;   /* nao enterra a 8 antes da hora (seria derrota) */
+        for (pp = 0; pp < 6; pp++) { float ddx = PX[pp] - b[j].x, ddy = PY[pp] - b[j].y, d2 = ddx * ddx + ddy * ddy; if (d2 < bd) { bd = d2; bpp = pp; } }
+        if (j == lockBall) { ok = 0; setmsg("BOLA PRESA: O ENTERRO NAO FUNCIONA"); }
+        else if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
+        else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
         if (ok) {
-            float bd = 1e9f; int pp;
-            for (pp = 0; pp < 6; pp++) { float ddx = PX[pp] - b[j].x, ddy = PY[pp] - b[j].y, d2 = ddx * ddx + ddy * ddy; if (d2 < bd) { bd = d2; buryP = pp; } }
-            buryBall = j; buryT = 1500; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
-        } else setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA");
+            buryP = bpp; buryBall = j; buryT = 1500; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
+        } else abilCD[cur] = 0;                       /* nao funcionou: devolve a recarga */
     }
     else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* marreta bionica */
     else if (abilKind == AB_CORTE) { b[0].vx = b[0].vy = 0; abilFx = 36; fxX = b[0].x; fxY = b[0].y; }
@@ -990,6 +1044,9 @@ static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     float tpk = tabPock();
+    if (lockBall > 0 && b[lockBall].in) {              /* POLICIAL: a bola presa nao se mexe de jeito nenhum (nenhum poder a move) */
+        b[lockBall].x = lockX; b[lockBall].y = lockY; b[lockBall].vx = b[lockBall].vy = 0.0f; b[lockBall].vz = 0.0f; b[lockBall].z = 0.0f;
+    }
     if (abilKind == AB_SUGAR && abilT > 0 && firstHit > 0 && b[firstHit].in && b[firstHit].z <= 0.0f) {   /* vampiro/grinch: a bola alvo CURVA suave para a cacapa que ja esta mirando (nao e mais um ima) */
         Ball *q = &b[firstHit];
         float sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
@@ -1044,6 +1101,7 @@ static int stepPhysics(float dt)
         int inMouth = 0, air, wl = 0;
         float mdx = 0.0f, mdy = 0.0f, mpr = 0.0f, mpx = 0.0f, mpy = 0.0f;
         if (!b[i].in) continue;
+        if (lockBall > 0 && i == lockBall) { b[i].vx = b[i].vy = 0.0f; continue; }     /* presa: sem movimento, sem cacapa */
         if (b[i].z > 0.0f) {                       /* pulo: sobe e desce sem atrito */
             b[i].vz -= JUMP_G * dt; b[i].z += b[i].vz * dt;
             if (b[i].z <= 0.0f) {
@@ -1118,9 +1176,22 @@ static int stepPhysics(float dt)
             float dx, dy, d2, d, nx, ny, rv, ov;
             if (!b[j].in) continue;
             if (i == 0 && b[0].z > JUMP_CLEAR) break;      /* pulando: passa por cima de todas */
+            if (ghostBall > 0 && (i == ghostBall || j == ghostBall)) continue;   /* RESSUSCITAR: a bola que voltou e um fantasma (sem fisica) */
             dx = b[j].x - b[i].x; dy = b[j].y - b[i].y; d2 = dx*dx + dy*dy;
             if (d2 >= 4*R*R || d2 < 0.0001f) continue;
             d = sqrtf(d2); nx = dx / d; ny = dy / d;
+            if (lockBall > 0 && (i == lockBall || j == lockBall)) {          /* POLICIAL: a bola presa e como uma parede - quem bate nela rebate e ela nao cede */
+                int mv = (i == lockBall) ? j : i, lk = (i == lockBall) ? i : j;
+                float mnx = (i == lockBall) ? nx : -nx, mny = (i == lockBall) ? ny : -ny, vn;
+                b[mv].x = b[lk].x + mnx * 2 * R; b[mv].y = b[lk].y + mny * 2 * R;
+                vn = b[mv].vx * mnx + b[mv].vy * mny;
+                if (vn < 0.0f) {
+                    if (-vn > 8.0f) SFX(SFX_BALL, 15 + (int)(-vn * 0.16f));
+                    b[mv].vx -= 1.85f * vn * mnx; b[mv].vy -= 1.85f * vn * mny;
+                    if (mv == 0 && firstHit < 0) { firstHit = lk; abilOnFirstHit(lk); }
+                }
+                continue;
+            }
             ov = (2*R - d) * 0.5f;
             b[i].x -= nx*ov; b[i].y -= ny*ov; b[j].x += nx*ov; b[j].y += ny*ov;
             rv = (b[i].vx - b[j].vx) * nx + (b[i].vy - b[j].vy) * ny;
@@ -1197,7 +1268,7 @@ static void endTurn(int foul, int ownPocket)
     int forgiven = 0, saved = 0, keep = abilExtra, kept = 0;   /* keep: NOVA VIDA do gato */
     abilExtra = 0;
     botTimer = 0; botPlanned = 0;
-    abilArm = 0; graveOpen = 0; hackOn = 0;
+    abilArm = 0; graveOpen = 0; copOpen = 0; hackOn = 0;
     if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
         foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
         if (!b[0].in) {
@@ -1360,6 +1431,23 @@ static void resolveBR(void)
     endTurn(0, own);
 }
 
+/* RESSUSCITAR: terminou a rodada fantasma; afasta as bolas que ficaram em cima da ressuscitada */
+static void ghostSettle(int g)
+{
+    int k;
+    if (g <= 0 || !b[g].in) return;
+    for (k = 0; k < 16; k++) {
+        float dx, dy, d;
+        if (k == g || !b[k].in) continue;
+        dx = b[k].x - b[g].x; dy = b[k].y - b[g].y; d = sqrtf(dx * dx + dy * dy);
+        if (d >= 2 * R) continue;
+        if (d < 0.01f) { dx = 1.0f; dy = 0.0f; d = 1.0f; }
+        b[k].x = b[g].x + dx / d * (2 * R + 0.5f); b[k].y = b[g].y + dy / d * (2 * R + 0.5f);
+        if (b[k].x < TX0 + R) b[k].x = TX0 + R; if (b[k].x > TX1 - R) b[k].x = TX1 - R;
+        if (b[k].y < TY0 + R) b[k].y = TY0 + R; if (b[k].y > TY1 - R) b[k].y = TY1 - R;
+    }
+}
+
 static void resolve(void)
 {
     int i, foul, ownPocket = 0;
@@ -1376,6 +1464,9 @@ static void resolve(void)
                          (firstHit < 0 ? "NAO TOCOU EM NENHUMA BOLA" : "A JOGADA TERMINOU"));
         if (tmOffer(nt, 0)) return;
     }
+    if (lockBall > 0 && cur != lockOwner) lockBall = 0;     /* POLICIAL: a prisao dura ate o fim da jogada do adversario */
+    sirenT[cur] = 0;                                  /* POLICIAL: a sirene vale so para esta jogada */
+    ghostSettle(ghostBall); ghostBall = 0;            /* COVEIRO: a ressuscitada volta ao normal (so na proxima rodada ela tem fisica) */
     if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
@@ -1439,6 +1530,7 @@ static void botPlan(void)
 
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
+        if (t == lockBall) continue;                  /* bola presa pelo policial: nao da para encacapar */
         if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
@@ -1480,7 +1572,7 @@ static void botPlan(void)
     if (botPow < 0.25f) botPow = 0.25f;
     if (breakShot) botPow = 1.0f;
     if (botPow > 1.0f) botPow = 1.0f;
-    botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f));   /* maldicao: o bot erra mais */
+    botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f) + (sirenT[cur] ? 0.05f : 0.0f));   /* maldicao e sirene: o bot erra mais */
 }
 
 /* ---------- entrada ---------- */
@@ -1516,7 +1608,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 26
+#define NTABLES 27
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -1544,6 +1636,7 @@ static const TableDef TABLES[NTABLES] = {
     { "GRINCH",   { 74,158, 48}, { 40, 26, 30}, {255, 70, 60}, 17 },
     { "ABISMO",   {  8, 62,122}, { 10, 30, 56}, {130,235,255}, 18 },
     { "CEMITERIO",{ 30, 52, 44}, { 34, 28, 38}, {180,200,180}, 19 },
+    { "DELEGACIA",{ 38, 66,122}, { 20, 26, 48}, {255,215, 80}, 20 },
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -2618,6 +2711,61 @@ static void tableDecoGrave(int stage, int mt)
     }
 }
 
+/* ---------- mesa DELEGACIA (style 20): moldura azul-marinho com fita de isolamento, sirenes vermelha/azul, holofotes e luzes nas cacapas ---------- */
+static void tableDecoPolice(int stage, int mt)
+{
+    int k;
+    float W = TX1 - TX0, H = TY1 - TY0, tp = tabPock();
+    if (stage == 0) {
+        rect(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, COL(18, 26, 54));
+        line(TX0 - 25, TY0 - 25, TX1 + 25, TY0 - 25, COL(60, 84, 150));
+        line(TX0 - 25, TY0 - 25, TX0 - 25, TY1 + 25, COL(60, 84, 150));
+        rect(TX0 - 23, TY0 - 23, TX1 + 23, TY0 - 15, COL(14, 14, 18));            /* fita de isolamento: base preta e listras amarelas */
+        rect(TX0 - 23, TY1 + 15, TX1 + 23, TY1 + 23, COL(14, 14, 18));
+        rect(TX0 - 23, TY0 - 15, TX0 - 15, TY1 + 15, COL(14, 14, 18));
+        rect(TX1 + 15, TY0 - 15, TX1 + 23, TY1 + 15, COL(14, 14, 18));
+        for (k = 0; k < (int)(W / 14.0f) + 2; k++) {
+            float x = TX0 - 19.0f + k * 14.0f;
+            if (x + 7.0f > TX1 + 23.0f) break;
+            quad(x, TY0 - 23, x + 7.0f, TY0 - 23, x + 3.0f, TY0 - 15, x - 4.0f, TY0 - 15, COL(250, 200, 30));
+            quad(x, TY1 + 15, x + 7.0f, TY1 + 15, x + 3.0f, TY1 + 23, x - 4.0f, TY1 + 23, COL(250, 200, 30));
+        }
+        for (k = 0; k < (int)(H / 14.0f) + 1; k++) {
+            float y = TY0 - 11.0f + k * 14.0f;
+            if (y + 7.0f > TY1 + 15.0f) break;
+            quad(TX0 - 23, y, TX0 - 15, y, TX0 - 19, y + 7.0f, TX0 - 23, y + 7.0f, COL(250, 200, 30));
+            quad(TX1 + 15, y, TX1 + 23, y, TX1 + 23, y + 7.0f, TX1 + 19, y + 7.0f, COL(250, 200, 30));
+        }
+        rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, COL(10, 14, 30));              /* sulco */
+        outlineRect(TX0 - 13.0f, TY0 - 13.0f, TX1 + 13.0f, TY1 + 13.0f, CA(110, 150, 240, 0x80));
+        for (k = 0; k < 4; k++) {                                                    /* sirenes nas tabelas, longe das cacapas */
+            float lx = (k & 1) ? TX1 - 70.0f : TX0 + 70.0f, ly = (k & 2) ? TY1 + 19.0f : TY0 - 19.0f;
+            int lit = ((mt / 10) + k) & 1;
+            discN(lx, ly, 15.0f, lit ? CA(255, 60, 70, 0x14) : CA(80, 140, 255, 0x14), 16);
+            discN(lx, ly, 6.5f, CA(10, 12, 24, 0xc0), 12);
+            discN(lx, ly, 4.6f, lit ? COL(255, 60, 70) : COL(80, 140, 255), 12);
+            discN(lx - 1.3f, ly - 1.5f, 1.5f, COL(255, 255, 255), 6);
+        }
+    } else if (stage == 1) {
+        float s1 = 0.5f + 0.5f * sinf(mt * 0.02f), s2 = 0.5f + 0.5f * cosf(mt * 0.02f);
+        float b1 = TX0 + W * (0.15f + 0.30f * s1), b2 = TX1 - W * (0.15f + 0.30f * s2);
+        tri(TX0 + 70.0f, TY0, b1 - 50.0f, TY1, b1 + 50.0f, TY1, CA(255, 60, 70, 0x0a));    /* holofotes vermelho e azul cruzando o feltro */
+        tri(TX1 - 70.0f, TY0, b2 - 50.0f, TY1, b2 + 50.0f, TY1, CA(80, 140, 255, 0x0a));
+        ringN(TCX, TCY, 44.0f, 2.0f, 32, CA(255, 215, 80, 0x14));                    /* distintivo apagado no centro */
+        ringN(TCX, TCY, 30.0f, 1.2f, 28, CA(255, 215, 80, 0x10));
+        for (k = 0; k < 5; k++) {                                                    /* marcas da tabela de altura na lateral */
+            float y = TY0 + 20.0f + k * 22.0f;
+            line(TX0 + 4.0f, y, TX0 + 16.0f, y, CA(235, 235, 245, 0x20));
+        }
+    } else {
+        for (k = 0; k < 6; k++) {
+            int lit = ((mt / 10) + k) & 1;
+            ring(PX[k], PY[k], (PR[k] + 4.5f) * tp, lit ? CA(255, 60, 70, 0x90) : CA(80, 140, 255, 0x90));
+            ring(PX[k], PY[k], (PR[k] + 6.2f) * tp, CA(235, 235, 245, 0x40));
+        }
+    }
+}
+
 static void tableDeco(int stage, const TableDef *T)
 {
     int k;
@@ -2711,6 +2859,8 @@ static void tableDeco(int stage, const TableDef *T)
         tableDecoAbyss(stage, mt);
     } else if (T->style == 19) {
         tableDecoGrave(stage, mt);
+    } else if (T->style == 20) {
+        tableDecoPolice(stage, mt);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
@@ -2800,6 +2950,10 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
             if (i % 3 == 0) discN(px, y1 - fmodf(mt * 0.3f * (1 + i % 3) + i * 9.0f, h), 2.0f, CA(150, 255, 170, 0x40), 8);
             rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, (i & 1) ? CA(150, 255, 170, 0x80) : CA(200, 210, 200, 0x60));
             if (i == 0) { float cx2 = (x0 + x1) * 0.5f, cy2 = (y0 + y1) * 0.5f; discN(cx2, cy2, 3.0f, CA(2, 2, 4, 0x90), 10); ring(cx2, cy2, 4.2f, CA(110, 76, 42, 0x90)); }
+            break;
+        case 20:                                             /* delegacia: luzes vermelhas e azuis piscando */
+            rect(px - 1.2f, y0 - f * 0.75f - 1.2f, px + 1.2f, y0 - f * 0.75f + 1.2f, ((i + mt / 10) & 1) ? CA(255, 60, 70, 0x90) : CA(80, 140, 255, 0x90));
+            rect(px - 1.2f, y1 + f * 0.75f - 1.2f, px + 1.2f, y1 + f * 0.75f + 1.2f, ((i + mt / 10) & 1) ? CA(80, 140, 255, 0x90) : CA(255, 60, 70, 0x90));
             break;
         case 14:                                             /* hack: bits caindo e varredura */
             py = y0 + fmodf(mt * 0.8f * (1 + i % 3) + i * 13.0f, h);
@@ -3400,6 +3554,16 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
                 cuePt(u, 2.0f + 3.0f * bn, &ax, &ay);
                 disc(ax, ay, 1.6f, CA(255, 190, 215, (al * 0x70) / 128));
             }
+        } else if (cd->fx == 18) {                                /* policial: sirene vermelha e azul piscando na ponta e luzes correndo */
+            int rb2 = (mt / 8) & 1;
+            float p = 0.5f + 0.5f * sinf(mt * 0.3f);
+            cuePt(0.0f, 0.0f, &ax, &ay);
+            discN(ax, ay, 4.0f + 3.0f * p, rb2 ? CA(255, 50, 60, (al * 0x50) / 128) : CA(70, 130, 255, (al * 0x50) / 128), 10);
+            for (k = 0; k < 3; k++) {
+                float u = fmodf(mt * 0.9f + k * 97.0f, 290.0f);
+                cuePt(u, (k & 1) ? 2.0f : -2.0f, &ax, &ay);
+                disc(ax, ay, 1.4f, ((k + mt / 8) & 1) ? CA(255, 80, 90, (al * 0x70) / 128) : CA(110, 160, 255, (al * 0x70) / 128));
+            }
         } else if (cd->fx == 17) {                                /* coveiro: ectoplasma verde, ponta de osso e cruzinha */
             float p = 0.5f + 0.5f * sinf(mt * 0.12f);
             cuePt(0.0f, 0.0f, &ax, &ay);
@@ -3782,6 +3946,21 @@ static void drawHUD(void)
             outlineRect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? (ok ? COL(110,255,140) : COL(255,110,100)) : COL(80,88,100));
             text(x1 + 22.5f - tw(0.2f, SH[k]) * 0.5f, y1 + 4.0f, 0.2f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH[k]);
         }
+    } else if (state == S_AIM && !isBot() && curAb() == AB_POLICIAL && abilCD[cur] == 0) {   /* mini seletor do Policial */
+        static const char *SH2[2] = { "ALGEMAS", "SIRENE" };
+        int k;
+        for (k = 0; k < 2; k++) {
+            float x1 = 454.0f + k * 71.0f, y1 = 400.0f;
+            int ok = copWhy(k) == NULL, sel = copOpen && copSel == k;
+            rect(x1, y1, x1 + 69.0f, y1 + 15.0f, sel ? CA(20, 34, 70, 0x80) : CA(14, 20, 34, 0x70));
+            outlineRect(x1, y1, x1 + 69.0f, y1 + 15.0f, sel ? (ok ? COL(110,160,255) : COL(255,110,100)) : COL(80,88,100));
+            text(x1 + 34.5f - tw(0.2f, SH2[k]) * 0.5f, y1 + 4.0f, 0.2f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH2[k]);
+        }
+        if (copOpen && copSel == 0 && abilArm) {
+            char tb3[48];
+            sprintf(tb3, "BOLA %d - QUADRADO TROCA O ALVO", copTgt);
+            hudText(454.0f, 388.0f, 0.24f, COL(255,230,60), tb3, 150.0f);
+        }
     } else if (state == S_AIM && !isBot() && curAb() != AB_NONE) {                  /* indicador do poder */
         char ab[40];
         u64 ac;
@@ -3807,14 +3986,14 @@ static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
-#define NCHARS 17
+#define NCHARS 18
 #define CPI 3.14159265f
 static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "ALIEN",
-                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL", "MESTRE DO TEMPO", "GRINCH", "POSEIDON", "COVEIRO" };
+                                         "COWBOY", "VAMPIRO", "MAGO", "VIKING", "GATO", "CHAPOLIN", "HACKER", "PAPAI NOEL", "MESTRE DO TEMPO", "GRINCH", "POSEIDON", "COVEIRO", "POLICIAL" };
 
 /* kit de cada personagem (para o modo historia e para o catalogo): taco e mesa. -1 = nao tem */
-static const int CHAR_CUE[NCHARS] = {  7, 27, 11, 10, 26, 12, 14, 28,  6, 29, 17, 16, 15, 18, 24, 25, 30 };
-static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22, 23, 24, 25 };
+static const int CHAR_CUE[NCHARS] = {  7, 27, 11, 10, 26, 12, 14, 28,  6, 29, 17, 16, 15, 18, 24, 25, 30, 31 };
+static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22, 23, 24, 25, 26 };
 static int cueChar(int c) { int i; for (i = 0; i < NCHARS; i++) if (CHAR_CUE[i] == c) return i; return -1; }
 static int effTable(void) { return (tableAuto && CHAR_TAB[charSel[0]] >= 0) ? CHAR_TAB[charSel[0]] : tableSel; }
 
@@ -4399,6 +4578,28 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
         discN(XX(31), YY(-8 + 3 * sinf(t * 0.2f)), ZZ(1.4f), gl, 6);
         break; }
 
+    case 17: {  /* POLICIAL: bone azul-marinho com distintivo dourado, farda azul, bigode e algemas no cinto */
+        u64 bl = COL(36, 62, 128), blD = COL(20, 36, 84), cap = COL(22, 36, 88), vis = COL(12, 16, 30), bad = COL(255, 205, 50), mus = COL(70, 46, 30);
+        if (full) {
+            legsC(cx, cy, s, blD, COL(16, 16, 22));
+            torsoC(cx, cy, s, bl, blD);
+            rect(XX(-28), YY(77), XX(28), YY(85), COL(22, 22, 28));                       /* cinto */
+            rect(XX(-6), YY(76), XX(6), YY(86), bad);                                     /* fivela */
+            beam(cx, YY(46), cx, YY(76), ZZ(2.0f), blD);                                  /* abotoadura */
+            discN(XX(-14), YY(58), ZZ(5.0f), bad, 10); discN(XX(-14), YY(58), ZZ(2.4f), bl, 8);   /* distintivo no peito */
+            ringN(XX(18), YY(80), ZZ(3.6f), ZZ(1.4f), 12, COL(230, 232, 240));          /* algemas no cinto */
+            ringN(XX(24), YY(80), ZZ(3.6f), ZZ(1.4f), 12, COL(230, 232, 240));
+            armsC(cx, cy, s, mood, t, bl, skin, 9.0f);
+        }
+        disc(cx, cy, ZZ(25), skin);
+        faceStd(cx, cy, s, mood, t, 9, 0, 17, COL(40, 28, 22), 3);
+        ell(XX(-7), YY(10), ZZ(8), ZZ(3.2f), mus); ell(XX(7), YY(10), ZZ(8), ZZ(3.2f), mus);   /* bigode */
+        ell(cx, YY(-13), ZZ(33), ZZ(7), vis);                                         /* aba do bone */
+        quad(XX(-22), YY(-12), XX(22), YY(-12), XX(19), YY(-38), XX(-19), YY(-38), cap);   /* copa */
+        beam(XX(-22), YY(-17), XX(22), YY(-17), ZZ(4), vis);
+        discN(cx, YY(-27), ZZ(5.4f), bad, 10); discN(cx, YY(-27), ZZ(2.6f), COL(220, 40, 52), 8);   /* distintivo do bone */
+        break; }
+
     default: {  /* GATO */
         u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
         if (full) {
@@ -4474,16 +4675,16 @@ static u64 rarCol(int r)
     default: return COL(255,215,70);
     }
 }
-/* ULTRA LENDARIO: Coveiro | LENDARIO: Grinch | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker e Poseidon |
+/* ULTRA LENDARIO: Coveiro | LENDARIO: Grinch e Policial | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker e Poseidon |
    SUPER RARO: Viking, Ninja, Chapolin e Pirata | RARO: Pinguim, Robo, Alien, Gato e Cowboy */
-static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 3, 3, 4, 2, 5 };
+static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 3, 3, 4, 2, 5, 4 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 #define NCAT_SEC 8
-static const int CATH[NCAT_SEC] = { 0, 8, 14, 19, 23, 26, 29, 30 };     /* 1a ficha de cada categoria */
+static const int CATH[NCAT_SEC] = { 0, 8, 14, 19, 23, 26, 29, 31 };     /* 1a ficha de cada categoria */
 static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO", "ULTRA LENDARIO" };
 static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27, 29,   11, 10, 6, 17,   16, 18, 25,   14, 15, 28,   24, 30 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27, 29,   11, 10, 6, 17,   16, 18, 25,   14, 15, 28,   24, 31, 30 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
@@ -4520,7 +4721,7 @@ static void drawCueMenu(void)
         { "AS SUAS BOLAS SAO PUXADAS PARA A CACAPA MAIS PROXIMA", "(FORCA FRACA). MESA ABERTA: TODAS, MENOS A 8." },
         { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE", "OS BOTOES DE MIRAR FICAM INVERTIDOS E A FORCA FALHA AS VEZES." },
         { "SE NAO ENCACAPAR E NAO FOR FALTA, VOCE JOGA DE NOVO.", "SE ENCACAPAR, A HABILIDADE NAO GASTA." },
-        { "", "" }, { "", "" }, { "", "" }, { "", "" } };
+        { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
     char buf[64];
@@ -4594,14 +4795,18 @@ static void drawCueMenu(void)
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
         textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
         if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: A PA ENTERRA A BOLA ALVO NA CACAPA (QUALQUER BOLA)", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: ENTERRA A BOLA ALVO PERTO DA CACAPA (RECARGA 5)", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
-            textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A MESA A ULTIMA BOLA DO ADVERSARIO", 375.0f);
+            textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
+        } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
+            textFit(236, 311, 0.25f, COL(215,220,232), "ALGEMAS: PRENDE UMA BOLA DO ADVERSARIO POR 1 JOGADA. NADA A MOVE", 375.0f);
+            textFit(236, 322, 0.25f, COL(215,220,232), "SIRENE: O ADVERSARIO JOGA SEM LINHA GUIA NA PROXIMA JOGADA", 375.0f);
+            textFit(236, 333, 0.25f, COL(215,220,232), "QUADRADO TROCA A BOLA QUE VAI SER PRESA", 375.0f);
         } else {
             textFit(236, 316, 0.28f, COL(215,220,232), AD[ab][0], 345.0f);
             textFit(236, 329, 0.28f, COL(215,220,232), AD[ab][1], 345.0f);
         }
-        sprintf(buf, ab == AB_COVEIRO ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
+        sprintf(buf, (ab == AB_COVEIRO || ab == AB_POLICIAL) ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
         textFit(236, 344, 0.26f, COL(0,255,200), buf, 345.0f);
     } else {
         text(236, 303, 0.4f, COL(130,138,155), "SEM HABILIDADE ESPECIAL");
@@ -5034,7 +5239,7 @@ static void cycleChar(int pl, int d)       /* cada jogador usa um personagem dif
 {
     int o = charSel[1 - pl];
     do { charSel[pl] = (charSel[pl] + d + NCHARS) % NCHARS; } while (charSel[pl] == o);
-    if (pl == 0 && charSel[0] == 16) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
+    if (pl == 0 && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
 }
 
 /* ---------- torneio mata-mata ---------- */
@@ -5921,6 +6126,41 @@ static void drawRewind(void)
     textC(290, 0.24f, COL(150,155,170), "SETAS ESCOLHEM   X CONFIRMA");
 }
 
+/* POLICIAL / COVEIRO: marcas na mesa (algemas na bola presa, alvo das algemas, fantasma da ressuscitada e a sirene) */
+static void drawCuffs(float x, float y, int al)
+{
+    ringN(x - 4.2f, y, 4.4f, 1.8f, 14, CA(236, 238, 246, al));
+    ringN(x + 4.2f, y, 4.4f, 1.8f, 14, CA(236, 238, 246, al));
+    line(x - 1.0f, y, x + 1.0f, y, CA(150, 158, 176, al));
+}
+static void drawCopMarks(void)
+{
+    int rb = (menuT / 8) & 1;
+    if (lockBall > 0 && b[lockBall].in) {                           /* bola presa: aro vermelho/azul e algemas por cima */
+        float x = b[lockBall].x, y = b[lockBall].y, pu = 1.2f * sinf(menuT * 0.25f);
+        ringN(x, y, R + 2.6f + pu, 2.2f, 22, rb ? CA(255, 60, 70, 0xa0) : CA(80, 140, 255, 0xa0));
+        discN(x, y, R * 0.62f, CA(20, 24, 40, 0x90), 12);
+        drawCuffs(x, y, 0xd0);
+    }
+    if (state == S_AIM && !isBot() && abilArm && curAb() == AB_POLICIAL && copSel == 0 && copTgt > 0 && b[copTgt].in) {   /* alvo das algemas */
+        float bx = b[copTgt].x, by = b[copTgt].y, bob = 3.0f * sinf(menuT * 0.2f);
+        ringN(bx, by, R + 3.5f, 1.8f, 24, CA(255, 230, 60, 0x7c));
+        ringN(bx, by, R + 6.5f + bob * 0.4f, 1.2f, 24, CA(255, 230, 60, 0x40));
+        tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,230,60));
+        drawCuffs(bx, by, 0xa0);
+    }
+    if (ghostBall > 0 && b[ghostBall].in && (state == S_ROLL || state == S_STRIKE)) {   /* ressuscitada: fantasma (a branca passa por ela) */
+        float gx = b[ghostBall].x, gy = b[ghostBall].y, pu = 1.5f * sinf(menuT * 0.3f);
+        ringN(gx, gy, R + 2.5f + pu, 1.6f, 22, CA(150, 255, 170, 0x90));
+        discN(gx, gy, R + 1.0f, CA(150, 255, 170, 0x18), 16);
+    }
+    if (state == S_AIM && !isBot() && sirenT[cur]) {                /* SIRENE sobre quem esta mirando */
+        u64 sc = rb ? CA(255, 50, 60, 0x50) : CA(70, 130, 255, 0x50);
+        rect(0, 0, 640, 8, sc); rect(0, 440, 640, 448, sc); rect(0, 0, 8, 448, sc); rect(632, 0, 640, 448, sc);
+        textC(74, 0.34f, rb ? COL(255,110,120) : COL(130,175,255), "SIRENE! SEM LINHA GUIA");
+    }
+}
+
 static void drawScene(void)
 {
     int i;
@@ -5952,6 +6192,7 @@ static void drawScene(void)
         } else drawBallAt(0, b[0].x, b[0].y, R);
     }
     for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
+    drawCopMarks();
     if (state == S_ROLL || state == S_STRIKE) {                      /* efeitos das habilidades */
         if (abilKind == AB_CONGELAR) {
             rect(TX0, TY0, TX1, TY1, CA(150, 215, 255, 0x12));
@@ -6058,7 +6299,7 @@ static void drawScene(void)
     if (state == S_AIM) {
         float cd0 = R + 4 + pwr * 70;
         if (chalkAnim > 0) cd0 += 16.0f + 4.0f * sinf(chalkAnim * 0.7f);
-        if (!isBot()) { drawGuide(); if (jumpArm) drawJumpMark(); }
+        if (!isBot()) { if (!sirenT[cur]) drawGuide(); if (jumpArm) drawJumpMark(); }   /* SIRENE: sem linha guia */
         drawCue(b[0].x, b[0].y, cd0, 0x80, ang, curCue());
         if (chalkAnim > 0) drawChalkFx(b[0].x, b[0].y, cd0);
     } else if (state == S_STRIKE) {
@@ -6252,6 +6493,7 @@ static void hackSolve(void)
     }
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
+        if (t == lockBall) continue;                  /* bola presa pelo policial: nao da para encacapar */
         if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
@@ -6362,6 +6604,19 @@ static void useAbility(void)
         SFX(SFX_ABIL, 70);
         if (why) setmsg(why);
         else { sprintf(tb, "COVEIRO: %s PRONTO (O: TROCAR)", GV_NAME[graveSel]); setmsg(tb); }
+        return;
+    }
+    if (ab == AB_POLICIAL) {                              /* O: abre o seletor e passa ALGEMAS > SIRENE > fechar */
+        const char *why;
+        if (!copOpen) { copOpen = 1; copSel = 0; } else copSel++;
+        if (copSel > 1) { copOpen = 0; copSel = 0; abilArm = 0; setmsg("HABILIDADE CANCELADA: POLICIAL"); return; }
+        why = copWhy(copSel);
+        abilArm = (why == NULL);
+        if (copSel == 0 && abilArm) copTgt = copBest();   /* alvo inicial: a bola do adversario mais perto da cacapa */
+        SFX(SFX_ABIL, 70);
+        if (why) setmsg(why);
+        else if (copSel == 0) { sprintf(tb, "ALGEMAS NA BOLA %d (QUADRADO TROCA O ALVO)", copTgt); setmsg(tb); }
+        else setmsg("SIRENE PRONTA (O: TROCAR)");
         return;
     }
     abilArm = !abilArm;
@@ -6527,7 +6782,13 @@ int main(int argc, char *argv[])
                         setmsg(jumpArm ? "PULO ATIVADO: A BRANCA VAI PULAR" : "PULO DESLIGADO");
                     }
                     else if (pressed & PAD_SQUARE) {
-                        if (chalk[cur] < 0.97f) { chalkAnim = 50; SFX(SFX_CHALK, 70); }
+                        if (curAb() == AB_POLICIAL && copOpen && copSel == 0 && abilArm) {   /* POLICIAL: QUADRADO troca a bola que sera presa */
+                            char tb2[48];
+                            int nt = copNext(copTgt, 1);
+                            if (nt > 0) copTgt = nt;
+                            sprintf(tb2, "ALGEMAS NA BOLA %d", copTgt); setmsg(tb2);
+                        }
+                        else if (chalk[cur] < 0.97f) { chalkAnim = 50; SFX(SFX_CHALK, 70); }
                         else setmsg("O TACO JA ESTA COM GIZ");
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
