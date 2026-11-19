@@ -269,7 +269,7 @@ No menu inicial, **LOJA** gasta as **moedas** ganhas nas partidas em itens de vi
 - **TÍTULOS** (6): apelido sob o nome do jogador 1 no placar (Novato, Tubarão, Mestre das Caçapas, **Rei da Sinuca**, Lenda)
 - **MOLDURAS** (6): borda no painel do jogador 1: Dourada, Neon Azul, Fogo, Gelo e Arco-íris
 - **Save**: moedas, itens comprados e equipados ficam no **memory card 1** (pasta `8BALLREIS`, arquivo `loja.sav`). Sem cartão a loja funciona, mas o progresso não é salvo
-- **Makefile**: o save usa a `libmc`, então acrescente **`-lmc`** às bibliotecas. Para desligar o save, defina `USE_MEMCARD 0` no `main.c`
+- **Save sem biblioteca extra**: usa o `fileio` do kernel (`mc0:`), então o Makefile não precisa de `-lmc`. Para desligar o save, defina `USE_MEMCARD 0` no `main.c`
 - Os preços e itens ficam nas tabelas `SH_IT` / `SH_N` no `main.c`
 
 ## Compilar

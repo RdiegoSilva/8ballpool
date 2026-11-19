@@ -16,10 +16,10 @@
 #include <dmaKit.h>
 #include <libpad.h>
 #ifndef USE_MEMCARD
-#define USE_MEMCARD 1   /* 1 = salva moedas e itens da LOJA no memory card 1 (precisa de -lmc no Makefile); 0 = nao salva */
+#define USE_MEMCARD 1   /* 1 = salva moedas e itens da LOJA no memory card 1 (usa o fileio do kernel, sem biblioteca extra); 0 = nao salva */
 #endif
 #if USE_MEMCARD
-#include <libmc.h>
+#include <fileio.h>
 #endif
 #include <math.h>
 #include <stdio.h>
@@ -511,7 +511,7 @@ static void renderSkin(int id, int ox, int oy)
                     float bd = 0.80f + 0.20f * sinf(y * 14.0f + id * 1.3f) + 0.08f * sinf(y * 33.0f + x * 6.0f);
                     if (fabsf(y) < 0.05f) bd = 1.35f;
                     cr *= bd; cg *= bd; cb *= bd;
-                    if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
+                    cr = fminf(cr, 255.0f); cg = fminf(cg, 255.0f); cb = fminf(cb, 255.0f);
                 } else if (skinStyleEff == 3 && (!skinStripe[id] || fabsf(y) <= 0.55f)) {   /* FRUTAS: sementes claras */
                     float ln = atan2f(z, x) * 0.95493f, lt = asinf(y) * 1.90986f, sx2, sy2;
                     sy2 = lt - floorf(lt) - 0.5f; sx2 = ln + floorf(lt) * 0.5f; sx2 = sx2 - floorf(sx2) - 0.5f;
@@ -544,7 +544,7 @@ static void renderSkin(int id, int ox, int oy)
                     if (cr > 235 && cg > 235 && cb > 225) { cr = 175; cg = 255; cb = 195; }
                     else if (cr + cg + cb > 150) {
                         cr = cr * 1.2f + 20; cg = cg * 1.2f + 45; cb = cb * 1.2f + 20;
-                        if (cr > 255) cr = 255; if (cg > 255) cg = 255; if (cb > 255) cb = 255;
+                        cr = fminf(cr, 255.0f); cg = fminf(cg, 255.0f); cb = fminf(cb, 255.0f);
                     }
                 }
             }
@@ -1521,36 +1521,61 @@ static const ShopItem SH_IT[SH_CATS][SH_MAXI] = {
 };
 
 #if USE_MEMCARD
-#ifndef MC_TYPE_MC
-#define MC_TYPE_MC 0
+#ifndef FIO_O_RDONLY
+#define FIO_O_RDONLY 0x0001
+#define FIO_O_WRONLY 0x0002
+#define FIO_O_CREAT  0x0200
+#define FIO_O_TRUNC  0x0400
 #endif
 #define SH_MAGIC 0x53484C38u
-typedef struct { u32 magic; int coins; int own[SH_CATS]; int eq[SH_CATS]; u32 sum; } ShopSave;
+#define SH_FILE "mc0:8BALLREIS/loja.sav"
+typedef struct { u32 magic; int coins; int own[SH_CATS]; int eq[SH_CATS]; u32 pad; u32 sum; } ShopSave;
 static ShopSave shBuf __attribute__((aligned(64)));
-static int shMcOk;
+static int shLoaded, shSaveFail;
 static u32 shSum(const ShopSave *sv)
 {
     const u8 *q = (const u8 *)sv; u32 h = 2166136261u; unsigned k;
     for (k = 0; k < sizeof(ShopSave) - sizeof(u32); k++) { h ^= q[k]; h *= 16777619u; }
     return h;
 }
-static int shMcWait(void) { int cmd = 0, res = 0; mcSync(0, &cmd, &res); return res; }
+
+/* le o save. merge = 1: soma as moedas ja ganhas nesta sessao (o cartao so ficou pronto depois). Devolve 1 se o arquivo existe */
+static int shTryLoad(int merge)
+{
+    int fd, r, k;
+    fd = fioOpen(SH_FILE, FIO_O_RDONLY);
+    if (fd < 0) return 0;
+    memset(&shBuf, 0, sizeof(shBuf));
+    r = fioRead(fd, &shBuf, sizeof(shBuf));
+    fioClose(fd);
+    if (r == (int)sizeof(shBuf) && shBuf.magic == SH_MAGIC && shBuf.sum == shSum(&shBuf) && shBuf.coins >= 0) {
+        shCoins = (merge ? shCoins : 0) + shBuf.coins; if (shCoins > 999999) shCoins = 999999;
+        for (k = 0; k < SH_CATS; k++) {
+            shOwn[k] |= shBuf.own[k] | 1;
+            if (!merge || shEq[k] == 0)
+                shEq[k] = (shBuf.eq[k] >= 0 && shBuf.eq[k] < SH_N[k] && ((shOwn[k] >> shBuf.eq[k]) & 1)) ? shBuf.eq[k] : 0;
+        }
+    }
+    return 1;
+}
 #endif
 
 static void shopSave(void)
 {
 #if USE_MEMCARD
-    int fd, k;
-    if (!shMcOk) return;
+    int fd, r, k;
+    if (!shLoaded && shTryLoad(1)) shLoaded = 1;           /* o cartao pode ter ficado pronto so agora */
     memset(&shBuf, 0, sizeof(shBuf));
     shBuf.magic = SH_MAGIC; shBuf.coins = shCoins;
     for (k = 0; k < SH_CATS; k++) { shBuf.own[k] = shOwn[k]; shBuf.eq[k] = shEq[k]; }
     shBuf.sum = shSum(&shBuf);
-    mcMkDir(0, 0, "8BALLREIS"); shMcWait();                 /* se ja existe, so devolve erro (ignorado) */
-    mcOpen(0, 0, "/8BALLREIS/loja.sav", 0x202); fd = shMcWait();   /* escrita + criar */
-    if (fd < 0) return;
-    mcWrite(fd, &shBuf, sizeof(shBuf)); shMcWait();
-    mcClose(fd); shMcWait();
+    fioMkdir("mc0:8BALLREIS");                              /* se ja existe, so devolve erro (ignorado) */
+    fd = fioOpen(SH_FILE, FIO_O_WRONLY | FIO_O_CREAT | FIO_O_TRUNC);
+    if (fd < 0) { shSaveFail = 1; return; }
+    r = fioWrite(fd, &shBuf, sizeof(shBuf));
+    fioClose(fd);
+    shSaveFail = (r != (int)sizeof(shBuf));
+    if (!shSaveFail) shLoaded = 1;
 #endif
 }
 
@@ -1560,30 +1585,10 @@ static void shopInit(void)
     for (k = 0; k < SH_CATS; k++) { shOwn[k] = 1; shEq[k] = 0; }
     shCoins = 0;
 #if USE_MEMCARD
-    {
-        int type, freeK, fmt, fd, r;
-        SifLoadModule("rom0:MCMAN", 0, NULL);
-        SifLoadModule("rom0:MCSERV", 0, NULL);
-        if (mcInit(MC_TYPE_MC) < 0) { shMcOk = 0; return; }
-        mcGetInfo(0, 0, &type, &freeK, &fmt); shMcWait();
-        mcGetInfo(0, 0, &type, &freeK, &fmt); r = shMcWait();
-        shMcOk = (r >= -1);
-        if (shMcOk) {
-            mcOpen(0, 0, "/8BALLREIS/loja.sav", 1); fd = shMcWait();   /* so leitura */
-            if (fd >= 0) {
-                memset(&shBuf, 0, sizeof(shBuf));
-                mcRead(fd, &shBuf, sizeof(shBuf)); r = shMcWait();
-                mcClose(fd); shMcWait();
-                if (r == (int)sizeof(shBuf) && shBuf.magic == SH_MAGIC && shBuf.sum == shSum(&shBuf) && shBuf.coins >= 0) {
-                    shCoins = shBuf.coins > 999999 ? 999999 : shBuf.coins;
-                    for (k = 0; k < SH_CATS; k++) {
-                        shOwn[k] = shBuf.own[k] | 1;
-                        shEq[k] = (shBuf.eq[k] >= 0 && shBuf.eq[k] < SH_N[k] && ((shOwn[k] >> shBuf.eq[k]) & 1)) ? shBuf.eq[k] : 0;
-                    }
-                }
-            }
-        }
-    }
+    SifLoadModule("rom0:MCMAN", 0, NULL);
+    SifLoadModule("rom0:MCSERV", 0, NULL);
+    fioInit();
+    if (shTryLoad(0)) shLoaded = 1;
 #endif
     ballStyle = shEq[SC_BOLA];
 }
@@ -6505,7 +6510,7 @@ static void drawShopScreen(void)
     discN(548, 54, 8.0f, COL(255,205,60), 12); discN(548, 54, 5.5f, COL(210,150,20), 10);
     text(560, 46, 0.4f, COL(255,235,120), buf);
 #if USE_MEMCARD
-    if (!shMcOk) text(36, 46, 0.28f, COL(255,170,120), "SEM MEMORY CARD 1: O PROGRESSO NAO SERA SALVO");
+    if (shSaveFail) text(36, 46, 0.28f, COL(255,170,120), "SEM MEMORY CARD 1: O PROGRESSO NAO SERA SALVO");
     else
 #endif
     text(36, 46, 0.3f, COL(150,160,178), "MOEDAS GANHAS NAS PARTIDAS");
