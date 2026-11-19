@@ -79,7 +79,7 @@ static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], gri
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
 #define ENTERRO_ALCANCE 100000.0f                     /* distancia maxima ate a cacapa: sem limite (o ENTERRO puxa a bola de qualquer lugar) */
-#define ENTERRO_PUXAO 0.30f                           /* NERF: o ENTERRO desvia a bola alvo so 30% em direcao a cacapa (nao e mais garantido) */
+#define ENTERRO_PUXAO 0.50f                           /* o ENTERRO desvia a bola alvo 50% em direcao a cacapa */
 #define ENTERRO_RECARGA 3                             /* o ENTERRO recarrega em 3 tacadas */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
@@ -686,6 +686,11 @@ static int botCue;                                       /* MESTRE: taco que o b
 static int botMaster(void) { return mode == 0 && cur == 1 && botLevel == 4 && !(tourney && !tAbil); }   /* dificuldade MESTRE: o bot usa tacos e poderes */
 static int curCue(void) { return botMaster() ? botCue : ((isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]); }
 static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !(tourney && !tAbil))) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
+/* VAMPIRO: barra de sangue. Cada tacada que encacapa uma bola sua enche 1/3; se errar, a barra seca.
+   Com 3 bolas seguidas a barra enche e a 4a tacada vira SEDE DE SANGUE (mais forte e a bola alvo curva para a cacapa) */
+#define BLOOD_MAX 3
+static int blood[2], bloodShot;
+static int vampOn(int p) { return charSel[p] == 6 && !(tourney && !tAbil) && (abilOn || (mode == 0 && p == 1)); }
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
@@ -755,6 +760,7 @@ static void rackMini(void)
     }
 }
 
+static void autoAim(void);
 static void newGame(int m)
 {
     char buf[40];
@@ -767,12 +773,14 @@ static void newGame(int m)
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
+    blood[0] = blood[1] = 0; bloodShot = 0;
     graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
     raceCnt[0] = raceCnt[1] = 0;
     copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
+    autoAim();                                           /* ja comeca mirando numa bola sua (no meio), nao no angulo 0 */
 }
 
 /* BAGUNCA: sacode as bolas do adversario (cada uma ganha um empurrao em direcao aleatoria) */
@@ -952,6 +960,13 @@ static void shoot(float p)
     if (abilCD[cur] > 0) abilCD[cur]--;
     abilKind = AB_NONE; abilT = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; hackOn = 0; grinchOn = 0; abilExtra = 0; rastT = -1;
     graveOn = 0; buryBall = 0; buryT = 0; ghostBall = 0;
+    bloodShot = vampOn(cur) && blood[cur] >= BLOOD_MAX;
+    if (bloodShot) {                                     /* VAMPIRO: SEDE DE SANGUE */
+        b[0].vx *= 1.35f; b[0].vy *= 1.35f;
+        if (abilKind == AB_NONE) abilKind = AB_SUGAR;    /* a bola alvo curva suave para a cacapa */
+        abilFx = 36; fxX = hitX; fxY = hitY;
+        setmsg("SEDE DE SANGUE! TACADA MAIS FORTE");
+    }
     if (abilArm && curAb() != AB_NONE) {                 /* habilidade do taco de personagem */
         abilKind = curAb(); abilCD[cur] = AB_COOL; abilFx = 36; fxX = hitX; fxY = hitY;
         if (abilKind == AB_GRINCH) {                      /* vira o poder que ja estava sorteado e mostrado na tela */
@@ -1298,6 +1313,12 @@ static void endTurn(int foul, int ownPocket)
     char buf[64];
     int forgiven = 0, saved = 0, keep = abilExtra, kept = 0;   /* keep: NOVA VIDA do gato */
     abilExtra = 0;
+    if (vampOn(cur)) {                                   /* VAMPIRO: barra de sangue */
+        if (bloodShot) blood[cur] = 0;                   /* gastou a sede de sangue */
+        else if (ownPocket && !foul) { if (blood[cur] < BLOOD_MAX) blood[cur]++; }
+        else blood[cur] = 0;                             /* errou: a barra seca */
+    }
+    bloodShot = 0;
     botTimer = 0; botPlanned = 0; botCue = 0;
     abilArm = 0; graveOpen = 0; copOpen = 0; hackOn = 0;
     if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
@@ -3873,52 +3894,42 @@ static float tipKey(float x, float y, const char *k, const char *l, u64 c1, u64 
 
 static void drawChar(int id, float cx, float cy, float s, int mood, int t, int full);
 
-/* painel de cada jogador (topo), estilo 8 Ball Pool: barra com nome, grupo e bolas em casinhas
-   + retrato do personagem numa moldura quadrada ao lado do placar */
+/* HUD do topo (layout novo): faixa baixa de vidro com 3 blocos: [retrato | nome, grupo e bolas] [placar] [nome, grupo e bolas | retrato]
+   quem joga tem borda dourada, brilho e filete na cor do jogador; o outro fica apagado */
+static void hudText(float x, float y, float sc, u64 c, const char *t, float maxw);
 static void drawPlayerPanel(int pl)
 {
-    float x1 = pl == 0 ? 70.0f : 438.0f, x2 = x1 + 160.0f, y1 = 6.0f, y2 = 64.0f;
-    float ax1 = pl == 0 ? 234.0f : 378.0f, ax2 = ax1 + 56.0f, amy = (y1 + y2) * 0.5f, acx = (ax1 + ax2) * 0.5f;
-    float c0 = x1 + (pl == 0 ? 14.0f : 10.0f), c1 = x2 - (pl == 0 ? 8.0f : 14.0f);   /* area util (a faixa de cor fica na borda de fora) */
+    float x1 = pl == 0 ? 70.0f : 354.0f, x2 = x1 + 216.0f, y1 = 4.0f, y2 = 48.0f;
+    float ax1 = pl == 0 ? x1 + 4.0f : x2 - 44.0f, ax2 = ax1 + 40.0f, ay1 = y1 + 2.0f, ay2 = y2 - 2.0f, acx = (ax1 + ax2) * 0.5f;
+    float c0 = pl == 0 ? ax2 + 8.0f : x1 + 8.0f, c1 = pl == 0 ? x2 - 8.0f : ax1 - 8.0f;
     int act = (pl == cur), k, slots = gmode == GM_BR ? 4 : 8;
     const char *nm = pname(pl);
     const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
                      (grp[pl] < 0 ? (gmode == GM_RACE ? raceTxt(pl) : "MESA ABERTA") : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
-    u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);                 /* cor do jogador: azul (1) e vermelho (2) */
-    u64 edge = act ? COL(255,215,60) : (pl == 0 ? COL(62,96,150) : COL(150,70,74));
-    float sp = (c1 - c0 - 18.0f) / (float)(slots - 1), bx0, tx = c0;
-    if (sp > 30.0f) sp = 30.0f;
-    bx0 = (c0 + c1) * 0.5f - (slots - 1) * sp * 0.5f;
+    u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);
+    u64 edge = act ? COL(255,215,60) : (pl == 0 ? COL(50,78,120) : COL(120,58,62));
+    float sp = (c1 - c0 - 14.0f) / (float)(slots - 1), bx0 = c0 + 7.0f, tx = c0;
+    if (sp > 20.0f) sp = 20.0f;
 
-    hbox(x1, y1, x2, y2, act ? CA(255, 205, 70, 0x70) : CA(70, 78, 96, 0x40),
-         act ? CA(40, 34, 14, 0x70) : CA(8, 12, 22, 0x50));
-    if (pl == 0) rect(x1, y1, x1 + 5, y2, edge); else rect(x2 - 5, y1, x2, y2, edge);
-    if (act) rect(pl == 0 ? x1 + 5 : x1, y1 + 1, pl == 0 ? x2 : x2 - 5, y1 + 2, CA(255, 230, 120, 0x40));   /* brilho de quem joga */
+    hbox(x1, y1, x2, y2, act ? CA(255, 205, 70, 0x78) : CA(70, 78, 96, 0x38), act ? CA(38, 32, 12, 0x74) : CA(8, 12, 22, 0x4c));
+    if (act) rect(x1 + 4, y1 + 1, x2 - 4, y1 + 3, CA(255, 225, 120, 0x50));        /* brilho de quem joga */
 
-    text(c0, y1 + 5, 0.42f, act ? COL(255,235,110) : COL(175,182,196), nm);
-    rect(c0, y1 + 20, c1, y1 + 21, act ? CA(255, 215, 60, 0x40) : CA(140, 150, 170, 0x28));   /* divisoria nome / grupo */
-    if (gmode == GM_BR) {                                              /* bolinha da cor do jogador */
+    /* retrato quadrado, chanfrado, com luz e filete embaixo */
+    cham(ax1 - 1.5f, ay1 - 1.5f, ax2 + 1.5f, ay2 + 1.5f, 4.0f, edge);
+    cham(ax1, ay1, ax2, ay2, 3.0f, pl == 0 ? COL(40,78,128) : COL(128,52,54));
+    discN(acx, ay1 + 16.0f, 16.0f, CA(255, 255, 255, 0x0c), 14);
+    drawChar(charSel[pl], acx, ay1 + 26.0f, 0.36f, 0, menuT, 0);
+    rect(ax1 + 3.0f, ay2 - 2.0f, ax2 - 3.0f, ay2, side);
+    if (curse[pl]) frameR(ax1 - 3.0f, ay1 - 3.0f, ax2 + 3.0f, ay2 + 3.0f, 2.0f, ((menuT / 10) & 1) ? CA(215, 150, 255, 0x90) : CA(150, 70, 230, 0x90));   /* MALDICAO */
+
+    /* nome e grupo */
+    hudText(c0, y1 + 5, 0.4f, act ? COL(255,235,110) : COL(170,178,194), nm, c1 - c0 - 40.0f);
+    if (gmode == GM_BR) {
         const u8 *bc = BC0[BRC[colSel[pl]]];
-        discN(c0 + 4.0f, y1 + 29.0f, 4.4f, shade(bc, 0.55f, 0), 10);
-        discN(c0 + 4.0f, y1 + 29.0f, 3.6f, shade(bc, 1.0f, 0), 10);
-        tx = c0 + 13.0f;
+        discN(c1 - 4.0f, y1 + 10.0f, 4.0f, shade(bc, 0.55f, 0), 10);
+        discN(c1 - 4.0f, y1 + 10.0f, 3.2f, shade(bc, 1.0f, 0), 10);
     }
-    text(tx, y1 + 24, 0.3f, act ? COL(255,255,255) : COL(135,143,158), gn);
-
-    /* retrato: moldura (dourada na vez do jogador), fundo em degrade com luz e o personagem maior */
-    cham(ax1 - 2.5f, y1 - 2.5f, ax2 + 2.5f, y2 + 2.5f, 5.0f, COL(8,10,16));
-    cham(ax1 - 2.0f, y1 - 2.0f, ax2 + 2.0f, y2 + 2.0f, 4.5f, act ? edge : (pl == 0 ? COL(50,78,120) : COL(120,58,62)));
-    cham(ax1 - 0.5f, y1 - 0.5f, ax2 + 0.5f, y2 + 0.5f, 3.5f, COL(8,10,16));
-    cham(ax1, y1, ax2, amy + 3.0f, 3.0f, pl == 0 ? COL(52,96,150) : COL(150,62,62));
-    rect(ax1, amy + 3.0f, ax2, y2 - 3.0f, pl == 0 ? COL(34,66,112) : COL(110,44,48));
-    rect(ax1 + 3.0f, y2 - 3.0f, ax2 - 3.0f, y2, pl == 0 ? COL(34,66,112) : COL(110,44,48));
-    discN(acx, y1 + 30.0f, 24.0f, CA(255, 255, 255, 0x0a), 16);
-    discN(acx, y1 + 30.0f, 15.0f, CA(255, 255, 255, 0x0a), 14);
-    drawChar(charSel[pl], acx, y1 + 36.0f, 0.52f, 0, menuT, 0);          /* avatar do personagem */
-    rect(ax1 + 3.0f, y2 - 6.0f, ax2 - 3.0f, y2, CA(0, 0, 0, 0x1a));                    /* sombra na base da moldura */
-    rect(ax1 + 3.0f, y1, ax2 - 3.0f, y1 + 1.0f, CA(255, 255, 255, 0x30));
-    rect(ax1 + 3.0f, y2 - 2.0f, ax2 - 3.0f, y2, side);                                 /* filete com a cor do jogador */
-    if (curse[pl]) frameR(ax1 - 4.0f, y1 - 4.0f, ax2 + 4.0f, y2 + 4.0f, 2.0f, ((menuT / 10) & 1) ? CA(215, 150, 255, 0x90) : CA(150, 70, 230, 0x90));   /* MALDICAO: aura roxa */
+    text(tx, y1 + 18, 0.28f, act ? COL(235,238,245) : COL(120,128,144), gn);
 
     if (act && timeSel && (mode == 1 || tourney) && !isBot() && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
         int sec = (turnT + 59) / 60;
@@ -3928,57 +3939,69 @@ static void drawPlayerPanel(int pl)
         if (fr < 0) fr = 0; if (fr > 1) fr = 1;
         sprintf(tb, "%dS", sec);
         text(c1 - tw(0.4f, tb), y1 + 5, 0.4f, tcol, tb);
-        rect(x1, y2 + 3, x2, y2 + 7, CA(40, 44, 56, 0x70));
-        rect(x1, y2 + 3, x1 + (x2 - x1) * fr, y2 + 7, sec <= 5 ? COL(255,90,80) : (fr < 0.5f ? COL(255,200,60) : COL(110,230,130)));
+        rect(x1 + 4, y2 - 4, x2 - 4, y2 - 1, CA(40, 44, 56, 0x90));
+        rect(x1 + 4, y2 - 4, x1 + 4 + (x2 - x1 - 8) * fr, y2 - 1, sec <= 5 ? COL(255,90,80) : (fr < 0.5f ? COL(255,200,60) : COL(110,230,130)));
+    } else if (act) rect(x1 + 4, y2 - 3, x2 - 4, y2 - 1, side);                 /* filete na cor do jogador */
+
+    if (vampOn(pl)) {                                    /* VAMPIRO: barra de sangue (3 gomos) logo abaixo do bloco */
+        int full = blood[pl] >= BLOOD_MAX, q;
+        float gw = (x2 - x1 - 8.0f) / 3.0f, pul = full ? (0.5f + 0.5f * sinf(menuT * 0.25f)) : 0.0f;
+        for (q = 0; q < 3; q++) {
+            float gx = x1 + 4.0f + q * gw;
+            rect(gx, y2 + 4.0f, gx + gw - 2.0f, y2 + 9.0f, CA(30, 8, 14, 0xa0));
+            if (q < blood[pl]) rect(gx, y2 + 4.0f, gx + gw - 2.0f, y2 + 9.0f, full ? COL(255, (int)(40 + 90 * pul), (int)(50 + 60 * pul)) : COL(200, 20, 44));
+            if (q < blood[pl]) rect(gx, y2 + 4.0f, gx + gw - 2.0f, y2 + 5.5f, CA(255, 160, 170, 0x50));
+        }
+        if (full) text(x1 + 4.0f, y2 + 11.0f, 0.26f, COL(255, 110, 120), "SEDE DE SANGUE!");
     }
-    if (grp[pl] < 0) {                                                   /* mesa aberta: casinhas vazias, so para organizar */
+
+    /* bolas: casinhas pequenas numa fileira */
+    if (grp[pl] < 0) {                                   /* mesa aberta: casinhas vazias */
         for (k = 0; k < slots - 1; k++) {
-            float bx = bx0 + k * sp, by = y1 + 45.0f;
-            discN(bx, by, 7.6f, CA(14, 18, 28, 0x60), 14);
-            ring(bx, by, 7.6f, CA(58, 66, 86, 0x60));
+            float bx = bx0 + k * sp, by = y1 + 34.0f;
+            discN(bx, by, 6.6f, CA(14, 18, 28, 0x60), 12);
+            ring(bx, by, 6.6f, CA(58, 66, 86, 0x60));
         }
         return;
     }
     for (k = 0; k < slots - (gmode == GM_BR ? 0 : 1); k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
-        float bx = bx0 + k * sp, by = y1 + 45.0f;
-        if ((gmode == GM_MINI || gmode == GM_DUEL) && (id < 8 ? id : id - 8) > (gmode == GM_DUEL ? 2 : 3)) continue;   /* mini/duelo: menos bolas por grupo */
-        discN(bx, by, 8.6f, COL(10,13,22), 14);                          /* casinha da bola */
-        ring(bx, by, 8.6f, COL(44,52,70));
-        if (b[id].in) drawBallAt(id, bx, by, 6.8f);
-        else discN(bx, by, 2.2f, CA(90, 100, 124, 0x50), 8);             /* bola ja encacapada: marca */
+        float bx = bx0 + k * sp, by = y1 + 34.0f;
+        if ((gmode == GM_MINI || gmode == GM_DUEL) && (id < 8 ? id : id - 8) > (gmode == GM_DUEL ? 2 : 3)) continue;
+        discN(bx, by, 6.8f, COL(10,13,22), 12);
+        ring(bx, by, 6.8f, COL(44,52,70));
+        if (b[id].in) drawBallAt(id, bx, by, 5.4f);
+        else discN(bx, by, 1.8f, CA(90, 100, 124, 0x50), 8);
     }
-    if (gmode != GM_BR && countGroup(grp[pl]) == 0) {                 /* so falta a bola 8 */
-        float bx = bx0 + 7 * sp, by = y1 + 45.0f;
-        discN(bx, by, 8.4f, COL(14,18,28), 14);
-        ring(bx, by, 8.4f, act ? COL(255,215,60) : COL(58,66,86));
-        drawBallAt(8, bx, by, 6.8f);
+    if (gmode != GM_BR && countGroup(grp[pl]) == 0) {   /* so falta a bola 8 */
+        float bx = bx0 + 7 * sp, by = y1 + 34.0f;
+        discN(bx, by, 6.8f, COL(10,13,22), 12);
+        ring(bx, by, 6.8f, act ? COL(255,215,60) : COL(44,52,70));
+        drawBallAt(8, bx, by, 5.4f);
     }
 }
 
-/* placar de vitorias (centro do topo) */
+/* placar de vitorias (centro do topo): bloco central maior, o numero de cada jogador na cor dele */
 static void drawScoreBoard(void)
 {
     int *w = mode == 0 ? winsBot : winsVs;
     char buf[16];
     float s;
+    hbox(290, 4, 350, 48, tourney ? CA(255, 215, 60, 0x60) : CA(120, 128, 150, 0x50), CA(8, 12, 22, 0x70));
+    rect(300, 5, 340, 7, tourney ? CA(255, 215, 60, 0x50) : CA(255, 255, 255, 0x20));
     if (tourney) {                                       /* torneio: mostra a fase em vez do placar */
         const char *rn = tRound == 0 ? "QUARTAS" : (tRound == 1 ? "SEMI" : "FINAL");
-        hbox(296, 6, 372, 64, CA(255, 215, 60, 0x60), CA(8, 12, 22, 0x68));
-        text(334 - tw(0.28f, "TORNEIO") * 0.5f, 13, 0.28f, COL(255,215,70), "TORNEIO");
-        rect(304, 28, 364, 29, CA(255, 215, 60, 0x30));
-        text(334 - tw(0.36f, rn) * 0.5f, 38, 0.36f, COL(255,235,110), rn);
+        text(320 - tw(0.26f, "TORNEIO") * 0.5f, 11, 0.26f, COL(255,215,70), "TORNEIO");
+        text(320 - tw(0.34f, rn) * 0.5f, 27, 0.34f, COL(255,235,110), rn);
         return;
     }
-    hbox(296, 6, 372, 64, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x68));
-    text(334 - tw(0.28f, "PLACAR") * 0.5f, 13, 0.28f, COL(150,158,175), "PLACAR");
-    rect(304, 28, 364, 29, CA(120, 128, 146, 0x30));
-    s = (w[0] > 9 || w[1] > 9) ? 0.45f : 0.6f;
+    text(320 - tw(0.24f, "PLACAR") * 0.5f, 10, 0.24f, COL(150,158,175), "PLACAR");
+    s = (w[0] > 9 || w[1] > 9) ? 0.42f : 0.56f;
     sprintf(buf, "%d", w[0] > 99 ? 99 : w[0]);
-    text(334 - 9 - tw(s, buf), 36, s, COL(120,175,255), buf);              /* jogador 1: azul */
-    text(334 - tw(s, ":") * 0.5f, 35, s, COL(150,158,175), ":");
+    text(320 - 8 - tw(s, buf), 25, s, COL(120,175,255), buf);
+    text(320 - tw(s, ":") * 0.5f, 24, s, COL(150,158,175), ":");
     sprintf(buf, "%d", w[1] > 99 ? 99 : w[1]);
-    text(334 + 9, 36, s, COL(255,125,120), buf);                           /* jogador 2: vermelho */
+    text(320 + 8, 25, s, COL(255,125,120), buf);
 }
 
 /* texto que encolhe para caber em maxw pixels */

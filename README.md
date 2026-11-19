@@ -58,6 +58,9 @@ Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAG
 - Embaixo da tela de configuração aparecem os dois escolhidos; o da linha selecionada comemora
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
+## HUD (layout novo)
+O topo da tela agora é uma faixa baixa de vidro com três blocos: **retrato + nome, grupo e bolas** do jogador 1, **placar** no centro e o bloco do jogador 2 espelhado. Quem joga tem borda dourada, brilho e filete na cor do jogador (azul/vermelho); o outro fica apagado. O relógio de jogada vira um filete no pé do bloco, e a barra de sangue do Vampiro fica logo abaixo.
+
 ## Animações de vitória e derrota
 Quando a partida termina:
 - **Quem venceu**: o personagem pula de alegria com os braços pro alto, com raios de luz girando, fogos de artifício, chuva de confete e um troféu brilhando no centro
@@ -268,7 +271,7 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
-- **ENTERRO**: a bola alvo (a primeira que a branca toca) tem a trajetória desviada **30%** em direção à caçapa mais próxima no momento da batida (`ENTERRO_PUXAO`); não é mais garantido, só ajuda. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **ENTERRO**: a bola alvo (a primeira que a branca toca) tem a trajetória desviada **50%** em direção à caçapa mais próxima no momento da batida (`ENTERRO_PUXAO`); não é mais garantido, só ajuda. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
 - **COVA**: abre uma caçapa extra (agora bem menor, raio 12 em vez de 20) no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
 - **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque). A bola que volta é um **fantasma**: nesta jogada a branca e as outras bolas **passam por ela, sem física**; na rodada seguinte ela volta ao normal.
 
@@ -278,6 +281,13 @@ Combo **POLICIAL** (personagem + taco **Cassetete** + mesa **Delegacia**: fita d
 
 - **ALGEMAS**: prende **qualquer bola do adversário** por 1 jogada (até o fim da próxima tacada dele). A bola presa **não se mexe de jeito nenhum**: nenhum poder a move, não cai na caçapa e quem bate nela rebate como em uma parede. **QUADRADO** troca a bola que será presa (começa pela mais perto de uma caçapa). O BOT não usa a bola presa como alvo.
 - **SIRENE**: na próxima jogada o adversário joga **sem linha guia** (o BOT erra mais a mira).
+
+## Vampiro: barra de sangue (SEDE DE SANGUE)
+Quando o personagem é o Vampiro (com HABILIDADES ligadas), aparece uma **barra de sangue com 3 gomos** embaixo do painel dele:
+- Cada tacada que **encaçapa uma bola sua** enche 1 gomo
+- Se a tacada **não encaçapar** (ou der falta), a barra **seca** e volta a zero
+- Com **3 bolas seguidas** a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **35% mais força** e a bola alvo **curva para a caçapa** (como o PUXÃO)
+- Depois da tacada de sangue a barra zera. Vale também para o Vampiro controlado pelo BOT
 
 ## Vampiro e Grinch (PUXÃO)
 
