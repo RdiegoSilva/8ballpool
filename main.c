@@ -6067,6 +6067,68 @@ static void bracketInput(u32 pr)
     } else if (pr & PAD_SELECT) { tourney = 0; menuInit(); state = S_MENU; }
 }
 
+/* ---------- SELETOR DE PERSONAGEM (etapa 1): grade de retratos, cursor por jogador, pedestais e PRONTO ---------- */
+#define CS_COLS 7
+#define CS_ROWS 3
+#define CS_RND  NCHARS                                /* casa do ALEATORIO (depois dos personagens; as ultimas casas ficam vazias) */
+static int csStage, csReady[2], csPos, csInit;        /* csStage: 0 jogador 1 escolhe, 1 jogador 2 (ou BOT) escolhe, 2 os dois prontos */
+static const u8 CSC[2][3] = { {255,215,60}, {90,220,255} };   /* cor de cada jogador: dourado e ciano */
+
+static int csSlot(int pl) { return charRand[pl] ? CS_RND : charSel[pl]; }
+static int csChooser(void) { return csStage < 2 ? csStage : (tourney ? 0 : 1); }
+static int csTaken(int pl, int slot)                  /* o outro jogador ja travou este personagem? */
+{
+    int o = 1 - pl;
+    return !tourney && slot < NCHARS && csReady[o] && !charRand[o] && charSel[o] == slot;
+}
+static void csEnsure(void)
+{
+    if (csInit) return;
+    csInit = 1; csStage = 0; csReady[0] = csReady[1] = 0; csPos = csSlot(0);
+}
+static int csMove(int pos, int dx, int dy)            /* anda pela grade pulando as casas vazias */
+{
+    int r = pos / CS_COLS, c = pos % CS_COLS, n;
+    for (n = 0; n < 24; n++) {
+        c = (c + dx + CS_COLS) % CS_COLS; r = (r + dy + CS_ROWS) % CS_ROWS;
+        if (r * CS_COLS + c <= CS_RND) return r * CS_COLS + c;
+    }
+    return pos;
+}
+static void csApply(int pl)                           /* aplica a casa do cursor ao jogador pl */
+{
+    if (csPos == CS_RND) charRand[pl] = 1;
+    else if (!csTaken(pl, csPos)) { charRand[pl] = 0; charSel[pl] = csPos; }
+    if (pl == 0 && !charRand[0] && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio */
+    if (pl == 0 && !tourney && !charRand[0] && !charRand[1] && charSel[0] == charSel[1]) {     /* o 2o jogador ainda nao escolheu: sai da frente */
+        int c = charSel[1];
+        do { c = (c + 1) % NCHARS; } while (c == charSel[0]);
+        charSel[1] = c;
+    }
+}
+static void csInput(u32 pr)
+{
+    int pl, dx = ((pr & PAD_RIGHT) ? 1 : 0) - ((pr & PAD_LEFT) ? 1 : 0), dy = ((pr & PAD_DOWN) ? 1 : 0) - ((pr & PAD_UP) ? 1 : 0);
+    csEnsure();
+    pl = csChooser();
+    if (pr & PAD_L1) { setStep = 0; setSel = 0; return; }
+    if (pr & (PAD_R1 | PAD_START)) { setStep = 2; setSel = 0; return; }
+    if (pr & PAD_CIRCLE) {                                      /* O: destrava o ultimo jogador (no comeco, volta uma etapa) */
+        if (csStage == 0) { setStep = 0; setSel = 0; return; }
+        csStage = (csStage == 2) ? (tourney ? 0 : 1) : 0;
+        csReady[csStage] = 0; csPos = csSlot(csStage);
+        return;
+    }
+    if (csStage == 2) { if (pr & PAD_CROSS) { setStep = 2; setSel = 0; } return; }
+    if (dx || dy) { csPos = csMove(csPos, dx, dy); csApply(pl); }
+    if (pr & PAD_CROSS) {
+        if (csTaken(pl, csPos)) return;
+        csApply(pl);
+        csReady[pl] = 1;
+        if (pl == 0 && !tourney) { csStage = 1; csPos = csSlot(1); } else csStage = 2;
+    }
+}
+
 static void resolveRandoms(void)                /* ALEATORIO: sorteia personagens (diferentes entre si) e a mesa */
 {
     int pl;
@@ -6111,7 +6173,10 @@ static void confirmName(void)
 
 static void setupInput(u32 pr)
 {
-    int v[NSR], n = setRows(v), d = 0, row;
+    int v[NSR], n, d = 0, row;
+    if (setStep != 1) csInit = 0;
+    if (setStep == 1) { csInput(pr); return; }          /* etapa 1: seletor de personagem em grade */
+    n = setRows(v);
     if (pr & PAD_UP)    setSel = (setSel + n - 1) % n;
     if (pr & PAD_DOWN)  setSel = (setSel + 1) % n;
     if (pr & PAD_LEFT)  d = -1;
@@ -6173,6 +6238,93 @@ static void nameInput(u32 pr)
 
 static void selBar(float x1, float x2, float y, float h);
 
+static void csTile(int slot, float x, float y)
+{
+    const float w = 62.0f, h = 50.0f;
+    int i, ch = csChooser(), isCur = (slot == csPos && csStage < 2), own = -1, col;
+    float pu = 0.5f + 0.5f * sinf(menuT * 0.2f);
+    u64 bc, fc;
+    for (i = 0; i < (tourney ? 1 : 2); i++) if (csReady[i] && slot == csSlot(i)) own = i;
+    col = isCur ? ch : own;
+    if (col >= 0) {                                               /* brilho em volta da moldura */
+        int a = isCur ? 0x28 + (int)(0x28 * pu) : 0x30;
+        outlineRect(x - 4.0f, y - 4.0f, x + w + 4.0f, y + h + 4.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a / 2));
+        outlineRect(x - 3.0f, y - 3.0f, x + w + 3.0f, y + h + 3.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a));
+        outlineRect(x - 2.0f, y - 2.0f, x + w + 2.0f, y + h + 2.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a + 0x10));
+    }
+    bc = col >= 0 ? COL(CSC[col][0], CSC[col][1], CSC[col][2]) : COL(96,104,122);
+    fc = col >= 0 ? CA(CSC[col][0] / 5, CSC[col][1] / 5, CSC[col][2] / 5, 0x80) : CA(8, 14, 28, 0x78);
+    hbox(x, y, x + w, y + h, bc, fc);
+    if (slot < NCHARS) {
+        drawChar(slot, x + w * 0.5f, y + 30.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
+        rect(x + 6.0f, y + h - 6.0f, x + w - 6.0f, y + h - 4.0f, rarCol(CHAR_RAR[slot]));      /* faixa da raridade */
+    } else if (slot == CS_RND) {
+        text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(255,230,120), "?");
+        text(x + w * 0.5f - tw(0.22f, "ALEATORIO") * 0.5f, y + h - 12.0f, 0.22f, COL(215,220,232), "ALEATORIO");
+    } else {
+        text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(40,46,60), "?");
+    }
+    if (isCur && slot < NCHARS && csTaken(ch, slot)) {
+        rect(x + 1.0f, y + 1.0f, x + w - 1.0f, y + h - 1.0f, CA(0, 0, 0, 0x50));
+        text(x + w * 0.5f - tw(0.24f, "EM USO") * 0.5f, y + 18.0f, 0.24f, COL(255,120,110), "EM USO");
+    }
+    if (col >= 0) {                                               /* etiqueta: de quem e a casa */
+        const char *tg = (col == 1 && oppSel == 0) ? "BOT" : (col == 1 ? "P2" : "P1");
+        text(x + 4.0f, y + 3.0f, 0.24f, COL(CSC[col][0], CSC[col][1], CSC[col][2]), tg);
+    }
+}
+
+static void csPed(int pl, float px)                               /* pedestal: o personagem escolhido, nome e situacao */
+{
+    int ci = charRand[pl] ? (menuT / 90) % NCHARS : charSel[pl];
+    int hot = (csStage < 2 && csChooser() == pl), rdy = csReady[pl];
+    float bob = hot ? -3.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
+    u64 ac = (hot || rdy) ? COL(CSC[pl][0], CSC[pl][1], CSC[pl][2]) : COL(70,80,104);
+    const char *nm = charRand[pl] ? "ALEATORIO" : CHAR_NAME[ci], *st;
+    const char *who = (pl == 1 && oppSel == 0) ? "BOT" : pnames[pl];
+    u64 sc;
+    ell(px, 393.0f, 46.0f, 8.0f, COL(26,30,48));                 /* plataforma */
+    ell(px, 391.0f, 42.0f, 6.0f, ac);
+    ell(px, 390.0f, 36.0f, 4.0f, COL(18,22,38));
+    drawChar(ci, px, 306.0f + bob, 0.74f, (hot || rdy) ? 1 : 0, menuT, 1);
+    text(px - tw(0.3f, who) * 0.5f, 266.0f, 0.3f, ac, who);
+    text(px - tw(0.34f, nm) * 0.5f, 399.0f, 0.34f, (hot || rdy) ? COL(255,240,150) : COL(175,185,195), nm);
+    if (rdy)      { st = "PRONTO!";            sc = COL(120,255,150); }
+    else if (hot) { st = "ESCOLHENDO...";      sc = ((menuT / 20) & 1) ? COL(255,230,90) : COL(190,160,50); }
+    else          { st = pl == 1 && oppSel == 0 ? "BOT" : "AGUARDANDO"; sc = COL(120,130,148); }
+    hbox(px - 48.0f, 409.0f, px + 48.0f, 421.0f, rdy ? COL(90,200,120) : (hot ? COL(255,215,60) : COL(70,78,96)), CA(8, 14, 28, 0x80));
+    text(px - tw(0.24f, st) * 0.5f, 412.0f, 0.24f, sc, st);
+}
+
+static void drawCharSelect(void)
+{
+    const float tw0 = 62.0f, th0 = 50.0f, gx = 12.0f, gy = 8.0f;
+    float x0 = 320.0f - (CS_COLS * tw0 + (CS_COLS - 1) * gx) * 0.5f, y0 = 68.0f;
+    char buf[96];
+    int i, ch = csChooser();
+    csEnsure();
+    for (i = 0; i < CS_COLS * CS_ROWS; i++)
+        csTile(i, x0 + (i % CS_COLS) * (tw0 + gx), y0 + (i / CS_COLS) * (th0 + gy));
+    /* faixa de informacao (estilo letreiro) */
+    rect(0, 244, 640, 262, CA(20, 150, 210, 0x26));
+    rect(0, 244, 640, 245, CA(120, 230, 255, 0x50));
+    rect(0, 261, 640, 262, CA(120, 230, 255, 0x50));
+    if (csStage == 2) {
+        if ((menuT / 25) & 1) textC(248, 0.34f, COL(120,255,150), "PRONTO! X OU START: PROXIMA ETAPA   O: VOLTAR");
+        else                  textC(248, 0.34f, COL(255,240,150), "OS DOIS JOGADORES ESTAO PRONTOS");
+    } else {
+        int sl = csPos;
+        if (sl == CS_RND)        sprintf(buf, "J%d: ALEATORIO - SORTEIA UM PERSONAGEM NA HORA DE JOGAR", ch + 1);
+        else if (sl > CS_RND)    sprintf(buf, "EM BREVE");
+        else if (csTaken(ch, sl)) sprintf(buf, "%s ESTA EM USO PELO JOGADOR %d", CHAR_NAME[sl], 2 - ch);
+        else sprintf(buf, "%s - %s - TACO: %s - MESA: %s", CHAR_NAME[sl], RAR_NAME[CHAR_RAR[sl]],
+                     CHAR_CUE[sl] >= 0 ? CUES[CHAR_CUE[sl]].name : "PADRAO", CHAR_TAB[sl] >= 0 ? TABLES[CHAR_TAB[sl]].name : "LIVRE");
+        textFit(320.0f - 300.0f, 248.0f, 0.32f, (sl < CS_RND && !csTaken(ch, sl)) ? rarCol(CHAR_RAR[sl]) : COL(255,150,130), buf, 600.0f);
+    }
+    if (tourney) csPed(0, 320.0f);
+    else { csPed(0, 170.0f); csPed(1, 470.0f); }
+}
+
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
@@ -6199,6 +6351,13 @@ static void drawSetupScreen(void)
         text(x1 + 11 - tw(0.26f, nb) * 0.5f, 45, 0.26f, COL(10,14,24), nb);
         strcpy(lb, STEPN[i]);
         text(x1 + 24, 44, 0.28f, cur ? COL(255,240,150) : (done ? COL(150,225,170) : COL(120,130,148)), lb);
+    }
+    if (setStep == 1) {                                   /* etapa 1: seletor de personagem em grade (estilo jogo de luta) */
+        static const int fk1[4] = { 7, 0, 1, 8 };
+        static const char *const fl1[4] = { "MOVER", "CONFIRMAR", "VOLTAR", "ETAPA" };
+        drawCharSelect();
+        uiFoot(4, fk1, fl1);
+        return;
     }
     panel(60, 72, 580, y2);
 
