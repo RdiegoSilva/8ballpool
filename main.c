@@ -64,7 +64,7 @@ static int cur, grp[2], breakShot, charging;
 static float ang, pwr;
 static int pocketed[16], firstHit, gAtStart, startOwnLeft;
 static int winner, botTimer, botPlanned;
-static int gmode = GM_8BALL, tableSel = 0;       /* modo de jogo e mesa escolhidos */
+static int gmode = GM_8BALL, tableSel = 27;       /* modo de jogo e mesa escolhidos */
 static int colSel[2] = { 1, 2 };                 /* cores das bolas no modo brasileiro */
 static char pnames[2][12] = { "JOGADOR 1", "JOGADOR 2" };
 static int takeList[16], takeN, takeSel;         /* bolas que podem ser tiradas apos uma falta (brasileira) */
@@ -140,13 +140,13 @@ static int   jumpArm;                              /* 1 = a proxima tacada faz a
 static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 9.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
-#define POM 11.0f                                  /* meio: em cima da borda da tabela, quase todo na moldura */
+#define POC 7.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
+#define POM 9.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 14.0f, 12.0f, 14.0f, 14.0f, 12.0f, 14.0f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
+static const float PR[6] = { 15.5f, 13.5f, 15.5f, 15.5f, 13.5f, 15.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 21.0f, 18.0f, 21.0f, 21.0f, 18.0f, 21.0f };
+static const float PRC[6] = { 22.0f, 19.0f, 22.0f, 22.0f, 19.0f, 22.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -3164,14 +3164,35 @@ static void tableDecoPolice(int stage, int mt)
     }
 }
 
-/* ---------- mesa POOL AZUL (style 21): feltro azul com luz no centro, madeira vermelha lustrosa, placas metalicas nos cantos ---------- */
+/* ---------- mesa POOL AZUL (style 21): feltro azul com luz no centro, madeira vermelha ACOLCHOADA (losangos), tabelas azuis com brilho, placas metalicas nos cantos, cacapas pretas com aro prateado ---------- */
 static void tableDecoPool(int stage)
 {
     int k;
     if (stage == 0) {
+        float x, y;
+        tcCush = COL(26, 112, 178); tcCushHi = COL(140, 214, 252); tcCushLo = COL(14, 68, 120);      /* tabelas azuis (mais claras que o padrao) */
         outlineRect(TX0 - 27.5f, TY0 - 27.5f, TX1 + 27.5f, TY1 + 27.5f, CA(255, 110, 110, 0x46));     /* brilho do verniz na borda */
         outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(255, 255, 255, 0x14));
         outlineRect(TX0 - 18.0f, TY0 - 18.0f, TX1 + 18.0f, TY1 + 18.0f, CA(40, 4, 10, 0x50));          /* sombra funda perto da borracha */
+        /* acolchoado da madeira: losangos cruzados nas 4 faixas da moldura (como na mesa do 8 Ball Pool) */
+        for (x = TX0 - 25.0f; x < TX1 + 25.0f; x += 9.0f) {
+            float x2 = x + 13.0f;
+            line(x, TY0 - 25.0f, x2, TY0 - 12.0f, CA(60, 4, 14, 0x4c));
+            line(x2, TY0 - 25.0f, x, TY0 - 12.0f, CA(60, 4, 14, 0x4c));
+            line(x, TY1 + 12.0f, x2, TY1 + 25.0f, CA(60, 4, 14, 0x4c));
+            line(x2, TY1 + 12.0f, x, TY1 + 25.0f, CA(60, 4, 14, 0x4c));
+            disc(x + 6.5f, TY0 - 18.5f, 0.9f, CA(255, 120, 130, 0x40));                                /* botoes do estofado */
+            disc(x + 6.5f, TY1 + 18.5f, 0.9f, CA(255, 120, 130, 0x40));
+        }
+        for (y = TY0 - 25.0f; y < TY1 + 25.0f; y += 9.0f) {
+            float y2 = y + 13.0f;
+            line(TX0 - 25.0f, y, TX0 - 12.0f, y2, CA(60, 4, 14, 0x4c));
+            line(TX0 - 12.0f, y, TX0 - 25.0f, y2, CA(60, 4, 14, 0x4c));
+            line(TX1 + 12.0f, y, TX1 + 25.0f, y2, CA(60, 4, 14, 0x4c));
+            line(TX1 + 25.0f, y, TX1 + 12.0f, y2, CA(60, 4, 14, 0x4c));
+            disc(TX0 - 18.5f, y + 6.5f, 0.9f, CA(255, 120, 130, 0x40));
+            disc(TX1 + 18.5f, y + 6.5f, 0.9f, CA(255, 120, 130, 0x40));
+        }
         for (k = 0; k < 4; k++) {                                                                      /* placas metalicas escuras nos cantos */
             float cx = (k & 1) ? TX1 + 15.0f : TX0 - 15.0f, cy = (k & 2) ? TY1 + 15.0f : TY0 - 15.0f;
             discN(cx, cy, 15.0f, COL(34, 36, 42), 16);
@@ -3184,6 +3205,18 @@ static void tableDecoPool(int stage)
         for (k = 0; k < 4; k++)                                                                        /* borda do feltro mais escura */
             outlineRect(TX0 + k, TY0 + k, TX1 - k, TY1 - k, CA(6, 30, 62, 0x30 - k * 8));
     } else {
+        float ce = PRC[0] - POC + 2.0f, cm = PRC[1] + 1.0f;                                            /* mesmas aberturas das tabelas */
+        u64 hi = CA(170, 230, 255, 0x5a);
+        line(TX0 + ce, TY0 + 0.5f, TCX - cm, TY0 + 0.5f, hi);                                          /* brilho azul-claro no gume das tabelas */
+        line(TCX + cm, TY0 + 0.5f, TX1 - ce, TY0 + 0.5f, hi);
+        line(TX0 + ce, TY1 - 0.5f, TCX - cm, TY1 - 0.5f, hi);
+        line(TCX + cm, TY1 - 0.5f, TX1 - ce, TY1 - 0.5f, hi);
+        line(TX0 + 0.5f, TY0 + ce, TX0 + 0.5f, TY1 - ce, hi);
+        line(TX1 - 0.5f, TY0 + ce, TX1 - 0.5f, TY1 - ce, hi);
+        for (k = 0; k < 6; k++) {                                                                      /* aro prateado nas cacapas */
+            ring(PX[k], PY[k], PR[k] + 2.4f, COL(168, 174, 188));
+            ring(PX[k], PY[k], PR[k] + 3.4f, COL(70, 74, 84));
+        }
         line(HEADX, TY0, HEADX, TY1, CA(200, 240, 255, 0x46));                                         /* linha da cabeceira bem visivel */
     }
 }
