@@ -38,7 +38,12 @@
 #define TCY   ((TY0 + TY1) * 0.5f)
 #define HEADX (TX0 + (TX1 - TX0) * 0.25f)
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
-#define MAXV  640.0f
+#define MAXV  860.0f                      /* velocidade maxima da branca (era 640): bolas bem mais rapidas */
+#define FRIC_K 0.50f                      /* atrito proporcional a velocidade (era 0.6): bolas andam mais */
+#define FRIC_C 20.0f                      /* atrito constante (era 24); FRIC_C/FRIC_K = 40 como antes */
+#define OLD_MAXV 640.0f                   /* fisica antiga: so o bot usa, para manter a mesma distancia de tacada */
+#define OLD_FRIC_K 0.6f
+#define OLD_FRIC_C 24.0f
 
 enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP };
 enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
@@ -281,7 +286,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "3.0.0"
+#define GAME_VERSION "3.1.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1377,7 +1382,7 @@ static int stepPhysics(float dt)
         if (b[i].z > 0.0f) { moving = 1; continue; }       /* no ar nao ha atrito */
         sp = sqrtf(b[i].vx*b[i].vx + b[i].vy*b[i].vy);
         if (sp < 9.0f) { b[i].vx = b[i].vy = 0; continue; }
-        s2 = sp * (1.0f - 0.6f * dt * fricMul) - 24.0f * dt * fricMul;
+        s2 = sp * (1.0f - FRIC_K * dt * fricMul) - FRIC_C * dt * fricMul;
         if (sp < 40.0f) s2 -= 30.0f * dt * fricMul;     /* freio suave no final */
         if (s2 < 0) s2 = 0;
         b[i].vx *= s2 / sp; b[i].vy *= s2 / sp;
@@ -1897,6 +1902,15 @@ static void botKit(int found, int tgt, float dist, float cc)
     }
 }
 
+static float speedForDist(float d);              /* definida mais abaixo (usa o atrito da mesa) */
+static float botPowFix(float p)                   /* a heuristica do bot foi feita para a fisica antiga: converte para a mesma distancia na nova */
+{
+    const float h = OLD_FRIC_C / OLD_FRIC_K, vo = p * OLD_MAXV;
+    float dOld = (vo - h * logf(1.0f + vo / h)) / OLD_FRIC_K;
+    float np = speedForDist(dOld) / MAXV;
+    return np > 1.0f ? 1.0f : np;
+}
+
 static void botPlan(void)
 {
     int t, p, found = 0, gr = grp[cur], bt = 0;
@@ -1942,8 +1956,9 @@ static void botPlan(void)
         if (bd > 1e8f) botAng = atan2f(TCY - cy, FOOTX - cx);
         botPow = 0.65f;
     }
+    botPow = botPowFix(botPow);
     botPow += (((int)(rnd() % 2001)) - 1000) / 1000.0f * BOT_POWV[botLevel];
-    if (botPow < 0.25f) botPow = 0.25f;
+    if (botPow < botPowFix(0.25f)) botPow = botPowFix(0.25f);
     if (breakShot) botPow = 1.0f;
     if (botPow > 1.0f) botPow = 1.0f;
     botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f) + (sirenT[cur] ? 0.05f : 0.0f));   /* maldicao e sirene: o bot erra mais */
@@ -7201,9 +7216,10 @@ static void splashScreen(void)
 /* HACK: planejador proprio (sem erro aleatorio do bot). Para cada bola legal e cada cacapa calcula a bola fantasma,
    confere caminho livre, angulo de corte e de entrada na cacapa, risco de a branca cair (suicidio) e a FORCA exata
    usando o atrito real da mesa. Guarda as 5 melhores tacadas; O de novo troca de opcao. */
-static float stopDist(float v)                   /* distancia que a bola percorre ate parar (v' = -0.6v - 24) */
+static float stopDist(float v)                   /* distancia que a bola percorre ate parar (v' = -FRIC_K v - FRIC_C) */
 {
-    return v <= 0.0f ? 0.0f : (v - 40.0f * logf(1.0f + v / 40.0f)) / 0.6f;
+    const float h = FRIC_C / FRIC_K;
+    return v <= 0.0f ? 0.0f : (v - h * logf(1.0f + v / h)) / FRIC_K;
 }
 
 static float speedForDist(float d)               /* inverso: velocidade inicial para percorrer d */

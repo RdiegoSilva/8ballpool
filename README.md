@@ -3,7 +3,12 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 3.0.0
+- Versão: 3.1.0
+
+## Jogo mais rápido (3.1.0)
+- A tacada sai mais forte (velocidade máxima da branca de 640 para 860) e o atrito da mesa é menor, então as bolas correm mais e **andam mais longe** antes de parar
+- Os números ficam em `MAXV`, `FRIC_K` e `FRIC_C` no começo do `main.c`: se quiser ainda mais rápido, aumente `MAXV` ou diminua `FRIC_K`/`FRIC_C` (mantenha `FRIC_C / FRIC_K` = 40)
+- O BOT e o planejador do HACK foram ajustados para a nova física (a força que eles escolhem continua certa)
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
