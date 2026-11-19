@@ -271,7 +271,7 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
-- **ENTERRO**: a bola alvo (a primeira que a branca toca) tem a trajetória desviada **50%** em direção à caçapa mais próxima no momento da batida (`ENTERRO_PUXAO`); não é mais garantido, só ajuda. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **ENTERRO**: a bola alvo (a primeira que a branca toca) é **desviada 90%** (`ENTERRO_PUXAO`) em direção à caçapa mais próxima na batida, ganha +15% de velocidade e **continua sendo guiada** até a caçapa (curva rápida, sem deixar a bola morrer antes de chegar). Obstáculos ainda podem bloquear. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
 - **COVA**: abre uma caçapa extra (agora bem menor, raio 12 em vez de 20) no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
 - **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque). A bola que volta é um **fantasma**: nesta jogada a branca e as outras bolas **passam por ela, sem física**; na rodada seguinte ela volta ao normal.
 
@@ -285,8 +285,8 @@ Combo **POLICIAL** (personagem + taco **Cassetete** + mesa **Delegacia**: fita d
 ## Vampiro: barra de sangue (SEDE DE SANGUE)
 Quando o personagem é o Vampiro (com HABILIDADES ligadas), aparece uma **barra de sangue com 3 gomos** embaixo do painel dele:
 - Cada tacada que **encaçapa uma bola sua** enche 1 gomo
-- Se a tacada **não encaçapar** (ou der falta), a barra **seca** e volta a zero
-- Com **3 bolas seguidas** a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **50% mais força** e a bola alvo **curva bem mais forte para a caçapa** (PUXÃO reforçado, mira até ~75°)
+- Se a tacada **não encaçapar** (ou der falta), a barra **não se perde**: os gomos ficam guardados
+- Com **3 bolas** (não precisam ser seguidas) a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **50% mais força** e a bola alvo **curva bem mais forte para a caçapa** (PUXÃO reforçado, mira até ~75°)
 - Depois da tacada de sangue a barra zera. Vale também para o Vampiro controlado pelo BOT
 - **MORCEGOS:** na jogada seguinte do adversário, **6 morcegos** aparecem na mesa e voam por ela. As bolas **batem neles com física** (quicam e desviam) e a branca não pode ser posicionada em cima de um. Eles somem assim que o adversário termina a tacada
 

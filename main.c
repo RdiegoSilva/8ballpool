@@ -79,7 +79,7 @@ static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], gri
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
 #define ENTERRO_ALCANCE 100000.0f                     /* distancia maxima ate a cacapa: sem limite (o ENTERRO puxa a bola de qualquer lugar) */
-#define ENTERRO_PUXAO 0.50f                           /* o ENTERRO desvia a bola alvo 50% em direcao a cacapa */
+#define ENTERRO_PUXAO 0.90f                           /* o ENTERRO desvia a bola alvo 90% em direcao a cacapa na batida e continua guiando ate cair */
 #define ENTERRO_RECARGA 3                             /* o ENTERRO recarrega em 3 tacadas */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
@@ -1069,7 +1069,7 @@ static void abilOnFirstHit(int j)
         else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
         if (ok) {
             float sp = sqrtf(b[j].vx * b[j].vx + b[j].vy * b[j].vy), pdx = PX[bpp] - b[j].x, pdy = PY[bpp] - b[j].y, pdl = sqrtf(pdx * pdx + pdy * pdy);
-            buryP = bpp; buryBall = j; buryT = 1500; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
+            buryP = bpp; buryBall = j; buryT = 1500; b[j].vx *= 1.15f; b[j].vy *= 1.15f; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
             if (sp > 1.0f && pdl > 1.0f) {                /* puxa so uma parte: mistura a direcao da bola com a direcao da cacapa */
                 float nx2 = b[j].vx / sp * (1.0f - ENTERRO_PUXAO) + pdx / pdl * ENTERRO_PUXAO, ny2 = b[j].vy / sp * (1.0f - ENTERRO_PUXAO) + pdy / pdl * ENTERRO_PUXAO;
                 float nl = sqrtf(nx2 * nx2 + ny2 * ny2);
@@ -1123,7 +1123,13 @@ static int stepPhysics(float dt)
     if (abilKind == AB_ENTERRO && buryT > 0 && buryBall > 0 && b[buryBall].in && b[buryBall].z <= 0.0f) {   /* coveiro: a bola enterrada vai reto para a cacapa */
         Ball *q = &b[buryBall];
         float ddx = PX[buryP] - q->x, ddy = PY[buryP] - q->y, dl = sqrtf(ddx * ddx + ddy * ddy), sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
-        (void)ddx; (void)ddy; (void)dl; (void)sp; (void)q;   /* NERF: sem puxao continuo - o desvio de 30% e aplicado so na batida */
+        if (dl > 1.0f && sp > 12.0f) {                    /* guia a bola para a cacapa: gira rapido e mantem velocidade para chegar la */
+            float ux = q->vx / sp, uy = q->vy / sp, da = normAng(atan2f(ddy, ddx) - atan2f(uy, ux)), mx = 7.0f * dt, c, sn, ns = sp;
+            if (da > mx) da = mx; else if (da < -mx) da = -mx;
+            c = cosf(da); sn = sinf(da);
+            if (ns < 70.0f && dl > 25.0f) ns = fminf(70.0f, ns + 60.0f * dt);   /* nao deixa morrer antes de cair */
+            q->vx = (ux * c - uy * sn) * ns; q->vy = (ux * sn + uy * c) * ns;
+        }
         buryT--;
     }
     if (abilKind == AB_RASTREIO && firstHit < 0 && b[0].in && b[0].z <= 0.0f) {   /* alien: a branca persegue a bola certa mais perto da mira */
@@ -1396,7 +1402,7 @@ static void endTurn(int foul, int ownPocket)
     if (vampOn(cur)) {                                   /* VAMPIRO: barra de sangue */
         if (bloodShot) blood[cur] = 0;                   /* gastou a sede de sangue */
         else if (ownPocket && !foul) { if (blood[cur] < BLOOD_MAX) blood[cur]++; }
-        else blood[cur] = 0;                             /* errou: a barra seca */
+        /* errou: a barra NAO se perde, mantem os gomos */
     }
     bloodShot = 0;
     botTimer = 0; botPlanned = 0; botCue = 0;
