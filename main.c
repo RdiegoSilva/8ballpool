@@ -149,7 +149,7 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define POM 5.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 15.5f, 12.5f, 15.5f, 15.5f, 12.5f, 15.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
+static const float PR[6] = { 11.0f, 9.5f, 11.0f, 11.0f, 9.5f, 11.0f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
 static const float PRC[6] = { 22.0f, 17.0f, 22.0f, 22.0f, 17.0f, 22.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
@@ -3679,7 +3679,7 @@ static void drawTable(void)
     /* cacapas estilo 8 Ball Pool: buraco preto grande com aro fino metalico */
     for (p = 0; p < 6; p++) {
         float r0 = PR[p] * tabPock();
-        discN(PX[p], PY[p], r0 + 3.5f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
+        discN(PX[p], PY[p], r0 + 2.0f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
         discN(PX[p], PY[p], r0 + 1.5f, COL(96,100,108), 24);              /* aro metalico fino */
         discN(PX[p], PY[p], r0 + 0.8f, COL(30,32,38), 24);
         discN(PX[p], PY[p], r0, COL(2,2,4), 24);                          /* buraco */
