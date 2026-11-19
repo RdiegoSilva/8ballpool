@@ -1563,7 +1563,7 @@ static float normAng(float a)
     return a;
 }
 
-/* inicio da jogada: a mira ja aponta para uma bola sua (a mais perto com caminho livre).
+/* inicio da jogada: a mira ja aponta para uma bola sua (a mais reta/no meio da mesa, com caminho livre).
    Se houver bola do adversario (ou qualquer bola) no caminho de todas, a mira fica como estava */
 static void autoAim(void)
 {
@@ -1574,7 +1574,9 @@ static void autoAim(void)
         float dx, dy, d;
         if (!b[t].in || t == lockBall || !ownBall(t)) continue;
         dx = b[t].x - b[0].x; dy = b[t].y - b[0].y; d = sqrtf(dx * dx + dy * dy);
-        if (d < 2 * R || d >= bd) continue;
+        if (d < 2 * R) continue;
+        d = fabsf(dy) / d + d * 0.00001f;                /* quanto mais reta (no meio), melhor; empate: a mais perto */
+        if (d >= bd) continue;
         if (!pathClear(b[0].x, b[0].y, b[t].x, b[t].y, t)) continue;
         bd = d; best = t;
     }
@@ -3754,15 +3756,28 @@ static void frameR(float x1, float y1, float x2, float y2, float t, u64 c)
     rect(x1, y1 + t, x1 + t, y2 - t, c); rect(x2 - t, y1 + t, x2, y2 - t, c);
 }
 
-/* caixa do HUD: sombra, borda, fundo escuro translucido, brilho no topo e base mais escura */
+/* retangulo com os cantos cortados (3 faixas sem sobreposicao, para o alfa nao somar) */
+static void cham(float x1, float y1, float x2, float y2, float c, u64 col)
+{
+    rect(x1 + c, y1, x2 - c, y1 + c, col);
+    rect(x1, y1 + c, x2, y2 - c, col);
+    rect(x1 + c, y2 - c, x2 - c, y2, col);
+}
+
+/* caixa do HUD: sombra, borda, vidro escuro em degrade, brilho no topo e cantos chanfrados */
 static void hbox(float x1, float y1, float x2, float y2, u64 border, u64 fill)
 {
-    rect(x1 - 1.5f, y1 - 1.5f, x2 + 3.5f, y2 + 3.5f, GS_SETREG_RGBAQ(0, 0, 0, 0x16, 0x00));
-    rect(x1 - 1.5f, y1 - 1.5f, x2 + 1.5f, y2 + 1.5f, border);
-    rect(x1, y1, x2, y2, fill);
-    rect(x1, y1, x2, y1 + (y2 - y1) * 0.42f, CA(255, 255, 255, 0x07));
-    rect(x1, y1 + (y2 - y1) * 0.62f, x2, y2, CA(0, 0, 0, 0x0e));
-    rect(x1, y1, x2, y1 + 1.0f, CA(255, 255, 255, 0x22));
+    float c = 4.0f, h = y2 - y1;
+    int k;
+    cham(x1 - 1.0f, y1 - 1.0f, x2 + 3.0f, y2 + 3.0f, c + 1.0f, GS_SETREG_RGBAQ(0, 0, 0, 0x14, 0x00));
+    cham(x1 - 1.5f, y1 - 1.5f, x2 + 1.5f, y2 + 1.5f, c + 1.5f, border);
+    cham(x1, y1, x2, y2, c, fill);
+    for (k = 0; k < 4; k++) {                            /* degrade: mais claro em cima, escuro embaixo */
+        float ya = y1 + c + (h - 2 * c) * k / 4.0f, yb = y1 + c + (h - 2 * c) * (k + 1) / 4.0f;
+        rect(x1, ya, x2, yb, k < 2 ? CA(255, 255, 255, 0x08 - k * 3) : CA(0, 0, 0, 0x06 + (k - 2) * 8));
+    }
+    rect(x1 + c, y1, x2 - c, y1 + 1.0f, CA(255, 255, 255, 0x2c));
+    rect(x1 + c, y2 - 1.0f, x2 - c, y2, CA(0, 0, 0, 0x30));
 }
 
 /* tecla + descricao; devolve a largura usada */
@@ -3875,8 +3890,8 @@ static void drawPlayerPanel(int pl)
     if (sp > 30.0f) sp = 30.0f;
     bx0 = (c0 + c1) * 0.5f - (slots - 1) * sp * 0.5f;
 
-    hbox(x1, y1, x2, y2, act ? CA(255, 215, 60, 0x7c) : CA(70, 78, 96, 0x60),
-         act ? CA(46, 40, 12, 0x78) : CA(8, 12, 22, 0x68));
+    hbox(x1, y1, x2, y2, act ? CA(255, 205, 70, 0x70) : CA(70, 78, 96, 0x40),
+         act ? CA(40, 34, 14, 0x70) : CA(8, 12, 22, 0x50));
     if (pl == 0) rect(x1, y1, x1 + 5, y2, edge); else rect(x2 - 5, y1, x2, y2, edge);
     if (act) rect(pl == 0 ? x1 + 5 : x1, y1 + 1, pl == 0 ? x2 : x2 - 5, y1 + 2, CA(255, 230, 120, 0x40));   /* brilho de quem joga */
 
@@ -3891,17 +3906,18 @@ static void drawPlayerPanel(int pl)
     text(tx, y1 + 24, 0.3f, act ? COL(255,255,255) : COL(135,143,158), gn);
 
     /* retrato: moldura (dourada na vez do jogador), fundo em degrade com luz e o personagem maior */
-    rect(ax1 - 2.5f, y1 - 2.5f, ax2 + 2.5f, y2 + 2.5f, COL(8,10,16));
-    rect(ax1 - 2.0f, y1 - 2.0f, ax2 + 2.0f, y2 + 2.0f, edge);
-    rect(ax1 - 0.5f, y1 - 0.5f, ax2 + 0.5f, y2 + 0.5f, COL(8,10,16));
-    rect(ax1, y1, ax2, amy, pl == 0 ? COL(52,96,150) : COL(150,62,62));
-    rect(ax1, amy, ax2, y2, pl == 0 ? COL(34,66,112) : COL(110,44,48));
+    cham(ax1 - 2.5f, y1 - 2.5f, ax2 + 2.5f, y2 + 2.5f, 5.0f, COL(8,10,16));
+    cham(ax1 - 2.0f, y1 - 2.0f, ax2 + 2.0f, y2 + 2.0f, 4.5f, act ? edge : (pl == 0 ? COL(50,78,120) : COL(120,58,62)));
+    cham(ax1 - 0.5f, y1 - 0.5f, ax2 + 0.5f, y2 + 0.5f, 3.5f, COL(8,10,16));
+    cham(ax1, y1, ax2, amy + 3.0f, 3.0f, pl == 0 ? COL(52,96,150) : COL(150,62,62));
+    rect(ax1, amy + 3.0f, ax2, y2 - 3.0f, pl == 0 ? COL(34,66,112) : COL(110,44,48));
+    rect(ax1 + 3.0f, y2 - 3.0f, ax2 - 3.0f, y2, pl == 0 ? COL(34,66,112) : COL(110,44,48));
     discN(acx, y1 + 30.0f, 24.0f, CA(255, 255, 255, 0x0a), 16);
     discN(acx, y1 + 30.0f, 15.0f, CA(255, 255, 255, 0x0a), 14);
     drawChar(charSel[pl], acx, y1 + 36.0f, 0.52f, 0, menuT, 0);          /* avatar do personagem */
-    rect(ax1, y2 - 6.0f, ax2, y2, CA(0, 0, 0, 0x1a));                    /* sombra na base da moldura */
-    rect(ax1, y1, ax2, y1 + 1.0f, CA(255, 255, 255, 0x30));
-    rect(ax1, y2 - 2.0f, ax2, y2, side);                                 /* filete com a cor do jogador */
+    rect(ax1 + 3.0f, y2 - 6.0f, ax2 - 3.0f, y2, CA(0, 0, 0, 0x1a));                    /* sombra na base da moldura */
+    rect(ax1 + 3.0f, y1, ax2 - 3.0f, y1 + 1.0f, CA(255, 255, 255, 0x30));
+    rect(ax1 + 3.0f, y2 - 2.0f, ax2 - 3.0f, y2, side);                                 /* filete com a cor do jogador */
     if (curse[pl]) frameR(ax1 - 4.0f, y1 - 4.0f, ax2 + 4.0f, y2 + 4.0f, 2.0f, ((menuT / 10) & 1) ? CA(215, 150, 255, 0x90) : CA(150, 70, 230, 0x90));   /* MALDICAO: aura roxa */
 
     if (act && timeSel && (mode == 1 || tourney) && !isBot() && turnT >= 0 && state != S_ROLL && state != S_STRIKE) {
@@ -3927,8 +3943,8 @@ static void drawPlayerPanel(int pl)
         int id = grp[pl] == 0 ? k + 1 : k + 9;
         float bx = bx0 + k * sp, by = y1 + 45.0f;
         if ((gmode == GM_MINI || gmode == GM_DUEL) && (id < 8 ? id : id - 8) > (gmode == GM_DUEL ? 2 : 3)) continue;   /* mini/duelo: menos bolas por grupo */
-        discN(bx, by, 8.4f, COL(14,18,28), 14);                          /* casinha da bola */
-        ring(bx, by, 8.4f, COL(58,66,86));
+        discN(bx, by, 8.6f, COL(10,13,22), 14);                          /* casinha da bola */
+        ring(bx, by, 8.6f, COL(44,52,70));
         if (b[id].in) drawBallAt(id, bx, by, 6.8f);
         else discN(bx, by, 2.2f, CA(90, 100, 124, 0x50), 8);             /* bola ja encacapada: marca */
     }
@@ -5197,6 +5213,8 @@ static void drawOverScreen(void)
     float up = (1.0f - ent) * 170.0f, jump = fabsf(sinf(tt * 0.115f)) * 20.0f * ent;
     float ts;
     char buf[64];
+    int gv = (charSel[w] == 16);                         /* coveiro venceu: animacao especial */
+    float bp = gv ? fminf(fmaxf((tt - 70.0f) / 330.0f, 0.0f), 1.0f) : 0.0f;
     int *ws = mode == 0 ? winsBot : winsVs;
     const char *hint = tourney ? "X: CONTINUAR" : "X: REVANCHE   START: MENU";
 
@@ -5257,7 +5275,7 @@ static void drawOverScreen(void)
     ell(lx, base + 108 * sc, 36 * sc, 6 * sc, CA(0, 0, 0, 0x38));
 
     /* quem perdeu: cabisbaixo, chorando, com nuvem de chuva */
-    drawChar(charSel[l], lx, base + 8.0f + up * 0.6f + sinf(tt * 0.35f) * 1.5f, sc, 2, overT, 1);
+    drawChar(charSel[l], lx, base + 8.0f + up * 0.6f + sinf(tt * 0.35f) * 1.5f + (gv ? bp * 70.0f : 0.0f), sc, 2, overT, 1);
     {
         float cyl = 112.0f + 3.0f * sinf(tt * 0.05f);
         for (k = 0; k < 5; k++) {
@@ -5273,6 +5291,46 @@ static void drawOverScreen(void)
     }
 
     /* quem venceu: pula, braços pro alto */
+    if (gv) {                                            /* COVEIRO: joga areia e enterra o adversario */
+        float g = base + 108.0f * sc, dir = lx > wx ? 1.0f : -1.0f, hh = bp * 190.0f * sc, rm = hh > 0.0f ? 1.0f : 0.0f;
+        float sx = wx + dir * 34.0f * sc, sy = base - 6.0f * sc + sinf(tt * 0.5f) * 8.0f;
+        int i, n = 36;
+        drawChar(charSel[w], wx, base - jump * 0.25f + up + sinf(tt * 0.5f) * 3.0f, sc, 1, overT, 1);
+        /* monte de terra crescendo sobre o perdedor */
+        for (i = 0; i < 60 && rm > 0.0f; i++) {
+            float f = (float)i / 60.0f, y1 = g - hh * f, y0 = g - hh * (f + 1.0f / 60.0f);
+            float hw = (34.0f + 40.0f * (1.0f - f * f)) * sc * (0.35f + 0.65f * bp + 0.0f);
+            u64 cc = (i & 3) == 0 ? COL(120, 84, 48) : COL(150, 108, 62);
+            rect(lx - hw, y0, lx + hw, y1 + 1.0f, cc);
+            rect(lx - hw, y0, lx - hw + 4.0f, y1 + 1.0f, COL(104, 72, 40));
+        }
+        if (rm > 0.0f) { discN(lx, g - hh, (34.0f * sc) * (0.35f + 0.65f * bp), COL(150, 108, 62), 14); }
+        for (i = 0; i < 12; i++) rect(lx - 70 * sc + i * 12.0f * sc, g - 2.0f - (i % 3) * 2.0f, lx - 62 * sc + i * 12.0f * sc, g + 2.0f, COL(130, 92, 54));
+        /* areia voando em arcos */
+        if (tt > 40.0f && bp < 1.0f) {
+            for (i = 0; i < n; i++) {
+                float p = fmodf(tt * 0.035f + (float)i / n, 1.0f);
+                float ex = lx + sinf(i * 2.3f) * 26.0f, ey = g - 40.0f - fmodf(i * 17.0f, 80.0f);
+                float px = sx + (ex - sx) * p, py = sy + (ey - sy) * p - sinf(p * 3.14159f) * 95.0f;
+                discN(px, py, 2.0f + (i % 3), (i & 1) ? COL(224, 188, 108) : COL(196, 158, 88), 6);
+            }
+            for (i = 0; i < 8; i++) {                    /* poeira no impacto */
+                float p = fmodf(tt * 0.05f + i * 0.125f, 1.0f);
+                discN(lx + sinf(i * 1.7f) * 40.0f, g - 20.0f - p * 40.0f, 3.0f + p * 7.0f, CA(200, 170, 110, (int)(0x50 * (1.0f - p))), 8);
+            }
+        }
+        /* cruz no tumulo quando termina */
+        if (bp >= 1.0f) {
+            float cy2 = g - hh - 4.0f, bob = sinf(tt * 0.1f) * 1.5f;
+            rect(lx - 3.0f * sc, cy2 - 46.0f * sc, lx + 3.0f * sc, cy2 + 4.0f, COL(110, 76, 40));
+            rect(lx - 16.0f * sc, cy2 - 34.0f * sc, lx + 16.0f * sc, cy2 - 28.0f * sc, COL(110, 76, 40));
+            for (i = 0; i < 3; i++) {                    /* fiapos verdes do alem */
+                float ph = fmodf(tt * 0.02f + i * 0.33f, 1.0f);
+                discN(lx + sinf(tt * 0.06f + i * 2.0f) * 14.0f, cy2 - 50.0f * sc - ph * 50.0f + bob, 4.0f * (1.0f - ph) + 1.0f, CA(150, 255, 170, (int)(0x70 * (1.0f - ph))), 8);
+            }
+            textC(150, 0.5f, COL(190, 255, 190), "DESCANSE EM PAZ");
+        }
+    } else
     drawChar(charSel[w], wx, base - jump + up, sc, 1, overT, 1);
 
     /* trofeu no centro com brilhos */

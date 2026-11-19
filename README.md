@@ -62,6 +62,7 @@ Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAG
 Quando a partida termina:
 - **Quem venceu**: o personagem pula de alegria com os braços pro alto, com raios de luz girando, fogos de artifício, chuva de confete e um troféu brilhando no centro
 - **Quem perdeu**: o personagem fica cabisbaixo, chorando, debaixo de uma nuvem de chuva
+- **Coveiro (especial)**: se o Coveiro vence, ele joga areia com a pá no adversário, que vai sendo enterrado até sumir debaixo de um montinho de terra com uma cruz e o aviso "DESCANSE EM PAZ"
 - Contra o BOT: se você ganha aparece **VITORIA!**; se o bot ganha aparece **DERROTA**. No versus aparece "NOME VENCEU!"
 - X = revanche (mantém o placar), START = voltar ao menu
 
