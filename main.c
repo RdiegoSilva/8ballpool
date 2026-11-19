@@ -33,7 +33,8 @@
 #define MAXV  640.0f
 
 enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND };
-enum { GM_8BALL, GM_BR, NGM };            /* modos de sinuca */
+enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
+static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA", "BOLA 8 MINI", "MORTE SUBITA", "CORRIDA DE 3", "BOLA 8 DUELO" };
 
 typedef struct { float x, y, vx, vy; int in; float z, vz; } Ball;   /* z/vz: altura no pulo */
 
@@ -78,12 +79,16 @@ static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], gri
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
 #define ENTERRO_ALCANCE 100000.0f                     /* distancia maxima ate a cacapa: sem limite (o ENTERRO puxa a bola de qualquer lugar) */
+#define ENTERRO_PUXAO 0.30f                           /* NERF: o ENTERRO desvia a bola alvo so 30% em direcao a cacapa (nao e mais garantido) */
 #define ENTERRO_RECARGA 3                             /* o ENTERRO recarrega em 3 tacadas */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
 static const int GV_KIND[3] = { AB_ENTERRO, AB_COVA, AB_RESSUS };
 static const char *GV_NAME[3] = { "ENTERRO", "COVA", "RESSUSCITAR" };
 /* POLICIAL (lendario): 2 poderes que o jogador escolhe (ALGEMAS, SIRENE). lockBall = bola presa (nao se mexe de jeito nenhum) */
+static int raceCnt[2];                                  /* CORRIDA DE 3: bolas encacapadas por jogador */
+static char raceBuf[2][16];
+static const char *raceTxt(int pl) { sprintf(raceBuf[pl], "%d DE 3", raceCnt[pl]); return raceBuf[pl]; }
 static int copSel, copOpen, copTgt, lockBall, lockOwner, sirenT[2], ghostBall;   /* ghostBall: bola ressuscitada (sem fisica ate o fim da jogada) */
 static float lockX, lockY;
 static const int CP_KIND[2] = { AB_PRENDER, AB_SIRENE };
@@ -119,6 +124,7 @@ static int   fineHold, dpadHold;                                 /* tempo segura
 #define JUMP_CLEAR 11.0f                           /* acima desta altura a branca passa por cima das outras bolas */
 static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (segue), - puxa (volta) */
 static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
+static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
 #define POC 9.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
@@ -258,7 +264,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "2.6.0"
+#define GAME_VERSION "2.8.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -733,19 +739,36 @@ static void rackBR(void)
     }
 }
 
+/* BOLA 8 MINI: 3 lisas, 3 listradas e a 8 (no meio) num triangulo pequeno */
+static void rackMini(void)
+{
+    static const int ids[7] = { 1, 9, 2, 10, 8, 3, 11 };
+    static const int pr[7] = { 0, 1, 1, 2, 2, 2, 3 }, pc[7] = { 0, 0, 1, 0, 1, 2, 1 };
+    int i, n = (gmode == GM_DUEL) ? 5 : 7;                  /* duelo: 2 lisas, 2 listradas e a 8 */
+    rack();
+    for (i = 1; i < 16; i++) b[i].in = 0;
+    for (i = 0; i < n; i++) {
+        int id = ids[i];
+        b[id].in = 1;
+        b[id].x = FOOTX + pr[i] * (R * 1.76f);
+        b[id].y = TCY + (pc[i] - pr[i] * 0.5f) * (2 * R + 0.4f);
+    }
+}
+
 static void newGame(int m)
 {
     char buf[40];
     mode = m;
     if (gmode == GM_BR) { rackBR(); grp[0] = 0; grp[1] = 1; }
-    else                { rack();   grp[0] = grp[1] = -1; }
+    else                { if (gmode == GM_MINI || gmode == GM_DUEL) rackMini(); else rack();   grp[0] = grp[1] = -1; }
     cur = 0; ang = 0; pwr = 0;
-    charging = 0; breakShot = (gmode == GM_8BALL); botTimer = 0; botPlanned = 0; state = S_AIM;
+    charging = 0; breakShot = (gmode != GM_BR); botTimer = 0; botPlanned = 0; state = S_AIM;
     spinSel = spinCur = 0; barDir = 1.0f;
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
     graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
+    raceCnt[0] = raceCnt[1] = 0;
     copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
@@ -1024,7 +1047,13 @@ static void abilOnFirstHit(int j)
         else if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
         else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
         if (ok) {
+            float sp = sqrtf(b[j].vx * b[j].vx + b[j].vy * b[j].vy), pdx = PX[bpp] - b[j].x, pdy = PY[bpp] - b[j].y, pdl = sqrtf(pdx * pdx + pdy * pdy);
             buryP = bpp; buryBall = j; buryT = 1500; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
+            if (sp > 1.0f && pdl > 1.0f) {                /* puxa so uma parte: mistura a direcao da bola com a direcao da cacapa */
+                float nx2 = b[j].vx / sp * (1.0f - ENTERRO_PUXAO) + pdx / pdl * ENTERRO_PUXAO, ny2 = b[j].vy / sp * (1.0f - ENTERRO_PUXAO) + pdy / pdl * ENTERRO_PUXAO;
+                float nl = sqrtf(nx2 * nx2 + ny2 * ny2);
+                if (nl > 0.01f) { b[j].vx = nx2 / nl * sp; b[j].vy = ny2 / nl * sp; }
+            }
         } else abilCD[cur] = 0;                       /* nao funcionou: devolve a recarga */
     }
     else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* marreta bionica */
@@ -1073,7 +1102,7 @@ static int stepPhysics(float dt)
     if (abilKind == AB_ENTERRO && buryT > 0 && buryBall > 0 && b[buryBall].in && b[buryBall].z <= 0.0f) {   /* coveiro: a bola enterrada vai reto para a cacapa */
         Ball *q = &b[buryBall];
         float ddx = PX[buryP] - q->x, ddy = PY[buryP] - q->y, dl = sqrtf(ddx * ddx + ddy * ddy), sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
-        if (dl > 1.0f) { if (sp < 190.0f) sp = 190.0f; q->vx = ddx / dl * sp; q->vy = ddy / dl * sp; }
+        (void)ddx; (void)ddy; (void)dl; (void)sp; (void)q;   /* NERF: sem puxao continuo - o desvio de 30% e aplicado so na batida */
         buryT--;
     }
     if (abilKind == AB_RASTREIO && firstHit < 0 && b[0].in && b[0].z <= 0.0f) {   /* alien: a branca persegue a bola certa mais perto da mira */
@@ -1490,7 +1519,16 @@ static void resolve(void)
     }
     if (!foul && gAtStart < 0 && firstHit == 8) foul = 1;
 
-    if (!foul && grp[cur] < 0) {
+    if (gmode == GM_SUDDEN && !foul) {                /* MORTE SUBITA: a primeira bola encacapada sem falta vence */
+        for (i = 1; i < 16; i++)
+            if (i != 8 && pocketed[i]) { strcpy(overNote, "MORTE SUBITA"); endGame(cur); return; }
+    }
+    if (gmode == GM_RACE && !foul) {                  /* CORRIDA DE 3: o primeiro a encacapar 3 bolas (sem falta) vence */
+        for (i = 1; i < 16; i++)
+            if (i != 8 && pocketed[i]) { raceCnt[cur]++; ownPocket = 1; }
+        if (raceCnt[cur] >= 3) { strcpy(overNote, "CORRIDA DE 3"); endGame(cur); return; }
+    }
+    if (!foul && grp[cur] < 0 && gmode != GM_RACE) {
         for (i = 1; i < 16; i++)
             if (pocketed[i]) { grp[cur] = ballGroup(i); grp[1-cur] = 1 - grp[cur]; break; }
     }
@@ -3812,7 +3850,7 @@ static void drawPlayerPanel(int pl)
     int act = (pl == cur), k, slots = gmode == GM_BR ? 4 : 8;
     const char *nm = pname(pl);
     const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
-                     (grp[pl] < 0 ? "MESA ABERTA" : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
+                     (grp[pl] < 0 ? (gmode == GM_RACE ? raceTxt(pl) : "MESA ABERTA") : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
     u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);                 /* cor do jogador: azul (1) e vermelho (2) */
     u64 edge = act ? COL(255,215,60) : (pl == 0 ? COL(62,96,150) : COL(150,70,74));
     float sp = (c1 - c0 - 18.0f) / (float)(slots - 1), bx0, tx = c0;
@@ -3870,12 +3908,13 @@ static void drawPlayerPanel(int pl)
     for (k = 0; k < slots - (gmode == GM_BR ? 0 : 1); k++) {
         int id = grp[pl] == 0 ? k + 1 : k + 9;
         float bx = bx0 + k * sp, by = y1 + 45.0f;
+        if ((gmode == GM_MINI || gmode == GM_DUEL) && (id < 8 ? id : id - 8) > (gmode == GM_DUEL ? 2 : 3)) continue;   /* mini/duelo: menos bolas por grupo */
         discN(bx, by, 8.4f, COL(14,18,28), 14);                          /* casinha da bola */
         ring(bx, by, 8.4f, COL(58,66,86));
         if (b[id].in) drawBallAt(id, bx, by, 6.8f);
         else discN(bx, by, 2.2f, CA(90, 100, 124, 0x50), 8);             /* bola ja encacapada: marca */
     }
-    if (gmode == GM_8BALL && countGroup(grp[pl]) == 0) {                 /* so falta a bola 8 */
+    if (gmode != GM_BR && countGroup(grp[pl]) == 0) {                 /* so falta a bola 8 */
         float bx = bx0 + 7 * sp, by = y1 + 45.0f;
         discN(bx, by, 8.4f, COL(14,18,28), 14);
         ring(bx, by, 8.4f, act ? COL(255,215,60) : COL(58,66,86));
@@ -4041,7 +4080,7 @@ static const char *CHAR_NAME[NCHARS] = { "PINGUIM", "ROBO", "PIRATA", "NINJA", "
 static const int CHAR_CUE[NCHARS] = {  7, 27, 11, 10, 26, 12, 14, 28,  6, 29, 17, 16, 15, 18, 24, 25, 30, 31 };
 static const int CHAR_TAB[NCHARS] = {  8,  6,  2,  5,  9, 15, 18, 16,  7, 13, 21, 20, 19, 22, 23, 24, 25, 26 };
 static int cueChar(int c) { int i; for (i = 0; i < NCHARS; i++) if (CHAR_CUE[i] == c) return i; return -1; }
-static int effTable(void) { return (tableAuto && CHAR_TAB[charSel[0]] >= 0) ? CHAR_TAB[charSel[0]] : tableSel; }
+static int effTable(void) { if (tableAuto && CHAR_TAB[charSel[0]] >= 0) return CHAR_TAB[charSel[0]]; return tableRandom ? (menuT / 150) % NTABLES : tableSel; }
 
 static void ell(float cx, float cy, float rx, float ry, u64 c)
 {
@@ -4722,15 +4761,15 @@ static u64 rarCol(int r)
     }
 }
 /* ULTRA LENDARIO: Coveiro | LENDARIO: Grinch e Policial | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker e Poseidon |
-   SUPER RARO: Viking, Ninja, Chapolin e Pirata | RARO: Pinguim, Robo, Alien, Gato e Cowboy */
-static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 0, 1, 2, 3, 3, 4, 2, 5, 4 };
+   SUPER RARO: Viking, Ninja, Chapolin, Pirata e Gato | RARO: Pinguim, Robo, Alien e Cowboy */
+static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 1, 1, 2, 3, 3, 4, 2, 5, 4 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 #define NCAT_SEC 8
-static const int CATH[NCAT_SEC] = { 0, 8, 14, 19, 23, 26, 29, 31 };     /* 1a ficha de cada categoria */
+static const int CATH[NCAT_SEC] = { 0, 8, 14, 18, 23, 26, 29, 31 };     /* 1a ficha de cada categoria */
 static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO", "ULTRA LENDARIO" };
 static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27, 29,   11, 10, 6, 17,   16, 18, 25,   14, 15, 28,   24, 31, 30 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27,   11, 10, 6, 17, 29,   16, 18, 25,   14, 15, 28,   24, 31, 30 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
@@ -4841,7 +4880,7 @@ static void drawCueMenu(void)
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
         textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
         if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: PUXA A BOLA ALVO PARA A CACAPA DE QUALQUER DISTANCIA", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: DESVIA 30% A BOLA ALVO EM DIRECAO A CACAPA", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
         } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
@@ -5283,9 +5322,11 @@ static void cycleColor(int pl, int d)      /* cada jogador usa uma cor diferente
 
 static void cycleChar(int pl, int d)       /* cada jogador usa um personagem diferente */
 {
-    int o = charSel[1 - pl];
-    do { charSel[pl] = (charSel[pl] + d + NCHARS) % NCHARS; } while (charSel[pl] == o);
-    if (pl == 0 && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
+    int o = charSel[1 - pl], v = charRand[pl] ? NCHARS : charSel[pl];   /* NCHARS = ALEATORIO */
+    do { v = (v + d + NCHARS + 1) % (NCHARS + 1); } while (v < NCHARS && v == o && !charRand[1 - pl]);
+    charRand[pl] = (v == NCHARS);
+    if (!charRand[pl]) charSel[pl] = v;
+    if (pl == 0 && !charRand[0] && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
 }
 
 /* ---------- torneio mata-mata ---------- */
@@ -5357,9 +5398,22 @@ static void bracketInput(u32 pr)
     } else if (pr & PAD_SELECT) { tourney = 0; menuInit(); state = S_MENU; }
 }
 
+static void resolveRandoms(void)                /* ALEATORIO: sorteia personagens (diferentes entre si) e a mesa */
+{
+    int pl;
+    for (pl = 0; pl < 2; pl++) {
+        int o = charSel[1 - pl], c, tries = 0;
+        if (!charRand[pl]) continue;
+        do { c = (int)(rnd() % NCHARS); } while (c == o && ++tries < 60);
+        charSel[pl] = c;
+    }
+    if (tableRandom && !tableAuto) tableSel = (int)(rnd() % NTABLES);
+}
+
 static void startMatch(void)
 {
     rs += 7919 + menuT;
+    resolveRandoms();
     wbSel[1] = wbSel[0];                         /* a cor da bola branca vale para a partida toda */
     setSkins(gmode == GM_BR);
     abilOn = (oppSel == 0) ? 1 : !abilSel;
@@ -5413,7 +5467,7 @@ static void setupInput(u32 pr)
     case SR_LVL:   botLevel = (botLevel + d + NLEVELS) % NLEVELS; break;
     case SR_TIME:  timeSel = (timeSel + d + NTIMES) % NTIMES; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
-    case SR_TABLE: tableSel = (tableSel + d + NTABLES) % NTABLES; tableAuto = 0; break;
+    case SR_TABLE: { int v = tableRandom ? NTABLES : tableSel; v = (v + d + NTABLES + 1) % (NTABLES + 1); tableRandom = (v == NTABLES); if (!tableRandom) tableSel = v; tableAuto = 0; } break;   /* ultima opcao: ALEATORIA */
     case SR_ABIL:  if (tourney) tAbil = !tAbil; else abilSel = !abilSel; break;
     case SR_TAUTO: tableAuto = !tableAuto; break;
     case SR_BALLS: ballTheme = (ballTheme + d + NTHEMES) % NTHEMES; break;
@@ -5455,7 +5509,6 @@ static void drawSetupScreen(void)
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
                                     "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM" };
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
-    static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
     const float rh = 36.0f;
@@ -5512,15 +5565,15 @@ static void drawSetupScreen(void)
                        else strcpy(buf, "< SEM TEMPO >");
                        vc = timeSel ? COL(255,230,110) : COL(255,255,255); break;
         case SR_MODE:  sprintf(buf, "< %s >", GMN[gmode]); break;
-        case SR_TABLE: sprintf(buf, "< %s >", TABLES[effTable()].name); break;
+        case SR_TABLE: sprintf(buf, "< %s >", (tableRandom && !tableAuto) ? "ALEATORIA" : TABLES[effTable()].name); break;
         case SR_ABIL:  { int off = tourney ? !tAbil : abilSel; strcpy(buf, off ? "< DESLIGADAS >" : "< LIGADAS >"); vc = off ? COL(255,130,120) : COL(110,255,140); } break;
         case SR_TAUTO: if (tableAuto && CHAR_TAB[charSel[0]] >= 0) sprintf(buf, "< SIM: %s >", TABLES[CHAR_TAB[charSel[0]]].name);
                        else strcpy(buf, tableAuto ? "< SIM (SEM MESA) >" : "< NAO >");
                        vc = tableAuto ? COL(110,255,140) : COL(255,255,255); break;
         case SR_BALLS: sprintf(buf, "< %s >", THEME_NAME[ballTheme]); break;
         case SR_C0:    sprintf(buf, "< %s >", BRC_NAME[colSel[0]]); break;
-        case SR_CH0:   sprintf(buf, "< %s >", CHAR_NAME[charSel[0]]); break;
-        case SR_CH1:   sprintf(buf, "< %s >", CHAR_NAME[charSel[1]]); break;
+        case SR_CH0:   sprintf(buf, "< %s >", charRand[0] ? "ALEATORIO" : CHAR_NAME[charSel[0]]); break;
+        case SR_CH1:   sprintf(buf, "< %s >", charRand[1] ? "ALEATORIO" : CHAR_NAME[charSel[1]]); break;
         case SR_WB:    sprintf(buf, "< %s >", WB_NAME[wbSel[0]]); break;
         case SR_GD:    sprintf(buf, "< %s >", GD_NAME[gdSel[0]]); break;
         default:       sprintf(buf, "< %s >", BRC_NAME[colSel[1]]); break;
@@ -5552,7 +5605,11 @@ static void drawSetupScreen(void)
 
     if (v[setSel] == SR_MODE)
         hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA DAS SUAS. BRANCA NA CACAPA: PERDE"
-                              : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL";
+             : (gmode == GM_MINI ? "BOLA 8 MINI: SO 3 LISAS, 3 LISTRADAS E A 8 - PARTIDA RAPIDA"
+             : (gmode == GM_SUDDEN ? "MORTE SUBITA: QUEM ENCACAPAR A PRIMEIRA BOLA (SEM FALTA) GANHA. A 8 DERROTA"
+             : (gmode == GM_RACE ? "CORRIDA DE 3: O PRIMEIRO A ENCACAPAR 3 BOLAS (SEM FALTA) GANHA. A 8 DERROTA"
+             : (gmode == GM_DUEL ? "BOLA 8 DUELO: SO 2 LISAS, 2 LISTRADAS E A 8 - PARTIDA RELAMPAGO"
+                                 : "BOLA 8: LISAS X LISTRADAS - A BOLA 8 FICA PARA O FINAL"))));
     else if (v[setSel] == SR_TIME)
         hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
     else if (v[setSel] == SR_ABIL && tourney)
@@ -5608,15 +5665,16 @@ static void drawSetupScreen(void)
             hot = (setStep == 1 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
             float bob = hot ? -4.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
             const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
-            drawChar(charSel[i], px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
-            text(px - tw(0.34f, CHAR_NAME[charSel[i]]) * 0.5f, 402, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), CHAR_NAME[charSel[i]]);
+            int ci = charRand[i] ? (menuT / 90) % NCHARS : charSel[i];
+            drawChar(ci, px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
+            text(px - tw(0.34f, charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]) * 0.5f, 402, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]);
             text(px - tw(0.28f, nm) * 0.5f, 416, 0.28f, COL(130,140,155), nm);
-            text(px - tw(0.28f, RAR_NAME[CHAR_RAR[charSel[i]]]) * 0.5f, setStep == 1 ? 361 : 388, 0.28f, rarCol(CHAR_RAR[charSel[i]]), RAR_NAME[CHAR_RAR[charSel[i]]]);
+            text(px - tw(0.28f, RAR_NAME[CHAR_RAR[ci]]) * 0.5f, setStep == 1 ? 361 : 388, 0.28f, rarCol(CHAR_RAR[ci]), RAR_NAME[CHAR_RAR[ci]]);
             if (setStep == 1) {                                       /* kit do personagem: taco e mesa */
                 char kt[40];
-                sprintf(kt, "TACO: %s", CHAR_CUE[charSel[i]] >= 0 ? CUES[CHAR_CUE[charSel[i]]].name : "PADRAO");
+                sprintf(kt, "TACO: %s", CHAR_CUE[ci] >= 0 ? CUES[CHAR_CUE[ci]].name : "PADRAO");
                 text(px - tw(0.26f, kt) * 0.5f, 374, 0.26f, COL(255,190,110), kt);
-                sprintf(kt, "MESA: %s", CHAR_TAB[charSel[i]] >= 0 ? TABLES[CHAR_TAB[charSel[i]]].name : "LIVRE");
+                sprintf(kt, "MESA: %s", CHAR_TAB[ci] >= 0 ? TABLES[CHAR_TAB[ci]].name : "LIVRE");
                 text(px - tw(0.26f, kt) * 0.5f, 387, 0.26f, COL(150,220,255), kt);
             }
         }
@@ -5813,8 +5871,8 @@ static void drawBracketScreen(void)
         sprintf(buf, "%s X %s   MESA: %s", CHAR_NAME[tChar[0]], CHAR_NAME[tChar[tOpp]], TABLES[tTable].name);
         textC(402, 0.3f, COL(150,220,255), buf);                                                  /* personagens da partida */
         uiFoot(2, fk, fl);
-        if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", gmode == GM_BR ? "SINUCA BRASILEIRA" : "BOLA 8", tAbil ? "COM HABILIDADES" : "TACO CLASSICO", TIME_SEC[timeSel], LVL_NAME[botLevel]);
-        else         sprintf(rl, "REGRAS: %s | %s | SEM TEMPO | %s", gmode == GM_BR ? "SINUCA BRASILEIRA" : "BOLA 8", tAbil ? "COM HABILIDADES" : "TACO CLASSICO", LVL_NAME[botLevel]);
+        if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", GMN[gmode], tAbil ? "COM HABILIDADES" : "TACO CLASSICO", TIME_SEC[timeSel], LVL_NAME[botLevel]);
+        else         sprintf(rl, "REGRAS: %s | %s | SEM TEMPO | %s", GMN[gmode], tAbil ? "COM HABILIDADES" : "TACO CLASSICO", LVL_NAME[botLevel]);
         textC(413, 0.26f, COL(130,140,158), rl);
     } else {
         static const int fk[1] = { 0 };
@@ -5827,7 +5885,7 @@ static void drawMenuScreen(void)
 {
     static const char *ITEM[5] = { "MODO HISTORIA", "JOGAR", "TORNEIO", "PLAYER DE MUSICAS", "OPCOES" };
     static const char *DESC[5] = { "A HISTORIA DO JOGO CHEGA EM BREVE",
-                                   "BOLA 8 OU SINUCA BRASILEIRA, CONTRA O BOT OU UM AMIGO",
+                                   "BOLA 8, BRASILEIRA, MINI, SUBITA, CORRIDA E DUELO",
                                    "MATA-MATA COM 8 JOGADORES - SO TACO CLASSICO",
                                    "OUCA AS MUSICAS DO SEU PEN DRIVE",
                                    "SOM, MUSICA, VOLUME, EFEITOS E CREDITOS" };
@@ -5892,7 +5950,7 @@ static void drawMenuScreen(void)
     {
         static const char *BUL[5][3] = {
             { "A AVENTURA CHEGA EM BREVE", "PERSONAGENS, MESAS E TACOS", "UMA CAMPANHA CONTRA RIVAIS" },
-            { "CONTRA O BOT OU UM AMIGO", "BOLA 8 OU SINUCA BRASILEIRA", "17 PERSONAGENS, 25 MESAS" },
+            { "CONTRA O BOT OU UM AMIGO", "6 MODOS DE JOGO", "18 PERSONAGENS, 27 MESAS" },
             { "MATA-MATA COM 8 JOGADORES", "QUARTAS, SEMI E FINAL", "PERDEU, ESTA FORA!" },
             { "MP3 E WAV DO PEN DRIVE", "ORDEM ALEATORIA", "" },
             { "SOM, MUSICA E VOLUME", "EFEITOS E DICAS NA TELA", "CREDITOS DO JOGO" } };

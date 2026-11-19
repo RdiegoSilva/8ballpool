@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.6.0
+- Versão: 2.8.0
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
@@ -78,8 +78,16 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - No torneio não há revanche nem reiniciar partida; o placar do topo mostra a fase (QUARTAS, SEMI ou FINAL)
 - Ganhou a final: tela de **CAMPEÃO** com troféu
 
+## Sorteio (novo)
+- Na linha **MESA** a última opção é **ALEATORIA**: a mesa é sorteada ao iniciar a partida
+- Nas linhas de **personagem** (SEU PERSONAGEM / PERSONAGEM DO BOT / JOGADOR 1 e 2) a última opção é **ALEATORIO**: os personagens são sorteados (sempre diferentes entre si). **MESA DO PERSONAGEM = SIM** tem prioridade sobre a mesa aleatória
+
 ## Modos de jogo
 - **Bola 8**: as regras de sempre (lisas x listradas, bola 8 por último)
+- **Bola 8 Mini** (novo): partida rápida com só 3 lisas, 3 listradas e a bola 8 num triângulo pequeno; as regras são as da Bola 8
+- **Corrida de 3** (novo): quem encaçapar **3 bolas** (sem falta) primeiro vence; mesa aberta, sem lisas/listradas; o placar aparece no painel de cada jogador. Encaçapar a 8 é derrota
+- **Bola 8 Duelo** (novo): só 2 lisas, 2 listradas e a bola 8; regras da Bola 8
+- **Morte Súbita** (novo): quem encaçapar **primeiro** uma bola (qualquer uma, menos a 8) **sem fazer falta** vence na hora. Falta dá bola na mão; encaçapar a 8 é derrota
 - **Sinuca Brasileira**: a branca começa no meio da mesa e cada jogador tem 4 bolas lisas (sem número) da cor escolhida, como numa mesa de verdade: 2 bolas juntas no centro da cabeceira de cada jogador e 1 bola em cada tabela comprida
   - Vence quem encaçapar as 4 bolas da sua cor primeiro
   - Encaçapou uma bola sua sem errar? Joga de novo
@@ -119,8 +127,8 @@ Cada personagem tem uma raridade, mostrada na escolha de personagens e no catál
 - **LENDÁRIO**: Grinch e Policial
 - **MÍSTICO**: Vampiro, Mago, Papai Noel e Mestre do Tempo
 - **ÉPICO**: Hacker e Poseidon
-- **SUPER RARO**: Viking, Ninja, Chapolin e Pirata
-- **RARO**: Pinguim, Robô, Alien, Gato e Cowboy
+- **SUPER RARO**: Viking, Ninja, Chapolin, Pirata e Gato
+- **RARO**: Pinguim, Robô, Alien e Cowboy
 
 ## Kits dos personagens (taco + habilidade + mesa)
 Novo combo pack **GRINCH** (personagem + taco + mesa), o único **LENDÁRIO** (categoria própria no catálogo de tacos). O poder é **sorteado antes** (puxado pela situação da mesa) e **aparece na tela** ("O: PUXÃO VERDE" ou "O: BAGUNÇA"), então você decide se usa (O na mira). **Se tacar sem usar, o próximo poder é sorteado de novo** na jogada seguinte. Recarrega em 3 tacadas:
@@ -256,7 +264,7 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
-- **ENTERRO**: a bola alvo (a primeira que a branca toca) é puxada para a caçapa mais próxima com uma pá, **de qualquer distância**. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **ENTERRO**: a bola alvo (a primeira que a branca toca) tem a trajetória desviada **30%** em direção à caçapa mais próxima no momento da batida (`ENTERRO_PUXAO`); não é mais garantido, só ajuda. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
 - **COVA**: abre uma caçapa extra (agora bem menor, raio 12 em vez de 20) no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
 - **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque). A bola que volta é um **fantasma**: nesta jogada a branca e as outras bolas **passam por ela, sem física**; na rodada seguinte ela volta ao normal.
 
