@@ -3,11 +3,11 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 3.1.0
+- Versão: 3.1.1
 
-## Jogo mais rápido (3.1.0)
-- A tacada sai mais forte (velocidade máxima da branca de 640 para 860) e o atrito da mesa é menor, então as bolas correm mais e **andam mais longe** antes de parar
-- Os números ficam em `MAXV`, `FRIC_K` e `FRIC_C` no começo do `main.c`: se quiser ainda mais rápido, aumente `MAXV` ou diminua `FRIC_K`/`FRIC_C` (mantenha `FRIC_C / FRIC_K` = 40)
+## Jogo mais rápido (3.1.1)
+- A tacada sai bem mais forte (velocidade máxima da branca de 640 para 1200) e o atrito da mesa é um pouco menor, então as bolas correm muito mais e **andam mais longe** antes de parar
+- Os números ficam em `MAXV`, `FRIC_K` e `FRIC_C` no começo do `main.c`: para ficar ainda mais rápido aumente `MAXV`; para as bolas pararem antes, aumente `FRIC_K` ou `FRIC_C`
 - O BOT e o planejador do HACK foram ajustados para a nova física (a força que eles escolhem continua certa)
 
 ## Visual dos menus (novo)
@@ -35,7 +35,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
   - **MESA DO PERSONAGEM** (SIM/NÃO): usa automaticamente a mesa do personagem do Jogador 1 (veja a tabela de kits abaixo). Escolher uma mesa na mão desliga essa opção
   - **HABILIDADES** (só no versus): LIGADAS ou DESLIGADAS. Contra o BOT as habilidades ficam sempre ligadas para você
-  - MESA (27 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
+  - MESA (28 opções): Clássica, Fênix (feltro verde e madeira preta), Oceano, Vinho, Royal, **Preta Ouro** (feltro preto com detalhes dourados), **Neon** (luzes correndo em volta, faixas de luz, estrelas e caçapas brilhando) e as novas:
     - **Fogo**: chamas na moldura, brasas subindo pelo feltro e caçapas em brasa
     - **Gelo**: feltro azul-gelo, neve caindo, brilho de cristais e flocos nos cantos
     - **Galáxia**: estrelas piscando, nebulosas passando, estrela cadente e caçapas viram buracos negros
@@ -52,6 +52,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
     - **Chapolin**: feltro vermelho, moldura vermelha e amarela, corações nos cantos e subindo pelo feltro, grande coração amarelo no centro, estrelas e antenas saltitantes
     - **Grinch**: feltro verde, moldura vermelha com luzes piscando em verde, vermelho e branco, carinha do Grinch nos cantos, grande coração vermelho no centro que cresce, fumaça verde subindo, neve e presentes roubados flutuando
     - **Abismo**: fundo do mar com raios de luz e ondas no feltro, bolhas subindo, peixes passando, água correndo na moldura, corais nos cantos e redemoinhos nas caçapas
+    - **Pool Azul** (nova): feltro azul com luz no centro, madeira vermelha com brilho de verniz, diamantes claros, placas metálicas escuras nos cantos, caçapas pretas e linha da cabeceira bem visível (sem animação)
     - As animações param se a opção **Efeitos** estiver desligada
   - COR DAS BOLAS (só na Bola 8, **16 temas**): Clássicas, Neon, Pastel, Gelo, Fogo, Floresta, Ouro, Arco-íris, Candy, Oceano, Metal, Tropical, Pôr do sol, Lavanda, Retrô e Ácido (mostra as 8 cores do tema; vale para lisas e listradas)
   - COR JOGADOR 1 / 2 (só na Sinuca Brasileira, agora **32 cores**): Azul, Vermelha, Amarela, Verde, Roxa, Laranja, Rosa, Ciano, Marrom, Cinza, Lima, Dourada, Turquesa, Bordô, Salmão, Verde escuro, Azul claro, Violeta, Rosa choque, Bege, Prata, Coral, Oliva, Lavanda, Mostarda, Menta, Magenta, Marinho, Grafite, Pêssego, Chocolate ou Azul bebê (cada jogador usa uma cor diferente; padrão: vermelha x amarela)

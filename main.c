@@ -38,9 +38,9 @@
 #define TCY   ((TY0 + TY1) * 0.5f)
 #define HEADX (TX0 + (TX1 - TX0) * 0.25f)
 #define FOOTX (TX0 + (TX1 - TX0) * 0.75f)
-#define MAXV  860.0f                      /* velocidade maxima da branca (era 640): bolas bem mais rapidas */
-#define FRIC_K 0.50f                      /* atrito proporcional a velocidade (era 0.6): bolas andam mais */
-#define FRIC_C 20.0f                      /* atrito constante (era 24); FRIC_C/FRIC_K = 40 como antes */
+#define MAXV  1200.0f                     /* velocidade maxima da branca (era 640): bolas bem mais rapidas */
+#define FRIC_K 0.55f                      /* atrito proporcional a velocidade (era 0.6) */
+#define FRIC_C 20.0f                      /* atrito constante (era 24) */
 #define OLD_MAXV 640.0f                   /* fisica antiga: so o bot usa, para manter a mesma distancia de tacada */
 #define OLD_FRIC_K 0.6f
 #define OLD_FRIC_C 24.0f
@@ -286,7 +286,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "3.1.0"
+#define GAME_VERSION "3.1.1"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1998,7 +1998,7 @@ static u32 readpad(int port)
 
 /* ---------- desenho do jogo ---------- */
 typedef struct { const char *name; u8 felt[3], wood[3], dia[3]; int style; } TableDef;   /* style: 0 normal, 1 preta/ouro, 2 neon animada */
-#define NTABLES 27
+#define NTABLES 28
 static const TableDef TABLES[NTABLES] = {
     { "CLASSICA", { 24,114, 68}, {124, 74, 33}, {236,226,190} },
     { "FENIX",    { 14,128, 52}, { 34, 34, 38}, {240,240,244} },
@@ -2027,6 +2027,7 @@ static const TableDef TABLES[NTABLES] = {
     { "ABISMO",   {  8, 62,122}, { 10, 30, 56}, {130,235,255}, 18 },
     { "CEMITERIO",{ 30, 52, 44}, { 34, 28, 38}, {180,200,180}, 19 },
     { "DELEGACIA",{ 38, 66,122}, { 20, 26, 48}, {255,215, 80}, 20 },
+    { "POOL AZUL",{ 36,136,204}, {142, 26, 38}, {238,232,214}, 21 },   /* feltro azul, madeira vermelha, diamantes claros, cacapas pretas */
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
 
@@ -3156,6 +3157,30 @@ static void tableDecoPolice(int stage, int mt)
     }
 }
 
+/* ---------- mesa POOL AZUL (style 21): feltro azul com luz no centro, madeira vermelha lustrosa, placas metalicas nos cantos ---------- */
+static void tableDecoPool(int stage)
+{
+    int k;
+    if (stage == 0) {
+        outlineRect(TX0 - 27.5f, TY0 - 27.5f, TX1 + 27.5f, TY1 + 27.5f, CA(255, 110, 110, 0x46));     /* brilho do verniz na borda */
+        outlineRect(TX0 - 21.5f, TY0 - 21.5f, TX1 + 21.5f, TY1 + 21.5f, CA(255, 255, 255, 0x14));
+        outlineRect(TX0 - 18.0f, TY0 - 18.0f, TX1 + 18.0f, TY1 + 18.0f, CA(40, 4, 10, 0x50));          /* sombra funda perto da borracha */
+        for (k = 0; k < 4; k++) {                                                                      /* placas metalicas escuras nos cantos */
+            float cx = (k & 1) ? TX1 + 15.0f : TX0 - 15.0f, cy = (k & 2) ? TY1 + 15.0f : TY0 - 15.0f;
+            discN(cx, cy, 15.0f, COL(34, 36, 42), 16);
+            discN(cx, cy, 13.2f, COL(78, 82, 92), 16);
+            discN(cx - 1.0f, cy - 1.2f, 10.5f, COL(48, 50, 58), 16);
+        }
+    } else if (stage == 1) {
+        for (k = 0; k < 7; k++)                                                                        /* luz de cima: centro mais claro */
+            rect(TX0 + 70.0f + k * 24.0f, TY0 + 30.0f + k * 14.0f, TX1 - 70.0f - k * 24.0f, TY1 - 30.0f - k * 14.0f, CA(150, 225, 255, 0x07));
+        for (k = 0; k < 4; k++)                                                                        /* borda do feltro mais escura */
+            outlineRect(TX0 + k, TY0 + k, TX1 - k, TY1 - k, CA(6, 30, 62, 0x30 - k * 8));
+    } else {
+        line(HEADX, TY0, HEADX, TY1, CA(200, 240, 255, 0x46));                                         /* linha da cabeceira bem visivel */
+    }
+}
+
 static void tableDeco(int stage, const TableDef *T)
 {
     int k;
@@ -3251,6 +3276,8 @@ static void tableDeco(int stage, const TableDef *T)
         tableDecoGrave(stage, mt);
     } else if (T->style == 20) {
         tableDecoPolice(stage, mt);
+    } else if (T->style == 21) {
+        tableDecoPool(stage);
     } else if (T->style >= 3) {
         tableDecoFx(stage, T->style, mt);
     }
