@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include "music.h"
 
-#define R     7.0f                       /* raio das bolas (era 8): bolas menores = mesa parece maior */
+#define R     8.5f                       /* raio das bolas (original 8): bolas um pouco maiores */
 #define TX0   64.0f                      /* mesa maior (era 70..598 x 100..364): agora 64..604 x 86..364 */
 #define TX1   604.0f
 #define TY0   86.0f
@@ -85,7 +85,7 @@ static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao]
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
 enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, AB_POLICIAL, AB_PRENDER, AB_SIRENE, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE" };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "CHAPULIN", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 #define FORGIVE_ON(f) ((f) == 1 || (f) == 4)          /* 1 = PRESENTE (Noel), 4 = NOVA VIDA do Gato (perdoa falta e suicidio e joga de novo) */
@@ -138,6 +138,7 @@ static int   fineHold, dpadHold;                                 /* tempo segura
 
 /* pulo e efeito vertical (v1.6) */
 #define JUMP_G     900.0f                          /* gravidade da bola no ar */
+#define CHAP_HOP   160.0f                          /* CHAPULIN: impulso do pulo da bola alvo (pico ~14, no ar ~0,35 s) */
 #define JUMP_CLEAR 11.0f                           /* acima desta altura a branca passa por cima das outras bolas */
 static float spinV, spinVCur, spinVK;              /* efeito vertical: + rola (segue), - puxa (volta) */
 static int   jumpArm;                              /* 1 = a proxima tacada faz a branca pular */
@@ -148,9 +149,9 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define POM 5.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 17.5f, 13.5f, 17.5f, 17.5f, 13.5f, 17.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
+static const float PR[6] = { 15.5f, 12.5f, 15.5f, 15.5f, 12.5f, 15.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 24.0f, 18.0f, 24.0f, 24.0f, 18.0f, 24.0f };
+static const float PRC[6] = { 22.0f, 17.0f, 22.0f, 22.0f, 17.0f, 22.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -405,7 +406,7 @@ static void drawNumber(int n, float cx, float cy, float r)
 
 static void drawShadow(int i)
 {
-    float z = (i == 0 && b[0].z > 0.0f) ? b[0].z : 0.0f;      /* no pulo a sombra fica no chao, menor e mais fraca */
+    float z = b[i].z > 0.0f ? b[i].z : 0.0f;      /* no pulo a sombra fica no chao, menor e mais fraca */
     if (!b[i].in) return;
     discN(b[i].x + 3.6f + z * 0.5f, b[i].y + 4.2f + z * 0.7f, R * (1.10f - z * 0.012f),
           GS_SETREG_RGBAQ(0, 18, 8, z > 0.0f ? 0x0c : 0x14, 0x00), 12);
@@ -1235,7 +1236,10 @@ static void abilOnFirstHit(int j)
             }
         } else abilCD[cur] = 0;                       /* nao funcionou: devolve a recarga */
     }
-    else if (abilKind == AB_MARRETA) { b[j].vx *= 1.7f; b[j].vy *= 1.7f; abilFx = 36; fxX = b[j].x; fxY = b[j].y; }   /* marreta bionica */
+    else if (abilKind == AB_MARRETA) {                /* CHAPULIN: a marretada faz a bola alvo dar um PULO DE GAFANHOTO e passar por cima das outras bolas */
+        if (j != lockBall) { b[j].vz = CHAP_HOP; b[j].z = 0.01f; }
+        abilFx = 36; fxX = b[j].x; fxY = b[j].y;
+    }
     else if (abilKind == AB_CORTE) { b[0].vx = b[0].vy = 0; abilFx = 36; fxX = b[0].x; fxY = b[0].y; }
     else if (abilKind == AB_FOGO) {
         for (k = 1; k < 16; k++) {
@@ -1390,7 +1394,7 @@ static int stepPhysics(float dt)
         for (j = i + 1; j < 16; j++) {
             float dx, dy, d2, d, nx, ny, rv, ov;
             if (!b[j].in) continue;
-            if (i == 0 && b[0].z > JUMP_CLEAR) break;      /* pulando: passa por cima de todas */
+            if (b[i].z > JUMP_CLEAR || b[j].z > JUMP_CLEAR) continue;      /* pulando (branca ou bola do CHAPULIN): passa por cima das outras */
             if (ghostBall > 0 && (i == ghostBall || j == ghostBall)) continue;   /* RESSUSCITAR: a bola que voltou e um fantasma (sem fisica) */
             dx = b[j].x - b[i].x; dy = b[j].y - b[i].y; d2 = dx*dx + dy*dy;
             if (d2 >= 4*R*R || d2 < 0.0001f) continue;
@@ -5307,7 +5311,7 @@ static void drawCueMenu(void)
         { "A BOLA ALVO EXPLODE E EMPURRA PARA LONGE", "AS BOLAS QUE ESTAO PERTO DELA." },
         { "+20% DE FORCA E A BRANCA PARA NA HORA AO", "BATER NA BOLA (TACADA CORTADA)." },
         { "A BRANCA FAZ UMA CURVA FORTE (EFEITO X2,5)", "MESMO SEM USAR L2/R2." },
-        { "MARRETA BIONICA! A BOLA ALVO LEVA UMA MARRETADA", "E SAI COM +70% DE VELOCIDADE." },
+        { "CHAPULIN! A MARRETADA FAZ A BOLA ALVO DAR UM PULO DE", "GAFANHOTO E VOAR POR CIMA DAS OUTRAS BOLAS." },
         { "DEPOIS DE QUALQUER TACADA, VOCE PODE VOLTAR NO", "TEMPO E REFAZER A JOGADA - SE QUISER." },
         { "PODER SORTEADO CONFORME A MESA (PUXAO VERDE OU BAGUNCA) E", "MOSTRADO ANTES. NAO USOU NA TACADA? SORTEIA OUTRO." },
         { "", "" },
@@ -7193,7 +7197,10 @@ static void drawScene(void)
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
     else for (i = 1; i < 16; i++) drawShadow(i);
     if (state == S_ROLL && shEq[SC_RASTRO]) for (i = 0; i < 16; i++) if (b[i].in && b[i].z <= 0.0f) trailDraw(shEq[SC_RASTRO], b[i].x, b[i].y, b[i].vx, b[i].vy);   /* LOJA: rastro */
-    for (i = 1; i < 16; i++) if (b[i].in) drawBallAt(i, b[i].x, b[i].y, R);
+    for (i = 1; i < 16; i++) if (b[i].in) {
+        if (b[i].z > 0.0f) drawBallAt(i, b[i].x, b[i].y - b[i].z * 0.55f, R * (1.0f + b[i].z * 0.022f));   /* CHAPULIN: a bola sobe na tela */
+        else drawBallAt(i, b[i].x, b[i].y, R);
+    }
     if (b[0].in) {
         if (state == S_PLACE) {
             if (validPlace(b[0].x, b[0].y)) drawBallAt(0, b[0].x, b[0].y, R);
