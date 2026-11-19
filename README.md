@@ -59,7 +59,7 @@ Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAG
 - O rosto do personagem fica no canto do painel de cada jogador durante a partida
 
 ## HUD (layout novo)
-O topo da tela agora é uma faixa baixa de vidro com três blocos: **retrato + nome, grupo e bolas** do jogador 1, **placar** no centro e o bloco do jogador 2 espelhado. Quem joga tem borda dourada, brilho e filete na cor do jogador (azul/vermelho); o outro fica apagado. O relógio de jogada vira um filete no pé do bloco, e a barra de sangue do Vampiro fica logo abaixo.
+O topo da tela agora é uma faixa baixa de vidro com três blocos: **retrato + nome, grupo e bolas** do jogador 1, **placar** no centro e o bloco do jogador 2 espelhado. Quem joga tem borda dourada, brilho e filete na cor do jogador (azul/vermelho); o outro fica apagado. O relógio de jogada vira um filete no pé do bloco, e a barra de sangue do taco Vampiro fica logo abaixo.
 
 ## Animações de vitória e derrota
 Quando a partida termina:
@@ -163,7 +163,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Pirata     | Oceano     | **MARÉ**: a branca faz uma curva forte (efeito x2,5) sem precisar de L2/R2 | Oceano |
 
 - **Usar a habilidade: O na mira.** Na maioria, o primeiro toque arma a habilidade (aparece "ARMADO!" no canto) e vale para a próxima tacada; tocar de novo cancela. O **HACK** age na hora
-  - **HACK (melhorado)**: só mostra tacadas que **realmente encaçapam** (cada uma é testada na física do jogo: bola certa primeiro, branca não cai). Funciona na Bola 8 e na Sinuca Brasileira. **O de novo** troca para a próxima melhor opção (até 4) e, depois da última, libera a mira. Com o HACK ligado a mira, o efeito, o pulo e a troca de taco ficam travados, a tacada não sofre desvio de giz, a barra de força anda mais devagar e **gruda na força ideal** (±6%). Sem tacada possível, ele sugere uma jogada de segurança (acerta a bola certa sem arriscar a branca). Na quebra mira reto no triângulo com força total
+  - **HACK (melhorado)**: só mostra tacadas que **realmente encaçapam** (cada uma é testada na física do jogo: bola certa primeiro, branca não cai). Funciona na Bola 8 e na Sinuca Brasileira. **O de novo** troca para a próxima melhor opção (até 4) e, depois da última, libera a mira. Com o HACK ligado a mira, o efeito, o pulo e a troca de taco ficam travados, a tacada não sofre desvio de giz, a barra de força anda mais devagar e **gruda na força ideal** (±6%). Quando há poucas tacadas diretas, ele também procura **tacadas de tabela** (1 rebote na tacada). Depois da batida, a bola alvo ainda **curva para a caçapa** (tacada certeira). **Se você ligar e desligar o HACK sem atirar, a recarga é devolvida.** Sem tacada possível, ele sugere uma jogada de segurança (acerta a bola certa sem arriscar a branca). Na quebra mira reto no triângulo com força total
   - **CHAMINÉ**: vale para a Bola 8 e para a Sinuca Brasileira; o efeito dura só a tacada e depois a recarga é de 3 tacadas
 - Depois de usar, a habilidade **recarrega em 3 tacadas** (o contador aparece ao lado do nome do taco)
 - O BOT não usa habilidades. No torneio só você usa habilidades, e só se a regra HABILIDADES estiver LIGADA (padrão: DESLIGADAS, taco Clássico)
@@ -296,7 +296,7 @@ Combo **POLICIAL** (personagem + taco **Cassetete** + mesa **Delegacia**: fita d
 - **SIRENE**: na próxima jogada o adversário joga **sem linha guia** (o BOT erra mais a mira).
 
 ## Vampiro: barra de sangue (SEDE DE SANGUE)
-Quando o personagem é o Vampiro (com HABILIDADES ligadas), aparece uma **barra de sangue com 3 gomos** embaixo do painel dele:
+Quando você joga com o **taco VAMPIRO** (com HABILIDADES ligadas), aparece uma **barra de sangue com 3 gomos** embaixo do seu painel (a barra é do taco, não do personagem; o BOT com o personagem Vampiro também usa):
 - Cada tacada que **encaçapa uma bola sua** enche 1 gomo
 - Se a tacada **não encaçapar** (ou der falta), a barra **não se perde**: os gomos ficam guardados
 - Com **3 bolas** (não precisam ser seguidas) a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **50% mais força** e a bola alvo **curva bem mais forte para a caçapa** (PUXÃO reforçado, mira até ~75°)

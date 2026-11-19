@@ -750,7 +750,12 @@ static int blood[2], bloodShot;
 #define BATR  9.0f
 static float batX[NBAT], batY[NBAT], batVX[NBAT], batVY[NBAT];
 static int batOn, batWait, batFor;
-static int vampOn(int p) { return charSel[p] == 6 && !(tourney && !tAbil) && (abilOn || (mode == 0 && p == 1)); }
+static int vampOn(int p)                                 /* a barra de sangue e do TACO VAMPIRO (o BOT usa o taco do personagem Vampiro) */
+{
+    if (tourney && !tAbil) return 0;
+    if (mode == 0 && p == 1) return charSel[1] == 6;
+    return abilOn && cueSel[p] == 14;
+}
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
@@ -1027,6 +1032,7 @@ static void shoot(float p)
         abilFx = 36; fxX = hitX; fxY = hitY;
         setmsg("SEDE DE SANGUE! TACADA MAIS FORTE");
     }
+    if (hk && abilKind == AB_NONE) abilKind = AB_SUGAR;   /* HACK: depois da batida a bola alvo ainda curva para a cacapa (tacada certeira) */
     if (abilArm && curAb() != AB_NONE) {                 /* habilidade do taco de personagem */
         abilKind = curAb(); abilCD[cur] = AB_COOL; abilFx = 36; fxX = hitX; fxY = hitY;
         if (abilKind == AB_GRINCH) {                      /* vira o poder que ja estava sorteado e mostrado na tela */
@@ -7334,6 +7340,47 @@ static void hackSolve(void)
             hackAdd(atan2f(gy - cy, gx - cx), pw, sc);
         }
     }
+    if (hCandN < 6) {                                                       /* poucas tacadas diretas: tenta tacadas de TABELA (1 rebote) */
+        for (t = 1; t < 16; t++) {
+            if (!b[t].in || t == lockBall) continue;
+            if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
+            else if (gr >= 0 && ballGroup(t) != gr) continue;
+            for (p = 0; p < 6; p++) {
+                int w;
+                for (w = 0; w < 4; w++) {
+                    float tx = b[t].x, ty = b[t].y, mx, my, dx, dy, dl, wl, tt, bx_, by_, gx, gy, ax, ay, al, cc, vt, vc, v0, pw, sc;
+                    if (w == 0)      { mx = PX[p]; my = 2.0f * (TY0 + R) - PY[p]; }
+                    else if (w == 1) { mx = PX[p]; my = 2.0f * (TY1 - R) - PY[p]; }
+                    else if (w == 2) { mx = 2.0f * (TX0 + R) - PX[p]; my = PY[p]; }
+                    else             { mx = 2.0f * (TX1 - R) - PX[p]; my = PY[p]; }
+                    dx = mx - tx; dy = my - ty; dl = sqrtf(dx * dx + dy * dy);
+                    if (dl < 1.0f) continue;
+                    dx /= dl; dy /= dl;
+                    if (w < 2) { wl = w == 0 ? TY0 + R : TY1 - R; if (fabsf(dy) < 0.05f) continue; tt = (wl - ty) / dy; bx_ = tx + dx * tt; by_ = wl; }
+                    else       { wl = w == 2 ? TX0 + R : TX1 - R; if (fabsf(dx) < 0.05f) continue; tt = (wl - tx) / dx; bx_ = wl; by_ = ty + dy * tt; }
+                    if (tt < 2.0f * R || tt > dl - R) continue;
+                    if (bx_ < TX0 + 3.0f * R || bx_ > TX1 - 3.0f * R || by_ < TY0 + 3.0f * R || by_ > TY1 - 3.0f * R) continue;
+                    gx = tx - dx * 2.0f * R; gy = ty - dy * 2.0f * R;
+                    if (gx < TX0 + R || gx > TX1 - R || gy < TY0 + R || gy > TY1 - R) continue;
+                    ax = gx - cx; ay = gy - cy; al = sqrtf(ax * ax + ay * ay);
+                    if (al < 1.0f) continue;
+                    ax /= al; ay /= al;
+                    cc = ax * dx + ay * dy;
+                    if (cc < 0.35f) continue;
+                    if (!pathClear(cx, cy, gx, gy, t)) continue;
+                    if (!pathClear(tx, ty, bx_, by_, t)) continue;
+                    vt = speedForDist(dl + 12.0f) * 1.25f;               /* o rebote tira forca */
+                    vc = vt / (0.98f * cc);
+                    v0 = speedForDist(al + stopDist(vc));
+                    pw = v0 / pmul;
+                    if (pw > 1.0f) continue;
+                    if (pw < 0.15f) pw = 0.15f;
+                    sc = 800.0f + al * 0.8f + dl + (1.0f - cc) * 520.0f + pw * 90.0f;
+                    hackAdd(atan2f(gy - cy, gx - cx), pw, sc);
+                }
+            }
+        }
+    }
     {                                                                       /* confere cada tacada na simulacao: so ficam as que dao certo */
         int k, n = 0;
         for (k = 0; k < hCandN; k++) {
@@ -7377,7 +7424,7 @@ static void hackApply(void)                      /* trava a mira na opcao escolh
     ang = hCandAng[hCandI]; hackPow = hCandPow[hCandI]; hackOn = 1;
     spinSel = 0; spinV = 0; jumpArm = 0; charging = 0; pwr = 0;
     if (hCandSc[hCandI] >= 1e5f) strcpy(tb, "HACK: SEM TACADA DIRETA - JOGADA DE SEGURANCA");
-    else sprintf(tb, "HACK %d/%d: FORCA %d%% - O TROCA A OPCAO", hCandI + 1, hCandN, (int)(hackPow * 100.0f + 0.5f));
+    else sprintf(tb, hCandSc[hCandI] >= 800.0f ? "HACK %d/%d: TABELA, FORCA %d%% - O TROCA" : "HACK %d/%d: FORCA %d%% - O TROCA A OPCAO", hCandI + 1, hCandN, (int)(hackPow * 100.0f + 0.5f));
     setmsg(tb);
 }
 
@@ -7388,7 +7435,7 @@ static void useAbility(void)
     if (ab == AB_NONE) { setmsg(abilOn ? "ESTE TACO NAO TEM HABILIDADE" : "HABILIDADES DESLIGADAS NESTA PARTIDA"); return; }
     if (ab == AB_HACK && hackOn) {                       /* ja ativo: O troca para a proxima melhor tacada (e depois libera a mira) */
         hCandI++;
-        if (hCandI >= hCandN) { hackOn = 0; hCandI = 0; setmsg("HACK DESLIGADO: MIRA LIVRE"); }
+        if (hCandI >= hCandN) { hackOn = 0; hCandI = 0; abilCD[cur] = 0; setmsg("HACK DESLIGADO: MIRA LIVRE (RECARGA DEVOLVIDA)"); }   /* nao atirou: nao gasta a habilidade */
         else hackApply();
         return;
     }
