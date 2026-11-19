@@ -286,8 +286,9 @@ Combo **POLICIAL** (personagem + taco **Cassetete** + mesa **Delegacia**: fita d
 Quando o personagem é o Vampiro (com HABILIDADES ligadas), aparece uma **barra de sangue com 3 gomos** embaixo do painel dele:
 - Cada tacada que **encaçapa uma bola sua** enche 1 gomo
 - Se a tacada **não encaçapar** (ou der falta), a barra **seca** e volta a zero
-- Com **3 bolas seguidas** a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **35% mais força** e a bola alvo **curva para a caçapa** (como o PUXÃO)
+- Com **3 bolas seguidas** a barra enche e pulsa: a **4ª tacada vira SEDE DE SANGUE**, com **50% mais força** e a bola alvo **curva bem mais forte para a caçapa** (PUXÃO reforçado, mira até ~75°)
 - Depois da tacada de sangue a barra zera. Vale também para o Vampiro controlado pelo BOT
+- **MORCEGOS:** na jogada seguinte do adversário, **6 morcegos** aparecem na mesa e voam por ela. As bolas **batem neles com física** (quicam e desviam) e a branca não pode ser posicionada em cima de um. Eles somem assim que o adversário termina a tacada
 
 ## Vampiro e Grinch (PUXÃO)
 

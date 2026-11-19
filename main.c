@@ -690,6 +690,12 @@ static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !(tourney
    Com 3 bolas seguidas a barra enche e a 4a tacada vira SEDE DE SANGUE (mais forte e a bola alvo curva para a cacapa) */
 #define BLOOD_MAX 3
 static int blood[2], bloodShot;
+/* MORCEGOS (Vampiro): apos uma tacada SEDE DE SANGUE, na jogada do
+ * adversario aparecem morcegos na mesa; as bolas batem neles (fisica). */
+#define NBAT  6
+#define BATR  9.0f
+static float batX[NBAT], batY[NBAT], batVX[NBAT], batVY[NBAT];
+static int batOn, batWait, batFor;
 static int vampOn(int p) { return charSel[p] == 6 && !(tourney && !tAbil) && (abilOn || (mode == 0 && p == 1)); }
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
@@ -773,7 +779,7 @@ static void newGame(int m)
     spinV = spinVCur = 0; jumpArm = 0; overT = 0;
     chalk[0] = chalk[1] = 1.0f; chalkAnim = 0;
     abilArm = 0; abilKind = AB_NONE; abilT = 0; abilFx = 0; fricMul = 1.0f; pockMul = 1.0f; abilForgive = 0; abilExtra = 0; rastT = -1; grinchPend = 0; curse[0] = curse[1] = 0; hackOn = 0; abilCD[0] = abilCD[1] = 0;
-    blood[0] = blood[1] = 0; bloodShot = 0;
+    blood[0] = blood[1] = 0; bloodShot = 0; batOn = 0; batWait = 0;
     graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
     raceCnt[0] = raceCnt[1] = 0;
     copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0;
@@ -962,7 +968,7 @@ static void shoot(float p)
     graveOn = 0; buryBall = 0; buryT = 0; ghostBall = 0;
     bloodShot = vampOn(cur) && blood[cur] >= BLOOD_MAX;
     if (bloodShot) {                                     /* VAMPIRO: SEDE DE SANGUE */
-        b[0].vx *= 1.35f; b[0].vy *= 1.35f;
+        b[0].vx *= 1.5f; b[0].vy *= 1.5f;
         if (abilKind == AB_NONE) abilKind = AB_SUGAR;    /* a bola alvo curva suave para a cacapa */
         abilFx = 36; fxX = hitX; fxY = hitY;
         setmsg("SEDE DE SANGUE! TACADA MAIS FORTE");
@@ -1097,7 +1103,7 @@ static int stepPhysics(float dt)
         Ball *q = &b[firstHit];
         float sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
         if (sp > 25.0f) {
-            float ux = q->vx / sp, uy = q->vy / sp, bc = 0.55f;
+            float ux = q->vx / sp, uy = q->vy / sp, bc = bloodShot ? 0.25f : 0.55f;
             int bp = -1;
             for (p = 0; p < 6; p++) {                    /* so ajuda cacapas mais ou menos a frente (ate ~57 graus) */
                 float ddx = PX[p] - q->x, ddy = PY[p] - q->y, dl = sqrtf(ddx * ddx + ddy * ddy), cs;
@@ -1106,7 +1112,7 @@ static int stepPhysics(float dt)
                 if (cs > bc) { bc = cs; bp = p; }
             }
             if (bp >= 0) {                               /* gira a direcao aos poucos, sem dar velocidade extra */
-                float da = normAng(atan2f(PY[bp] - q->y, PX[bp] - q->x) - atan2f(uy, ux)), mx = 2.0f * dt, c, sn;
+                float da = normAng(atan2f(PY[bp] - q->y, PX[bp] - q->x) - atan2f(uy, ux)), mx = (bloodShot ? 3.6f : 2.0f) * dt, c, sn;
                 if (da > mx) da = mx; else if (da < -mx) da = -mx;
                 c = cosf(da); sn = sinf(da);
                 q->vx = (ux * c - uy * sn) * sp; q->vy = (ux * sn + uy * c) * sp;
@@ -1259,6 +1265,44 @@ static int stepPhysics(float dt)
             }
         }
     }
+    if (batOn) {                                         /* MORCEGOS: voam e as bolas batem neles */
+        int k;
+        for (k = 0; k < NBAT; k++) {
+            if (!sfxMute) {                              /* na simulacao (hack) ficam parados e nao mudam o estado */
+                batX[k] += batVX[k] * dt; batY[k] += batVY[k] * dt;
+                if (batX[k] < TX0 + BATR) { batX[k] = TX0 + BATR; batVX[k] = fabsf(batVX[k]); }
+                if (batX[k] > TX1 - BATR) { batX[k] = TX1 - BATR; batVX[k] = -fabsf(batVX[k]); }
+                if (batY[k] < TY0 + BATR) { batY[k] = TY0 + BATR; batVY[k] = fabsf(batVY[k]); }
+                if (batY[k] > TY1 - BATR) { batY[k] = TY1 - BATR; batVY[k] = -fabsf(batVY[k]); }
+            }
+            for (i = 0; i < 16; i++) {
+                float dx, dy, d2, md, d, nx, ny, vn;
+                if (!b[i].in) continue;
+                if (i == 0 && b[0].z > 0.0f) continue;   /* a branca no ar passa por cima */
+                if (b[i].z > 0.0f) continue;
+                dx = b[i].x - batX[k]; dy = b[i].y - batY[k];
+                md = R + BATR; d2 = dx * dx + dy * dy;
+                if (d2 >= md * md) continue;
+                d = sqrtf(d2); if (d < 0.001f) { dx = 1.0f; dy = 0.0f; d = 1.0f; }
+                nx = dx / d; ny = dy / d;
+                b[i].x += nx * (md - d); b[i].y += ny * (md - d);
+                vn = (b[i].vx - batVX[k]) * nx + (b[i].vy - batVY[k]) * ny;
+                if (vn < 0.0f) {
+                    b[i].vx -= 1.8f * vn * nx; b[i].vy -= 1.8f * vn * ny;
+                    if (!sfxMute) {
+                        float vx0 = batVX[k], vy0 = batVY[k];
+                        batVX[k] = vx0 + 0.5f * vn * nx; batVY[k] = vy0 + 0.5f * vn * ny;
+                    }
+                    SFX(SFX_BALL, 40);
+                }
+            }
+            if (!sfxMute) {                              /* mantem os morcegos voando */
+                float s = sqrtf(batVX[k] * batVX[k] + batVY[k] * batVY[k]);
+                if (s < 40.0f) { if (s < 1.0f) { batVX[k] = 60.0f; batVY[k] = 40.0f; } else { batVX[k] *= 40.0f / s; batVY[k] *= 40.0f / s; } }
+                else if (s > 220.0f) { batVX[k] *= 220.0f / s; batVY[k] *= 220.0f / s; }
+            }
+        }
+    }
     for (i = 0; i < 16; i++) {
         float sp, s2;
         if (!b[i].in) continue;
@@ -1284,7 +1328,42 @@ static int validPlace(float x, float y)
         dx = b[i].x - x; dy = b[i].y - y;
         if (dx*dx + dy*dy < (2*R+1)*(2*R+1)) return 0;
     }
+    if (batOn) {                                         /* nao posiciona em cima de um morcego */
+        int k;
+        for (k = 0; k < NBAT; k++) {
+            float dx = batX[k] - x, dy = batY[k] - y;
+            if (dx*dx + dy*dy < (R+BATR+1)*(R+BATR+1)) return 0;
+        }
+    }
     return 1;
+}
+
+/* MORCEGOS: nascem em lugares livres, longe das bolas */
+static void spawnBats(void)
+{
+    int k, tries;
+    for (k = 0; k < NBAT; k++) {
+        float x = (TX0 + TX1) * 0.5f, y = (TY0 + TY1) * 0.5f, a;
+        for (tries = 0; tries < 200; tries++) {
+            int i, ok = 1, j;
+            x = TX0 + BATR + (rnd() % (int)(TX1 - TX0 - 2 * BATR));
+            y = TY0 + BATR + (rnd() % (int)(TY1 - TY0 - 2 * BATR));
+            for (i = 0; i < 16 && ok; i++) {
+                float dx, dy;
+                if (!b[i].in) continue;
+                dx = b[i].x - x; dy = b[i].y - y;
+                if (dx*dx + dy*dy < (R+BATR+14)*(R+BATR+14)) ok = 0;
+            }
+            for (j = 0; j < k && ok; j++) {
+                float dx = batX[j] - x, dy = batY[j] - y;
+                if (dx*dx + dy*dy < (2*BATR+6)*(2*BATR+6)) ok = 0;
+            }
+            if (ok) break;
+        }
+        batX[k] = x; batY[k] = y;
+        a = (float)(rnd() % 628) / 100.0f;
+        batVX[k] = cosf(a) * 80.0f; batVY[k] = sinf(a) * 80.0f;
+    }
 }
 
 /* devolve uma bola a mesa num lugar livre (PRESENTE do Noel) */
@@ -1312,6 +1391,7 @@ static void endTurn(int foul, int ownPocket)
 {
     char buf[64];
     int forgiven = 0, saved = 0, keep = abilExtra, kept = 0;   /* keep: NOVA VIDA do gato */
+    int spawnB = vampOn(cur) && bloodShot, shooter = cur;     /* MORCEGOS depois da SEDE DE SANGUE */
     abilExtra = 0;
     if (vampOn(cur)) {                                   /* VAMPIRO: barra de sangue */
         if (bloodShot) blood[cur] = 0;                   /* gastou a sede de sangue */
@@ -1352,6 +1432,7 @@ static void endTurn(int foul, int ownPocket)
                 forgiven ? "FALTA PERDOADA! VEZ DE %s" : (saved ? "PRESENTE GUARDADO! VEZ DE %s" : "VEZ DE %s")), pname(cur));
         setmsg(buf);
     }
+    if (spawnB) { batFor = 1 - shooter; batWait = 1; }   /* os morcegos chegam na proxima jogada do adversario */
 }
 
 static void endGame(int w)
@@ -1505,6 +1586,7 @@ static void resolve(void)
     int i, foul, ownPocket = 0;
 
     overNote[0] = 0;
+    if (batOn && cur == batFor) batOn = 0;               /* MORCEGOS: somem quando o adversario termina a tacada */
     for (i = 1; i < 16; i++) {
         if (graveIn[i]) { graveIn[i] = 0; respot(i, graveOX[i], graveOY[i]); }     /* COVA: a bola volta ao lugar de origem */
         if (pocketed[i]) { potLog[potN & 31] = i; potN++; }                          /* cemiterio: lembra das bolas encacapadas */
@@ -6366,6 +6448,21 @@ static void drawCopMarks(void)
     }
 }
 
+static void drawBats(void)
+{
+    int k;
+    if (!batOn) return;
+    for (k = 0; k < NBAT; k++) {
+        float hv = (state == S_ROLL) ? 0.0f : 2.5f * sinf(menuT * 0.12f + k * 1.7f);
+        float fl = sinf(menuT * 0.45f + k * 2.1f);
+        float x = batX[k], y = batY[k] + hv;
+        discN(x + 2.0f, y + 7.0f, 7.0f, CA(0, 0, 0, 0x30), 10);      /* sombra */
+        batShape(x, y, 1.1f, fl, 0xe0);
+        disc(x - 1.6f, y - 0.5f, 0.9f, CA(255, 40, 40, 0xe0));
+        disc(x + 1.6f, y - 0.5f, 0.9f, CA(255, 40, 40, 0xe0));
+    }
+}
+
 static void drawScene(void)
 {
     int i;
@@ -6397,6 +6494,7 @@ static void drawScene(void)
         } else drawBallAt(0, b[0].x, b[0].y, R);
     }
     for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
+    drawBats();
     drawCopMarks();
     if (state == S_ROLL || state == S_STRIKE) {                      /* efeitos das habilidades */
         if (abilKind == AB_CONGELAR) {
@@ -7123,6 +7221,10 @@ int main(int argc, char *argv[])
             break;
         }
 
+        if (batWait && cur == batFor && (state == S_AIM || state == S_PLACE)) {   /* MORCEGOS chegam na vez do adversario */
+            batWait = 0; spawnBats(); batOn = 1;
+            setmsg("MORCEGOS NA MESA!");
+        }
         {   /* inicio de cada jogada (vinda do fim da tacada, da bola na mao ou da bola tirada): a mira ja aponta para uma bola sua */
             static int prevSt = -1;
             if (state == S_AIM && prevSt != S_AIM && prevSt != S_CUES && prevSt != S_REWIND && !isBot() && !paused) autoAim();
