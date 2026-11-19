@@ -29,10 +29,10 @@
 #include <stdlib.h>
 #include "music.h"
 
-#define R     8.0f
-#define TX0   70.0f
-#define TX1   598.0f
-#define TY0   100.0f
+#define R     7.0f                       /* raio das bolas (era 8): bolas menores = mesa parece maior */
+#define TX0   64.0f                      /* mesa maior (era 70..598 x 100..364): agora 64..604 x 86..364 */
+#define TX1   604.0f
+#define TY0   86.0f
 #define TY1   364.0f
 #define TCX   ((TX0 + TX1) * 0.5f)
 #define TCY   ((TY0 + TY1) * 0.5f)
@@ -45,7 +45,7 @@
 #define OLD_FRIC_K 0.6f
 #define OLD_FRIC_C 24.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP, S_REPLAY };
 enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
 static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA", "BOLA 8 MINI", "MORTE SUBITA", "CORRIDA DE 3", "BOLA 8 DUELO" };
 
@@ -88,6 +88,7 @@ enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB
 static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "MARRETA", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
+#define FORGIVE_ON(f) ((f) == 1 || (f) == 4)          /* 1 = PRESENTE (Noel), 4 = NOVA VIDA do Gato (perdoa falta e suicidio e joga de novo) */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
@@ -147,9 +148,9 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define POM 5.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 15.5f, 13.5f, 15.5f, 15.5f, 13.5f, 15.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
+static const float PR[6] = { 17.5f, 13.5f, 17.5f, 17.5f, 13.5f, 17.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 22.0f, 18.0f, 22.0f, 22.0f, 18.0f, 22.0f };
+static const float PRC[6] = { 24.0f, 18.0f, 24.0f, 24.0f, 18.0f, 24.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -733,6 +734,83 @@ static void drawFall(int i)
     discN(x, y, r * 1.02f, GS_SETREG_RGBAQ(0, 0, 0, (int)(0x78 * (1.0f - t)), 0x00), 10);
 }
 
+/* ---------- REPLAY da ultima bola encacapada antes da vitoria ----------
+   Cada quadro da tacada e gravado (anel dos ultimos REPN quadros). Se a tacada termina a partida, o jogo
+   mostra de novo os instantes ate a ultima bola cair (camera lenta perto da cacapa). X ou START pula. */
+#define REPN 600                                      /* quadros guardados (10 s) */
+#define REP_PRE 150                                   /* quadros mostrados antes da bola cair (2,5 s) */
+#define REP_POST 70                                   /* quadros mostrados depois */
+#define REP_SLOW 0.45f                                /* velocidade perto da cacapa (1.0 = normal) */
+typedef struct { float x[16], y[16], z[16], fX[16], fY[16], M[16][9]; unsigned char in[16], fT[16], fP[16]; } RepFrame;
+static RepFrame repBuf[REPN];
+static int repFrame, repPotF = -1, repPotBall, repA, repB, repT, repHold, repSfx;
+static float repPos;
+static Ball repSaveB[16];
+static int repSaveFT[16], repSaveFP[16], repSavePk[16];
+static float repSaveFX[16], repSaveFY[16], repSaveM[16][9];
+
+static void repReset(void) { repFrame = 0; repPotF = -1; }
+
+static void repRecord(void)                           /* chamada 1x por quadro enquanto as bolas rolam */
+{
+    RepFrame *f = &repBuf[repFrame % REPN];
+    int i;
+    for (i = 0; i < 16; i++) {
+        f->x[i] = b[i].x; f->y[i] = b[i].y; f->z[i] = b[i].z; f->in[i] = (unsigned char)b[i].in;
+        f->fT[i] = (unsigned char)fallT[i]; f->fP[i] = (unsigned char)fallP[i]; f->fX[i] = fallX[i]; f->fY[i] = fallY[i];
+        memcpy(f->M[i], ballM[i], sizeof f->M[i]);
+        if (fallT[i] == FALLN) { repPotF = repFrame; repPotBall = i; }     /* bola acabou de cair: guarda o quadro */
+    }
+    repFrame++;
+}
+
+static void repApply(int fi)
+{
+    RepFrame *f = &repBuf[fi % REPN];
+    int i;
+    for (i = 0; i < 16; i++) {
+        b[i].x = f->x[i]; b[i].y = f->y[i]; b[i].z = f->z[i]; b[i].in = f->in[i]; b[i].vx = b[i].vy = 0.0f; b[i].vz = 0.0f;
+        fallT[i] = f->fT[i]; fallP[i] = f->fP[i]; fallX[i] = f->fX[i]; fallY[i] = f->fY[i];
+        memcpy(ballM[i], f->M[i], sizeof f->M[i]);
+    }
+}
+
+static void repMaybeStart(void)                       /* chamar logo depois de resolve(): se acabou a partida, vai para o replay */
+{
+    int lo;
+    if (state != S_OVER || repPotF < 0 || repFrame < 2) return;
+    repB = repPotF + REP_POST; if (repB > repFrame - 1) repB = repFrame - 1;
+    repA = repPotF - REP_PRE;  lo = repFrame - REPN; if (lo < 0) lo = 0; if (repA < lo) repA = lo;
+    if (repB - repA < 20) return;
+    memcpy(repSaveB, b, sizeof b); memcpy(repSaveFT, fallT, sizeof fallT); memcpy(repSaveFP, fallP, sizeof fallP);
+    memcpy(repSavePk, pocketed, sizeof pocketed); memcpy(repSaveFX, fallX, sizeof fallX); memcpy(repSaveFY, fallY, sizeof fallY);
+    memcpy(repSaveM, ballM, sizeof ballM);
+    repPos = (float)repA; repT = 0; repHold = 0; repSfx = 0;
+    msgTimer = 0;
+    state = S_REPLAY;
+}
+
+static void repEnd(void)                              /* volta para a tela de fim de jogo */
+{
+    memcpy(b, repSaveB, sizeof b); memcpy(fallT, repSaveFT, sizeof fallT); memcpy(fallP, repSaveFP, sizeof fallP);
+    memcpy(pocketed, repSavePk, sizeof pocketed); memcpy(fallX, repSaveFX, sizeof fallX); memcpy(fallY, repSaveFY, sizeof fallY);
+    memcpy(ballM, repSaveM, sizeof ballM);
+    overT = 0; state = S_OVER;
+}
+
+static void repUpdate(int pressed)                    /* 1 passo do replay (estado S_REPLAY) */
+{
+    int fi, near;
+    repT++;
+    if (repT > 12 && (pressed & (PAD_CROSS | PAD_START))) { repEnd(); return; }      /* X pula o replay */
+    fi = (int)repPos; if (fi > repB) fi = repB;
+    repApply(fi);
+    if (!repSfx && fi >= repPotF) { repSfx = 1; SFX(SFX_POCKET, 90); }
+    near = fi >= repPotF - 25 && fi <= repPotF + 25;
+    if (fi >= repB) { if (++repHold > 30) repEnd(); }
+    else repPos += near ? REP_SLOW : 1.0f;
+}
+
 /* ---------- logica ---------- */
 static int ballGroup(int i) { return i == 0 ? -1 : (i == 8 ? 2 : (i < 8 ? 0 : 1)); }
 
@@ -1074,7 +1152,7 @@ static void shoot(float p)
         case AB_MAREALTA: marePush(); break;                /* POSEIDON: onda empurra as bolas para as cacapas */
         case AB_IMA:      imaPull(); break;                 /* ROBO: puxa as suas bolas para as cacapas */
         case AB_MALDICAO: curse[1 - cur] = 1; break;        /* MAGO: amaldicoa a proxima tacada do adversario */
-        case AB_VIDAS:    abilExtra = 1; break;             /* GATO: joga de novo se nao encacapar */
+        case AB_VIDAS:    abilExtra = 1; abilForgive = 4; break;   /* GATO: nao perde a vez (joga de novo) e a falta / suicidio e perdoado */
         case AB_BAGUNCA:  bagunca(); break;                 /* CHAMINE: cacapas bem maiores nesta tacada */
         default: break;
         }
@@ -1085,7 +1163,7 @@ static void shoot(float p)
         b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
     }
     jumpArm = 0;
-    breakShot = 0; pwr = 0; charging = 0; follow = FOLLOWN; state = S_ROLL;
+    breakShot = 0; pwr = 0; charging = 0; follow = FOLLOWN; repReset(); state = S_ROLL;
 }
 
 /* menu de tacos (SELECT) */
@@ -1486,7 +1564,7 @@ static void endTurn(int foul, int ownPocket)
     bloodShot = 0;
     botTimer = 0; botPlanned = 0; botCue = 0;
     abilArm = 0; graveOpen = 0; copOpen = 0; hackOn = 0;
-    if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
+    if (foul && FORGIVE_ON(abilForgive)) {               /* PRESENTE do Noel / NOVA VIDA do Gato: perdoa a falta */
         foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
         if (!b[0].in) {
             int tries;
@@ -1723,7 +1801,7 @@ static void resolveBR(void)
     char buf[64];
     overNote[0] = 0;
     if (pocketed[0]) {
-        if (abilForgive == 1) {                          /* PRESENTE: o Noel salva do suicidio e devolve a branca ao centro */
+        if (FORGIVE_ON(abilForgive)) {                   /* PRESENTE / NOVA VIDA: salva do suicidio e devolve a branca ao centro */
             respot(0, TCX, TCY); pocketed[0] = 0; saved = 1;
         } else {
             strcpy(overNote, "SUICIDIO - BRANCA NA CACAPA");
@@ -1732,7 +1810,7 @@ static void resolveBR(void)
         }
     }
     foul = firstHit < 0 || ballGroup(firstHit) != grp[cur];
-    if (saved || (foul && abilForgive == 1)) { foul = 0; abilForgive = 2; }       /* PRESENTE: perdoa a falta */
+    if (saved || (foul && FORGIVE_ON(abilForgive))) { foul = 0; abilForgive = 2; }       /* PRESENTE: perdoa a falta */
     for (i = 1; i < 16; i++)
         if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
     mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
@@ -1796,7 +1874,7 @@ static void resolve(void)
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
-        if (!ok && abilForgive == 1) {                     /* PRESENTE: o Noel devolve a bola 8 e perdoa */
+        if (!ok && FORGIVE_ON(abilForgive)) {              /* PRESENTE / NOVA VIDA: devolve a bola 8 e perdoa */
             respot(8, FOOTX, TCY);
             endTurn(1, 0);
             return;
@@ -5237,7 +5315,7 @@ static void drawCueMenu(void)
         { "A BRANCA CURVA SOZINHA E PERSEGUE A BOLA CERTA MAIS", "PERTO DA SUA MIRA, ATE A PRIMEIRA BATIDA." },
         { "AS SUAS BOLAS SAO PUXADAS PARA A CACAPA MAIS PROXIMA", "(FORCA FRACA). MESA ABERTA: TODAS, MENOS A 8." },
         { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE", "OS BOTOES DE MIRAR FICAM INVERTIDOS E A FORCA FALHA AS VEZES." },
-        { "SE NAO ENCACAPAR E NAO FOR FALTA, VOCE JOGA DE NOVO.", "SE ENCACAPAR, A HABILIDADE NAO GASTA." },
+        { "NAO PERDE A VEZ: SE NAO ENCACAPAR, VOCE JOGA DE NOVO.", "PERDOA FALTA E SUICIDIO. SE ENCACAPAR, NAO GASTA." },
         { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
@@ -7085,6 +7163,16 @@ static void drawBats(void)
     }
 }
 
+static void drawReplayTag(void)                       /* etiqueta REPLAY e dica para pular */
+{
+    int blink = (menuT / 20) & 1;
+    hbox(TX0 + 10, TY0 + 8, TX0 + 92, TY0 + 28, CA(255, 80, 80, 0x70), CA(10, 12, 20, 0x70));
+    discN(TX0 + 22, TY0 + 18, 4.0f, blink ? CA(255, 50, 50, 0x80) : CA(120, 30, 30, 0x80), 10);
+    textFit(TX0 + 32, TY0 + 12, 0.34f, COL(255,255,255), "REPLAY", 56.0f);
+    hbox(TCX - 78, TY1 - 28, TCX + 78, TY1 - 8, CA(255, 215, 60, 0x60), CA(10, 12, 20, 0x70));
+    textFit(TCX - 70, TY1 - 24, 0.30f, COL(255,215,70), "X: PULAR O REPLAY", 140.0f);
+}
+
 static void drawScene(void)
 {
     int i;
@@ -7244,6 +7332,7 @@ static void drawScene(void)
         tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,230,60));
     }
     drawHUD();
+    if (state == S_REPLAY) drawReplayTag();
     if (state == S_CUES) {
         gsKit_queue_exec(g);          /* descarrega a cena para a GS antes do catalogo (evita estourar o buffer do quadro) */
         drawCueMenu();
@@ -7361,7 +7450,7 @@ static int hackSim(float a, float p, int safeOnly)
     memcpy(sb, b, sizeof b); memcpy(spk, pocketed, sizeof pocketed); memcpy(sfT, fallT, sizeof fallT);
     memcpy(sfP, fallP, sizeof fallP); memcpy(sfX, fallX, sizeof fallX); memcpy(sfY, fallY, sizeof fallY);
     memset(pocketed, 0, sizeof pocketed); firstHit = -1;
-    spinCur = spinVCur = spinK = spinVK = 0.0f; abilKind = AB_NONE; abilT = 0; fricMul = 1.0f;
+    spinCur = spinVCur = spinK = spinVK = 0.0f; abilKind = AB_SUGAR; abilT = 0; fricMul = 1.0f;   /* igual a tacada real do HACK (startStrike liga o SUGAR) */
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(curCue());
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(curCue());
     sfxMute++;                                        /* simulacao: sem som */
@@ -7507,6 +7596,21 @@ static void hackSolve(void)
             if (n >= 4) break;
             if (hackSim(hCandAng[k], hCandPow[k], 0)) { hCandAng[n] = hCandAng[k]; hCandPow[n] = hCandPow[k]; hCandSc[n] = hCandSc[k]; n++; }
         }
+        if (n == 0 && hCandN > 0) {                                         /* nenhuma confirmada: ajusta fino o angulo e a forca das melhores */
+            static const float da[8] = { 0.008f, -0.008f, 0.018f, -0.018f, 0.0f, 0.0f, 0.012f, -0.012f };
+            static const float dp[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.06f, -0.06f, 0.08f, -0.08f };
+            float ra[4], rp[4], rs[4];
+            int top = hCandN < 4 ? hCandN : 4, v, nn = 0;
+            for (k = 0; k < top; k++)
+                for (v = 0; v < 8; v++) {
+                    float pw2 = hCandPow[k] + dp[v];
+                    if (pw2 > 1.0f) pw2 = 1.0f;
+                    if (pw2 < 0.12f) pw2 = 0.12f;
+                    if (hackSim(hCandAng[k] + da[v], pw2, 0)) { ra[nn] = hCandAng[k] + da[v]; rp[nn] = pw2; rs[nn] = hCandSc[k]; nn++; break; }
+                }
+            for (k = 0; k < nn; k++) { hCandAng[k] = ra[k]; hCandPow[k] = rp[k]; hCandSc[k] = rs[k]; }
+            n = nn;
+        }
         hCandN = n;
     }
     if (hCandN == 0) {                                                      /* sem tacada direta: jogada de seguranca */
@@ -7544,7 +7648,7 @@ static void hackApply(void)                      /* trava a mira na opcao escolh
     ang = hCandAng[hCandI]; hackPow = hCandPow[hCandI]; hackOn = 1;
     spinSel = 0; spinV = 0; jumpArm = 0; charging = 0; pwr = 0;
     if (hCandSc[hCandI] >= 1e5f) strcpy(tb, "HACK: SEM TACADA DIRETA - JOGADA DE SEGURANCA");
-    else sprintf(tb, hCandSc[hCandI] >= 800.0f ? "HACK %d/%d: TABELA, FORCA %d%% - O TROCA" : "HACK %d/%d: FORCA %d%% - O TROCA A OPCAO", hCandI + 1, hCandN, (int)(hackPow * 100.0f + 0.5f));
+    else sprintf(tb, hCandSc[hCandI] >= 800.0f ? "HACK %d/%d: TABELA, FORCA %d%% - O TROCA, X ATIRA" : "HACK %d/%d: FORCA %d%% - O TROCA, X ATIRA", hCandI + 1, hCandN, (int)(hackPow * 100.0f + 0.5f));
     setmsg(tb);
 }
 
@@ -7636,7 +7740,7 @@ int main(int argc, char *argv[])
         musicUpdate();
         p0 = readpad(0);
         p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
+        if (state == S_MENU || state == S_OVER || state == S_REPLAY || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         if (paused) in = p0 | p1;
@@ -7749,7 +7853,8 @@ int main(int argc, char *argv[])
                 if (anRY != 0.0f) { spinV -= anRY * 0.03f; if (spinV < -1.0f) spinV = -1.0f; if (spinV > 1.0f) spinV = 1.0f; }
                 }
                 if (!charging) {
-                    if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
+                    if ((pressed & PAD_CROSS) && hackOn) { pwr = hackPow; startStrike(hackPow); }          /* HACK: X atira na forca ideal exata */
+                    else if (pressed & PAD_CROSS) { charging = 1; pwr = 0; barDir = 1.0f; }
                     else if (pressed & PAD_SELECT) { if (hackOn) setmsg("HACK ATIVO: TACO TRAVADO"); else openCueMenu(); }
                     else if ((pressed & PAD_TRIANGLE) && hackOn) setmsg("HACK ATIVO: MIRA TRAVADA");
                     else if (pressed & PAD_TRIANGLE) {
@@ -7820,7 +7925,7 @@ int main(int argc, char *argv[])
                     setmsg("VOLTOU NO TEMPO! JOGUE DE NOVO");
                 } else {                                            /* NAO: a jogada vale; resolve normalmente */
                     tmSnap = 0; tmArmed = 0; tmNow = 0;
-                    resolve();
+                    resolve(); repMaybeStart();
                 }
                 tmSnap = 0;
             }
@@ -7841,8 +7946,13 @@ int main(int argc, char *argv[])
                     if (b[i].in && (b[i].vx != 0 || b[i].vy != 0 || b[i].z > 0.0f)) mv = 1;
                     if (fallT[i] > 0) fl = 1;
                 }
-                if (!mv && !fl) resolve();
+                repRecord();
+                if (!mv && !fl) { resolve(); repMaybeStart(); }
             }
+            break;
+
+        case S_REPLAY:
+            repUpdate(pressed);
             break;
 
         case S_PLACE:

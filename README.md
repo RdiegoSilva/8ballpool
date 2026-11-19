@@ -14,6 +14,11 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Os retratos dos jogadores ganham **moldura dourada** com pinos nos cantos (quem joga brilha mais)
 - O bloco central vira uma caixa dourada: o placar de vitórias em cima e, embaixo, uma **pilha de moedas com o prêmio** que o jogador ganha se vencer a partida (o mesmo valor que ele recebe no fim)
 
+## Replay da vitória (novo)
+Quando uma tacada termina a partida, o jogo **mostra de novo a última bola que caiu** antes da tela de fim (a bola 8 na vitória normal, ou a bola da falta/derrota): começa uns 2,5 segundos antes, passa em **câmera lenta** perto da caçapa e segue um pouco depois. Aparece a etiqueta **REPLAY** no canto da mesa e a dica **X: PULAR O REPLAY**; **X ou START** pula (vale para os dois jogadores, também quando o BOT vence).
+- Cada quadro da tacada é gravado num anel de 600 quadros (10 s) em `repBuf` no `main.c`; os números ficam em `REP_PRE` (quadros antes), `REP_POST` (depois), `REP_SLOW` (velocidade perto da caçapa) e `REPN`
+- Funciona em todos os modos (Bola 8, Sinuca Brasileira, torneio, 2 jogadores). Se ninguém encaçapou nada na última tacada (ex.: tempo esgotado), não há replay
+
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
 - **Faixa de título** dourada no topo, com brilho que corre e enfeites nos lados
@@ -161,12 +166,12 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 | Vampiro    | Vampiro    | **SUGAR**: depois da batida, a bola alvo é puxada para a caçapa mais próxima | Vampiro |
 | Papai Noel | Noel       | **CHAMINÉ**: todas as caçapas ficam **45% maiores** nesta tacada, com aro dourado (a branca também pode cair: cuidado com o suicídio) | Natal |
 | Chapolin   | Marreta Biônica | **MARRETA**: a bola alvo leva uma marretada do chipote e sai com +70% de velocidade | Chapolin |
-| Hacker     | Hack       | **HACK**: calcula a melhor tacada (confere na simulação da mesa), trava mira, efeito e pulo, mostra o caminho todo e marca a **força ideal** na barra | Hack |
+| Hacker     | Hack       | **HACK**: calcula a melhor tacada (confere na simulação da mesa, igual à tacada real; se nenhuma confirma, ajusta fino ângulo e força e testa de novo), trava mira, efeito e pulo, mostra o caminho todo e **X atira direto na força ideal exata** (não precisa acertar a barra) | Hack |
 | Poseidon   | Tridente   | **MARÉ ALTA**: uma onda gigante empurra **todas as bolas** (menos a branca) na direção da caçapa mais próxima de cada uma, com força fraca: só as bolas que já estão perto de uma caçapa chegam lá | Abismo |
 | Alien      | Ovni       | **RASTREIO**: a branca curva sozinha e **persegue a bola certa** mais perto da sua mira (a sua bola; mesa aberta: qualquer uma, menos a 8), até a primeira batida | Galáxia |
 | Robô       | Robô       | **ÍMÃ**: as **suas bolas** são puxadas para a caçapa mais próxima de cada uma, com força fraca (mesa aberta: todas, menos a 8) | Neon |
 | Mago       | Varinha    | **MALDIÇÃO**: amaldiçoa o adversário: na **próxima tacada dele** os botões de mirar ficam **invertidos** (direcional, stick e L1/R1) e a **força falha** às vezes (35% de chance: marcou 100, sai 10). O bot amaldiçoado só erra mais a mira. O painel do amaldiçoado ganha uma aura roxa e aparece "AMALDIÇOADO!" | Noite Lua |
-| Gato       | Gato       | **NOVA VIDA**: se a tacada **não encaçapar** e não for falta, você **joga de novo**. Se encaçapar, a habilidade **não gasta** | Rosa |
+| Gato       | Gato       | **NOVA VIDA** (agora junta o PRESENTE): você **não perde a vez** (se não encaçapar, **joga de novo**) e a **falta e o suicídio são perdoados** (branca na caçapa volta para a mesa, e na bola 8 antes da hora ela também volta). Se encaçapar uma bola sua sem falta, a habilidade **não gasta** | Rosa |
 | Grinch     | Grinch     | **GRINCH**: ao apertar O na mira, a habilidade é **sorteada** entre Puxão verde e Bagunça conforme a situação da mesa (veja abaixo da tabela) | Grinch |
 | Viking     | Dragão     | **FOGO**: a bola alvo explode e empurra as bolas que estão perto | Fogo |
 | Ninja      | Samurai    | **CORTE**: +20% de força e a branca para na hora ao bater na bola | Preta Ouro |
