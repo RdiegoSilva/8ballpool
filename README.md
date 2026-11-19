@@ -3,12 +3,16 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 3.1.1
+- Versão: 3.1.2
 
 ## Jogo mais rápido (3.1.1)
 - A tacada sai bem mais forte (velocidade máxima da branca de 640 para 1200) e o atrito da mesa é um pouco menor, então as bolas correm muito mais e **andam mais longe** antes de parar
 - Os números ficam em `MAXV`, `FRIC_K` e `FRIC_C` no começo do `main.c`: para ficar ainda mais rápido aumente `MAXV`; para as bolas pararem antes, aumente `FRIC_K` ou `FRIC_C`
 - O BOT e o planejador do HACK foram ajustados para a nova física (a força que eles escolhem continua certa)
+
+## HUD do topo no estilo 8 Ball Pool (3.1.2)
+- Os retratos dos jogadores ganham **moldura dourada** com pinos nos cantos (quem joga brilha mais)
+- O bloco central vira uma caixa dourada: o placar de vitórias em cima e, embaixo, uma **pilha de moedas com o prêmio** que o jogador ganha se vencer a partida (o mesmo valor que ele recebe no fim)
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:

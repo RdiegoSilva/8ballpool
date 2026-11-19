@@ -286,7 +286,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "3.1.1"
+#define GAME_VERSION "3.1.2"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1593,12 +1593,19 @@ static void shopInit(void)
     ballStyle = shEq[SC_BOLA];
 }
 
+/* moedas que o jogador ganha se vencer a partida (o HUD mostra esse valor no centro, como o pote do 8 Ball Pool) */
+static int prizeWin(void)
+{
+    if (mode == 0) return tourney ? (tRound == 2 ? 200 : 60) : 25 + 15 * botLevel;
+    return 15;
+}
+
 /* moedas no fim da partida */
 static void shopAward(int w)
 {
     int e;
     if (mode == 0) {
-        if (w == 0) e = tourney ? (tRound == 2 ? 200 : 60) : 25 + 15 * botLevel;
+        if (w == 0) e = prizeWin();
         else e = tourney ? 10 : 8;
     } else e = 15;
     shLastEarn = e;
@@ -4199,7 +4206,6 @@ static void drawPlayerPanel(int pl)
     const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
                      (grp[pl] < 0 ? (gmode == GM_RACE ? raceTxt(pl) : "MESA ABERTA") : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
     u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);
-    u64 edge = act ? COL(255,215,60) : (pl == 0 ? COL(50,78,120) : COL(120,58,62));
     float sp = (c1 - c0 - 14.0f) / (float)(slots - 1), bx0 = c0 + 7.0f, tx = c0;
     if (sp > 20.0f) sp = 20.0f;
 
@@ -4208,8 +4214,17 @@ static void drawPlayerPanel(int pl)
     if (act) rect(x1 + 4, y1 + 1, x2 - 4, y1 + 3, CA(255, 225, 120, 0x50));        /* brilho de quem joga */
 
     /* retrato quadrado, chanfrado, com luz e filete embaixo */
-    cham(ax1 - 1.5f, ay1 - 1.5f, ax2 + 1.5f, ay2 + 1.5f, 4.0f, edge);
-    cham(ax1, ay1, ax2, ay2, 3.0f, pl == 0 ? COL(40,78,128) : COL(128,52,54));
+    {   /* moldura dourada (quem joga brilha mais; o outro fica com o ouro mais fosco) */
+        u64 g0 = act ? COL(112,72,8) : COL(58,44,18), g1 = act ? COL(228,174,46) : COL(148,116,44), g2 = act ? COL(255,234,150) : COL(190,164,100);
+        cham(ax1 - 2.5f, ay1 - 2.5f, ax2 + 2.5f, ay2 + 2.5f, 4.5f, g0);
+        cham(ax1 - 2.0f, ay1 - 2.0f, ax2 + 2.0f, ay2 + 2.0f, 4.0f, g1);
+        rect(ax1 + 1.0f, ay1 - 2.0f, ax2 - 1.0f, ay1 - 1.0f, g2);                 /* brilho no topo */
+        rect(ax1 - 2.0f, ay1 + 3.0f, ax1 - 1.0f, ay2 - 3.0f, g2);                 /* e no lado esquerdo */
+        cham(ax1 - 0.8f, ay1 - 0.8f, ax2 + 0.8f, ay2 + 0.8f, 3.0f, g0);          /* filete escuro por dentro */
+        cham(ax1, ay1, ax2, ay2, 3.0f, pl == 0 ? COL(40,78,128) : COL(128,52,54));
+        discN(ax1 - 1.6f, ay1 - 1.6f, 1.5f, g2, 6); discN(ax2 + 1.6f, ay1 - 1.6f, 1.5f, g2, 6);   /* pinos nos cantos */
+        discN(ax1 - 1.6f, ay2 + 1.6f, 1.5f, g2, 6); discN(ax2 + 1.6f, ay2 + 1.6f, 1.5f, g2, 6);
+    }
     discN(acx, ay1 + 16.0f, 16.0f, CA(255, 255, 255, 0x0c), 14);
     drawChar(charSel[pl], acx, ay1 + 26.0f, 0.36f, 0, menuT, 0);
     rect(ax1 + 3.0f, ay2 - 2.0f, ax2 - 3.0f, ay2, side);
@@ -4279,27 +4294,44 @@ static void drawPlayerPanel(int pl)
     }
 }
 
-/* placar de vitorias (centro do topo): bloco central maior, o numero de cada jogador na cor dele */
+/* pilha de moedas douradas (como o pote do 8 Ball Pool) */
+static void coinStack(float cx, float cy)
+{
+    static const float ox[3] = { -3.5f, 3.5f, 0.0f }, oy[3] = { 3.0f, 3.0f, -2.0f };
+    int k;
+    for (k = 0; k < 3; k++) {
+        float x = cx + ox[k], y = cy + oy[k];
+        cham(x - 4.5f, y - 2.5f, x + 4.5f, y + 3.5f, 1.8f, COL(116,74,8));        /* lateral */
+        cham(x - 4.5f, y - 3.5f, x + 4.5f, y + 1.5f, 1.8f, COL(236,184,48));      /* face */
+        rect(x - 2.5f, y - 2.5f, x + 2.5f, y - 1.5f, COL(255,238,160));           /* brilho */
+    }
+}
+
+/* placar de vitorias (centro do topo): caixa dourada, o numero de cada jogador na cor dele e o premio em moedas embaixo */
 static void drawScoreBoard(void)
 {
     int *w = mode == 0 ? winsBot : winsVs;
     char buf[16];
     float s;
-    hbox(290, 4, 350, 48, tourney ? CA(255, 215, 60, 0x60) : CA(120, 128, 150, 0x50), CA(8, 12, 22, 0x70));
-    rect(300, 5, 340, 7, tourney ? CA(255, 215, 60, 0x50) : CA(255, 255, 255, 0x20));
+    hbox(290, 4, 350, 48, tourney ? CA(255, 215, 60, 0x90) : CA(226, 172, 44, 0x90), CA(8, 12, 22, 0x78));
+    frameR(293, 7, 347, 45, 1.0f, CA(226, 172, 44, 0x38));
+    rect(300, 5, 340, 7, tourney ? CA(255, 215, 60, 0x50) : CA(255, 235, 150, 0x30));
     if (tourney) {                                       /* torneio: mostra a fase em vez do placar */
         const char *rn = tRound == 0 ? "QUARTAS" : (tRound == 1 ? "SEMI" : "FINAL");
         text(320 - tw(0.26f, "TORNEIO") * 0.5f, 11, 0.26f, COL(255,215,70), "TORNEIO");
         text(320 - tw(0.34f, rn) * 0.5f, 27, 0.34f, COL(255,235,110), rn);
         return;
     }
-    text(320 - tw(0.24f, "PLACAR") * 0.5f, 10, 0.24f, COL(150,158,175), "PLACAR");
-    s = (w[0] > 9 || w[1] > 9) ? 0.42f : 0.56f;
+    s = (w[0] > 9 || w[1] > 9) ? 0.36f : 0.46f;
     sprintf(buf, "%d", w[0] > 99 ? 99 : w[0]);
-    text(320 - 8 - tw(s, buf), 25, s, COL(120,175,255), buf);
-    text(320 - tw(s, ":") * 0.5f, 24, s, COL(150,158,175), ":");
+    text(320 - 8 - tw(s, buf), 10, s, COL(120,175,255), buf);
+    text(320 - tw(s, ":") * 0.5f, 9, s, COL(150,158,175), ":");
     sprintf(buf, "%d", w[1] > 99 ? 99 : w[1]);
-    text(320 + 8, 25, s, COL(255,125,120), buf);
+    text(320 + 8, 10, s, COL(255,125,120), buf);
+    rect(298, 28, 342, 29, CA(226, 172, 44, 0x40));                 /* divisoria */
+    coinStack(303.0f, 37.0f);
+    sprintf(buf, "+%d", prizeWin());
+    text(314, 33, 0.28f, COL(255,215,70), buf);                    /* premio de quem vencer */
 }
 
 /* texto que encolhe para caber em maxw pixels */
@@ -6690,7 +6722,7 @@ static void drawMenuScreen(void)
     {
         static const char *BUL[6][3] = {
             { "A AVENTURA CHEGA EM BREVE", "PERSONAGENS, MESAS E TACOS", "UMA CAMPANHA CONTRA RIVAIS" },
-            { "CONTRA O BOT OU UM AMIGO", "6 MODOS DE JOGO", "18 PERSONAGENS, 27 MESAS" },
+            { "CONTRA O BOT OU UM AMIGO", "6 MODOS DE JOGO", "18 PERSONAGENS, 28 MESAS" },
             { "MATA-MATA COM 8 JOGADORES", "QUARTAS, SEMI E FINAL", "PERDEU, ESTA FORA!" },
             { "MP3 E WAV DO PEN DRIVE", "ORDEM ALEATORIA", "" },
             { "GIZ, BOLAS E RASTROS", "EFEITOS DE CACAPA", "TITULOS E MOLDURAS" },

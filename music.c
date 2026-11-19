@@ -440,11 +440,13 @@ static int decodeNext(void)                      /* enche pcm[]; 0 = fim da faix
     for (;;) {
         mp3dec_frame_info_t info;
         int samples;
-        if (mp3len - mp3pos < 4096 && !mp3eof) {                 /* reabastece o buffer do arquivo */
-            size_t got;
+        if (mp3len - mp3pos < 8192 && !mp3eof) {                 /* reabastece o buffer do arquivo, em pedacos pequenos (evita uma pausa grande de leitura no USB) */
+            size_t got, room;
             memmove(mp3in, mp3in + mp3pos, mp3len - mp3pos);
             mp3len -= mp3pos; mp3pos = 0;
-            got = fread(mp3in + mp3len, 1, sizeof(mp3in) - mp3len, fp);
+            room = sizeof(mp3in) - mp3len;
+            if (room > 4096) room = 4096;
+            got = fread(mp3in + mp3len, 1, room, fp);
             if (got == 0) mp3eof = 1;
             mp3len += (int)got;
         }
