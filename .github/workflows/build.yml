@@ -17,5 +17,5 @@ jobs:
         run: make
       - uses: actions/upload-artifact@v4
         with:
-          name: pool8
-          path: pool8.elf
+          name: 8 Ball Reis
+          path: 8 Ball Reis.elf
