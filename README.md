@@ -3,18 +3,18 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.9.0
+- Versão: 3.0.0
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
 - **Faixa de título** dourada no topo, com brilho que corre e enfeites nos lados
 - **Rodapé com os botões** do controle (X, O, START, SELECT, direcional, L1/R1) e o que cada um faz
-- **Menu inicial**: cartões com ícone para cada modo (JOGAR, TORNEIO, PLAYER DE MÚSICAS, OPÇÕES) e um **painel de detalhes** ao lado, que mostra o que tem em cada modo (e quantas músicas foram encontradas)
+- **Menu inicial**: cartões com ícone para cada modo (JOGAR, TORNEIO, PLAYER DE MÚSICAS, LOJA, OPÇÕES) e um **painel de detalhes** ao lado, que mostra o que tem em cada modo (e quantas músicas foram encontradas)
 - **Configurar partida / torneio**: barra de 4 etapas com bolinhas numeradas (etapa atual em dourado, concluídas em verde)
 - **Opções** em grupos (**AUDIO**, **VISUAL**, **SOBRE**): chaves liga/desliga, volume em barras e uma caixa com a descrição da opção selecionada
 
 ## Menu inicial (animado)
-- MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS e **OPÇÕES**
+- MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS, **LOJA** e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida**, agora em **4 etapas** (barra no topo): **1 Partida** (adversário, tempo ou dificuldade, modo), **2 Personagens**, **3 Mesa e bolas** e **4 Bola branca e guia**. Cima/Baixo escolhe, Esq/Dir muda, **X ou START em "PROXIMA ETAPA"** avança, **O** volta uma etapa (na primeira, volta ao menu) e **L1/R1** trocam de etapa. A última etapa (Bola branca e guia) tem **INICIAR PARTIDA**. Cada etapa mostra uma prévia (personagens com o taco e a mesa de cada um, mesa, bola branca e linha guia). Detalhes de cada opção:
@@ -258,6 +258,19 @@ O jogo toca as suas músicas enquanto você joga (toca sozinho ao abrir, em orde
 - START → **Player de músicas**: CIMA/BAIXO escolhe, X toca, QUADRADO pausa/continua, L1/R1 faixa anterior/próxima, ESQ/DIR volume, TRIÂNGULO procura de novo
 - Ao trocar de faixa aparece o nome no topo da tela
 - HD interno da PS2 e rede (SMB) ainda não são lidos
+
+## Loja (novo na 3.0)
+No menu inicial, **LOJA** gasta as **moedas** ganhas nas partidas em itens de visual (nenhum dá vantagem no jogo). Esq/Dir ou L1/R1 trocam de aba, Cima/Baixo escolhe o item, **X** compra e equipa (ou só equipa, se já comprou), **O** volta. Cada item tem uma prévia animada ao lado.
+- **Moedas**: contra o BOT vence = 25 + 15 por nível de dificuldade (derrota = 8); torneio: 60 por vitória, **200 pelo título** (derrota = 10); 2 jogadores: 15 para a partida. O ganho aparece na tela de fim de jogo (`shopAward` no `main.c`)
+- **GIZ** (6): cor do cubo e da poeira ao passar o giz: Azul (padrão), Verde, Rosa, Dourado e Roxo Mágico (com faíscas) e Arco-íris (muda de cor)
+- **BOLAS** (5): Clássicas, **Caveira**, **Planetas**, **Frutas** e **Brilho no escuro**. Não valem na Sinuca Brasileira (bolas lisas)
+- **RASTRO** (5): traço colorido atrás das bolas que rolam: Fogo, Gelo, Neon Verde e Arco-íris
+- **CAÇAPA** (4): efeito quando uma bola cai: **Confete**, **Fogo** ou **Raio**
+- **TÍTULOS** (6): apelido sob o nome do jogador 1 no placar (Novato, Tubarão, Mestre das Caçapas, **Rei da Sinuca**, Lenda)
+- **MOLDURAS** (6): borda no painel do jogador 1: Dourada, Neon Azul, Fogo, Gelo e Arco-íris
+- **Save**: moedas, itens comprados e equipados ficam no **memory card 1** (pasta `8BALLREIS`, arquivo `loja.sav`). Sem cartão a loja funciona, mas o progresso não é salvo
+- **Makefile**: o save usa a `libmc`, então acrescente **`-lmc`** às bibliotecas. Para desligar o save, defina `USE_MEMCARD 0` no `main.c`
+- Os preços e itens ficam nas tabelas `SH_IT` / `SH_N` no `main.c`
 
 ## Compilar
 ```
