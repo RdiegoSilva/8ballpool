@@ -16,10 +16,12 @@
 #include <dmaKit.h>
 #include <libpad.h>
 #ifndef USE_MEMCARD
-#define USE_MEMCARD 1   /* 1 = salva moedas e itens da LOJA no memory card 1 (usa o fileio do kernel, sem biblioteca extra); 0 = nao salva */
+#define USE_MEMCARD 1   /* 1 = salva moedas e itens da LOJA no memory card 1 (usa funcoes POSIX em mc0:, sem biblioteca extra); 0 = nao salva */
 #endif
 #if USE_MEMCARD
-#include <fileio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #endif
 #include <math.h>
 #include <stdio.h>
@@ -1521,12 +1523,6 @@ static const ShopItem SH_IT[SH_CATS][SH_MAXI] = {
 };
 
 #if USE_MEMCARD
-#ifndef FIO_O_RDONLY
-#define FIO_O_RDONLY 0x0001
-#define FIO_O_WRONLY 0x0002
-#define FIO_O_CREAT  0x0200
-#define FIO_O_TRUNC  0x0400
-#endif
 #define SH_MAGIC 0x53484C38u
 #define SH_FILE "mc0:8BALLREIS/loja.sav"
 typedef struct { u32 magic; int coins; int own[SH_CATS]; int eq[SH_CATS]; u32 pad; u32 sum; } ShopSave;
@@ -1543,11 +1539,11 @@ static u32 shSum(const ShopSave *sv)
 static int shTryLoad(int merge)
 {
     int fd, r, k;
-    fd = fioOpen(SH_FILE, FIO_O_RDONLY);
+    fd = open(SH_FILE, O_RDONLY);
     if (fd < 0) return 0;
     memset(&shBuf, 0, sizeof(shBuf));
-    r = fioRead(fd, &shBuf, sizeof(shBuf));
-    fioClose(fd);
+    r = (int)read(fd, &shBuf, sizeof(shBuf));
+    close(fd);
     if (r == (int)sizeof(shBuf) && shBuf.magic == SH_MAGIC && shBuf.sum == shSum(&shBuf) && shBuf.coins >= 0) {
         shCoins = (merge ? shCoins : 0) + shBuf.coins; if (shCoins > 999999) shCoins = 999999;
         for (k = 0; k < SH_CATS; k++) {
@@ -1569,11 +1565,11 @@ static void shopSave(void)
     shBuf.magic = SH_MAGIC; shBuf.coins = shCoins;
     for (k = 0; k < SH_CATS; k++) { shBuf.own[k] = shOwn[k]; shBuf.eq[k] = shEq[k]; }
     shBuf.sum = shSum(&shBuf);
-    fioMkdir("mc0:8BALLREIS");                              /* se ja existe, so devolve erro (ignorado) */
-    fd = fioOpen(SH_FILE, FIO_O_WRONLY | FIO_O_CREAT | FIO_O_TRUNC);
+    mkdir("mc0:8BALLREIS", 0777);                              /* se ja existe, so devolve erro (ignorado) */
+    fd = open(SH_FILE, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0) { shSaveFail = 1; return; }
-    r = fioWrite(fd, &shBuf, sizeof(shBuf));
-    fioClose(fd);
+    r = (int)write(fd, &shBuf, sizeof(shBuf));
+    close(fd);
     shSaveFail = (r != (int)sizeof(shBuf));
     if (!shSaveFail) shLoaded = 1;
 #endif
@@ -1587,7 +1583,6 @@ static void shopInit(void)
 #if USE_MEMCARD
     SifLoadModule("rom0:MCMAN", 0, NULL);
     SifLoadModule("rom0:MCSERV", 0, NULL);
-    fioInit();
     if (shTryLoad(0)) shLoaded = 1;
 #endif
     ballStyle = shEq[SC_BOLA];
