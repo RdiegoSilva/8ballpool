@@ -264,7 +264,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "2.8.0"
+#define GAME_VERSION "2.9.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1561,6 +1561,24 @@ static float normAng(float a)
     while (a >  3.14159265f) a -= 6.2831853f;
     while (a < -3.14159265f) a += 6.2831853f;
     return a;
+}
+
+/* inicio da jogada: a mira ja aponta para uma bola sua (a mais perto com caminho livre).
+   Se houver bola do adversario (ou qualquer bola) no caminho de todas, a mira fica como estava */
+static void autoAim(void)
+{
+    int t, best = -1;
+    float bd = 1e9f;
+    if (!b[0].in) return;
+    for (t = 1; t < 16; t++) {
+        float dx, dy, d;
+        if (!b[t].in || t == lockBall || !ownBall(t)) continue;
+        dx = b[t].x - b[0].x; dy = b[t].y - b[0].y; d = sqrtf(dx * dx + dy * dy);
+        if (d < 2 * R || d >= bd) continue;
+        if (!pathClear(b[0].x, b[0].y, b[t].x, b[t].y, t)) continue;
+        bd = d; best = t;
+    }
+    if (best > 0) ang = atan2f(b[best].y - b[0].y, b[best].x - b[0].x);
 }
 
 /* MESTRE: o bot escolhe o taco e o poder conforme a situacao da mesa
@@ -7024,6 +7042,11 @@ int main(int argc, char *argv[])
             break;
         }
 
+        {   /* inicio de cada jogada (vinda do fim da tacada, da bola na mao ou da bola tirada): a mira ja aponta para uma bola sua */
+            static int prevSt = -1;
+            if (state == S_AIM && prevSt != S_AIM && prevSt != S_CUES && prevSt != S_REWIND && !isBot() && !paused) autoAim();
+            prevSt = state;
+        }
         /* tempo por jogada (so no versus): passou o tempo, perde a vez */
         {
             int inTurn = (state == S_AIM || state == S_PLACE || state == S_TAKE || state == S_CUES) && !isBot();   /* torneio: o relogio so corre nas jogadas do jogador */

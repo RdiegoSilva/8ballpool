@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.8.0
+- Versão: 2.9.0
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
@@ -77,6 +77,9 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - Entre as partidas aparece o **chaveamento**: X joga a próxima partida, SELECT sai do torneio. As partidas dos outros jogadores são decididas automaticamente
 - No torneio não há revanche nem reiniciar partida; o placar do topo mostra a fase (QUARTAS, SEMI ou FINAL)
 - Ganhou a final: tela de **CAMPEÃO** com troféu
+
+## Mira automática no início da jogada (novo)
+Quando a sua vez começa (depois da tacada do adversário, da bola na mão ou de tirar uma bola), a mira **já aponta para a bola sua mais perto que tenha caminho livre**. Se houver bola do adversário (ou outra bola) na frente de todas, a mira fica como estava. Você continua podendo girar a mira normalmente.
 
 ## Sorteio (novo)
 - Na linha **MESA** a última opção é **ALEATORIA**: a mesa é sorteada ao iniciar a partida
