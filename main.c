@@ -84,8 +84,8 @@ static int tourney, tRound, tOpp, tPM, tRes, tChamp;   /* tRes: 0 antes da parti
 static int tSlot[4][8], tChar[8];                      /* tSlot[rodada][posicao] = competidor (0 = voce, -1 = ainda nao definido) */
 static char tName[8][12];
 /* habilidades dos tacos de personagem (O na mira usa a habilidade; recarrega em AB_COOL tacadas) */
-enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, AB_POLICIAL, AB_PRENDER, AB_SIRENE, NAB };
-static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "CHAPULIN", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE" };
+enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, AB_POLICIAL, AB_PRENDER, AB_SIRENE, AB_CORNETA, AB_CHIQUI, AB_BIONICA, NAB };
+static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "CHAPOLIN", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE", "CORNETA", "CHIQUITOLINA", "MARRETA BIONICA" };
 #define AB_COOL 3
 static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
 #define FORGIVE_ON(f) ((f) == 1 || (f) == 4)          /* 1 = PRESENTE (Noel), 4 = NOVA VIDA do Gato (perdoa falta e suicidio e joga de novo) */
@@ -110,6 +110,20 @@ static int copSel, copOpen, copTgt, lockBall, lockOwner, sirenT[2], ghostBall;  
 static float lockX, lockY;
 static const int CP_KIND[2] = { AB_PRENDER, AB_SIRENE };
 static const char *CP_NAME[2] = { "ALGEMAS", "SIRENE" };
+/* CHAPOLIN (ultra lendario): 3 poderes que o jogador escolhe.
+   CORNETA PARALISADORA: uma bola do adversario nao se mexe mais ate o fim da partida (solta so quando e a ultima dele)
+   PASTILHAS DE CHIQUITOLINA: ate o fim da proxima jogada do adversario, as bolas dele ficam menores, mais lentas e a forca dele cai
+   MARRETA BIONICA: nesta tacada as bolas saem mais rapidas e demoram para parar */
+#define CHIQ_R    0.70f                               /* tamanho das bolas do adversario sob a CHIQUITOLINA */
+#define CHIQ_POW  0.75f                               /* forca da tacada do adversario sob a CHIQUITOLINA */
+#define CHIQ_DRAG 1.6f                                /* atrito extra das bolas do adversario (por segundo) */
+#define BION_VEL  1.35f                               /* MARRETA BIONICA: velocidade da branca */
+#define BION_FRIC 0.40f                               /* MARRETA BIONICA: atrito (menor = demora mais para parar) */
+static int chSel, chOpen, cornBall, cornOwner, chiqOn, chiqOwner = -1;
+static float cornX, cornY;
+static const int CH_KIND[3] = { AB_CORNETA, AB_CHIQUI, AB_BIONICA };
+static const char *CH_NAME[3] = { "CORNETA", "CHIQUITOLINA", "MARRETA BIONICA" };
+#define LOCKED(i) ((i) > 0 && ((i) == lockBall || (i) == cornBall))   /* bola presa (algemas) ou paralisada (corneta): nada a move */
 #define TAB_CEM 25                                    /* indice da mesa CEMITERIO em TABLES */
 static float tabPock(void) { return ((tourney && tTable >= 0) ? tTable : tableSel) == TAB_CEM ? 1.14f : 1.0f; }   /* cemiterio: cacapas um pouco mais largas */
 static int grinchPend;                                /* poder que o Grinch tem agora (0 = ainda nao sorteado); aparece na tela antes de usar */
@@ -297,6 +311,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
 /* dificuldade do BOT: facil / medio / dificil */
 #define NLEVELS 5
 static int botLevel = 1, menuT;
+static int rplMode = 0;                                                /* REPLAY: 0 = so no fim da partida, 1 = toda jogada, 2 = desligado */
 static int sndOn = 1, musOn = 1, volLvl = 8, fxOn = 1, tipsOn = 1;   /* opcoes do menu de pausa */
 static int sfxMute;                                                    /* > 0 durante simulacoes (HACK): sem som */
 #define SFX(id, v) do { if (sndOn && !sfxMute) sfxPlay((id), (v)); } while (0)   /* efeito sonoro (opcao SOM) */
@@ -744,7 +759,7 @@ static void drawFall(int i)
 #define REP_SLOW 0.45f                                /* velocidade perto da cacapa (1.0 = normal) */
 typedef struct { float x[16], y[16], z[16], fX[16], fY[16], M[16][9]; unsigned char in[16], fT[16], fP[16]; } RepFrame;
 static RepFrame repBuf[REPN];
-static int repFrame, repPotF = -1, repPotBall, repA, repB, repT, repHold, repSfx;
+static int repFrame, repPotF = -1, repPotBall, repA, repB, repT, repHold, repSfx, repRet, repSaveMsgT;
 static float repPos;
 static Ball repSaveB[16];
 static int repSaveFT[16], repSaveFP[16], repSavePk[16];
@@ -776,39 +791,48 @@ static void repApply(int fi)
     }
 }
 
-static void repMaybeStart(void)                       /* chamar logo depois de resolve(): se acabou a partida, vai para o replay */
+static void repMaybeStart(void)                       /* chamar logo depois de resolve(): fim de partida ou (opcao) toda jogada */
 {
-    int lo;
-    if (state != S_OVER || repPotF < 0 || repFrame < 2) return;
-    repB = repPotF + REP_POST; if (repB > repFrame - 1) repB = repFrame - 1;
-    repA = repPotF - REP_PRE;  lo = repFrame - REPN; if (lo < 0) lo = 0; if (repA < lo) repA = lo;
+    int lo, over = (state == S_OVER);
+    if (repFrame < 2 || rplMode == 2) return;            /* sem quadros gravados ou replay desligado */
+    if (!over && (rplMode != 1 || (state != S_AIM && state != S_PLACE))) return;
+    lo = repFrame - REPN; if (lo < 0) lo = 0;
+    if (over) {                                          /* fim de partida: instantes ate a ultima bola cair */
+        if (repPotF < 0) return;
+        repB = repPotF + REP_POST; if (repB > repFrame - 1) repB = repFrame - 1;
+        repA = repPotF - REP_PRE;  if (repA < lo) repA = lo;
+    } else {                                             /* toda jogada: a tacada inteira */
+        repA = lo; repB = repFrame - 1;
+    }
     if (repB - repA < 20) return;
     memcpy(repSaveB, b, sizeof b); memcpy(repSaveFT, fallT, sizeof fallT); memcpy(repSaveFP, fallP, sizeof fallP);
     memcpy(repSavePk, pocketed, sizeof pocketed); memcpy(repSaveFX, fallX, sizeof fallX); memcpy(repSaveFY, fallY, sizeof fallY);
     memcpy(repSaveM, ballM, sizeof ballM);
+    repRet = state; repSaveMsgT = msgTimer;
     repPos = (float)repA; repT = 0; repHold = 0; repSfx = 0;
     msgTimer = 0;
     state = S_REPLAY;
 }
 
-static void repEnd(void)                              /* volta para a tela de fim de jogo */
+static void repEnd(void)                              /* volta para o estado de antes do replay (fim de jogo ou mira) */
 {
     memcpy(b, repSaveB, sizeof b); memcpy(fallT, repSaveFT, sizeof fallT); memcpy(fallP, repSaveFP, sizeof fallP);
     memcpy(pocketed, repSavePk, sizeof pocketed); memcpy(fallX, repSaveFX, sizeof fallX); memcpy(fallY, repSaveFY, sizeof fallY);
     memcpy(ballM, repSaveM, sizeof ballM);
-    overT = 0; state = S_OVER;
+    if (repRet == S_OVER) overT = 0; else msgTimer = repSaveMsgT;
+    state = repRet;
 }
 
-static void repUpdate(int pressed)                    /* 1 passo do replay (estado S_REPLAY) */
+static void repUpdate(int pressed)                    /* 1 passo do replay (estado S_REPLAY): repete ate apertar X */
 {
-    int fi, near;
+    int fi, near, hasPot = (repPotF >= repA && repPotF <= repB);
     repT++;
     if (repT > 12 && (pressed & (PAD_CROSS | PAD_START))) { repEnd(); return; }      /* X pula o replay */
     fi = (int)repPos; if (fi > repB) fi = repB;
     repApply(fi);
-    if (!repSfx && fi >= repPotF) { repSfx = 1; SFX(SFX_POCKET, 90); }
-    near = fi >= repPotF - 25 && fi <= repPotF + 25;
-    if (fi >= repB) { if (++repHold > 30) repEnd(); }
+    if (hasPot && !repSfx && fi >= repPotF) { repSfx = 1; SFX(SFX_POCKET, 90); }
+    near = hasPot && fi >= repPotF - 25 && fi <= repPotF + 25;
+    if (fi >= repB) { if (++repHold > 30) { repPos = (float)repA; repHold = 0; repSfx = 0; } }   /* chegou no fim: recomeca */
     else repPos += near ? REP_SLOW : 1.0f;
 }
 
@@ -821,6 +845,16 @@ static int countGroup(int gr)
     for (i = 1; i < 16; i++) if (b[i].in && ballGroup(i) == gr) n++;
     return n;
 }
+
+static int plBall(int pl, int k)                      /* k e uma bola do jogador pl? (mesa aberta: todas, menos a 8) */
+{
+    int gr = grp[pl];
+    if (k <= 0) return 0;
+    if (gr < 0 || gr > 1) return k != 8;
+    return countGroup(gr) > 0 ? ballGroup(k) == gr : k == 8;
+}
+static int chiqBall(int k) { return chiqOn && chiqOwner >= 0 && plBall(1 - chiqOwner, k); }   /* CHIQUITOLINA: bola do adversario do Chapolin */
+static float ballRad(int k) { return chiqBall(k) ? R * CHIQ_R : R; }
 
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
@@ -930,7 +964,7 @@ static void newGame(int m)
     blood[0] = blood[1] = 0; bloodShot = 0; batOn = 0; batWait = 0;
     graveSel = 0; graveOpen = 0; graveOn = 0; buryBall = 0; buryT = 0; potN = 0; memset(graveIn, 0, sizeof(graveIn));
     raceCnt[0] = raceCnt[1] = 0;
-    copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0;
+    copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0; chSel = 0; chOpen = 0; cornBall = 0; cornOwner = 0; chiqOn = 0; chiqOwner = -1;
     turnReset = 1; turnCur = -1;
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
@@ -1040,7 +1074,7 @@ static const char *graveWhy(int k)                    /* NULL = o poder pode ser
 static int copCand(int k)
 {
     int og = grp[1 - cur];
-    if (k < 1 || k > 15 || !b[k].in) return 0;
+    if (k < 1 || k > 15 || !b[k].in || k == cornBall) return 0;
     if (og < 0 && grp[cur] >= 0 && grp[cur] < 2) og = 1 - grp[cur];
     if (og < 0) return k != 8;
     return countGroup(og) > 0 ? ballGroup(k) == og : k == 8;
@@ -1069,11 +1103,41 @@ static const char *copWhy(int k)                      /* NULL = o poder pode ser
     if (k == 0 && copBest() < 0) return "ALGEMAS: NENHUMA BOLA DO ADVERSARIO NA MESA";
     return NULL;
 }
+/* CHAPOLIN (corneta): bola do adversario que pode ser paralisada (nunca a 8; nunca a ultima da cor dele, que ficaria impossivel de encacapar) */
+static int cornCand(int k) { return copCand(k) && k != 8 && !(ballGroup(k) < 2 && countGroup(ballGroup(k)) <= 1); }
+static int cornNext(int from, int dir)
+{
+    int n, k = from;
+    for (n = 0; n < 16; n++) { k = (k + dir + 16) % 16; if (cornCand(k)) return k; }
+    return -1;
+}
+static int cornBest(void)                             /* alvo inicial: a bola do adversario mais perto de uma cacapa */
+{
+    int k, p, best = -1;
+    float bd = 1e9f;
+    for (k = 1; k < 16; k++) {
+        if (!cornCand(k)) continue;
+        for (p = 0; p < 6; p++) {
+            float dx = b[k].x - PX[p], dy = b[k].y - PY[p], d2 = dx * dx + dy * dy;
+            if (d2 < bd) { bd = d2; best = k; }
+        }
+    }
+    return best;
+}
+static const char *chWhy(int k)                       /* NULL = o poder pode ser usado agora; senao o motivo */
+{
+    if (k == 0) {
+        if (cornBall > 0 && b[cornBall].in) return "CORNETA: JA HA UMA BOLA PARALISADA";
+        if (cornBest() < 0) return "CORNETA: NENHUMA BOLA DO ADVERSARIO PODE SER PARALISADA";
+    }
+    return NULL;
+}
 static const char *abLabel(int ab)                    /* nome mostrado na tela (Grinch: poder sorteado; Coveiro: poder escolhido) */
 {
     if (ab == AB_GRINCH) return grinchName();
     if (ab == AB_COVEIRO && graveOpen) return GV_NAME[graveSel];
     if (ab == AB_POLICIAL && copOpen) return CP_NAME[copSel];
+    if (ab == AB_MARRETA && chOpen) return CH_NAME[chSel];
     return AB_NAME[ab];
 }
 
@@ -1106,6 +1170,7 @@ static void shoot(float p)
     if (cursedNow && !isBot() && (int)(rnd() % 100) < CURSE_FAIL) {   /* MALDICAO: a forca falha (marcou 100, sai 10) */
         p *= 0.10f; setmsg("MALDICAO! A FORCA FALHOU");
     }
+    if (chiqOn && cur != chiqOwner) p *= CHIQ_POW;    /* CHIQUITOLINA: o adversario do Chapolin bate mais fraco */
     b[0].vx = cosf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     b[0].vy = sinf(a) * p * MAXV * cuePowMul(hitCue) * pm;
     SFX(SFX_HIT, 35 + (int)(p * 65.0f));                 /* toc do taco na bola */
@@ -1140,10 +1205,19 @@ static void shoot(float p)
             abilKind = CP_KIND[copSel];
             sprintf(tb, "POLICIAL USOU: %s!", CP_NAME[copSel]); setmsg(tb);
         }
+        if (abilKind == AB_MARRETA) {                     /* CHAPOLIN: vira o poder escolhido */
+            char tb[64];
+            abilKind = CH_KIND[chSel];
+            sprintf(tb, "CHAPOLIN USOU: %s!", CH_NAME[chSel]); setmsg(tb);
+        }
         switch (abilKind) {
         case AB_COVA:     { int q; memset(graveIn, 0, sizeof(graveIn)); for (q = 1; q < 16; q++) { graveOX[q] = b[q].x; graveOY[q] = b[q].y; } fxX = TCX; fxY = TCY; } break;
         case AB_RESSUS:   { int id = graveFindRevive(); if (id > 0) { respot(id, TCX, TCY); ghostBall = id; fxX = b[id].x; fxY = b[id].y; } } break;   /* a ressuscitada e um fantasma: sem fisica ate o fim desta jogada */
         case AB_PRENDER:  if (copTgt > 0 && b[copTgt].in) { lockBall = copTgt; lockOwner = cur; lockX = b[copTgt].x; lockY = b[copTgt].y; fxX = lockX; fxY = lockY; } break;   /* POLICIAL: prende a bola */
+        case AB_CORNETA:  if (copTgt > 0 && b[copTgt].in && cornCand(copTgt)) { cornBall = copTgt; cornOwner = cur; cornX = b[copTgt].x; cornY = b[copTgt].y; fxX = cornX; fxY = cornY; }
+                          else { abilCD[cur] = 0; abilKind = AB_NONE; setmsg("CORNETA: NENHUMA BOLA VALIDA"); } break;   /* CHAPOLIN: paralisa a bola ate o fim da partida */
+        case AB_CHIQUI:   chiqOn = 1; chiqOwner = cur; fxX = TCX; fxY = TCY; break;                                   /* CHAPOLIN: bolas do adversario menores e lentas */
+        case AB_BIONICA:  b[0].vx *= BION_VEL; b[0].vy *= BION_VEL; fricMul = BION_FRIC; break;                        /* CHAPOLIN: tudo mais rapido, demora para parar */
         case AB_SIRENE:   sirenT[1 - cur] = 1; fxX = TCX; fxY = TCY; break;                                                                        /* POLICIAL: o adversario joga sem linha guia */
         case AB_TIRO:     b[0].vx *= 1.5f; b[0].vy *= 1.5f; spinCur = 0.0f; spinVCur = 0.0f; jumpArm = 0; break;
         case AB_CORTE:    b[0].vx *= 1.2f; b[0].vy *= 1.2f; break;
@@ -1158,7 +1232,7 @@ static void shoot(float p)
         default: break;
         }
     }
-    abilArm = 0; graveOpen = 0; copOpen = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
+    abilArm = 0; graveOpen = 0; copOpen = 0; chOpen = 0; grinchPend = 0;                        /* GRINCH: usando ou nao, o proximo poder e sorteado de novo */
     if (jumpArm && !isBot()) {                        /* pulo: a branca sobe e passa por cima das outras bolas */
         b[0].vz = (150.0f + 90.0f * p) * cueJumpMul(hitCue);
         b[0].z = 0.01f; b[0].vx *= 0.9f; b[0].vy *= 0.9f;
@@ -1222,7 +1296,7 @@ static void abilOnFirstHit(int j)
             }
             if (bcs < ENTERRO_COS) ok = 0;
         }
-        if (j == lockBall) { ok = 0; setmsg("BOLA PRESA: O ENTERRO NAO FUNCIONA"); }
+        if (LOCKED(j)) { ok = 0; setmsg("BOLA PRESA: O ENTERRO NAO FUNCIONA"); }
         else if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
         else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
         else if (!ok) setmsg("ENTERRO: SEM CACAPA NA FRENTE DA BOLA");
@@ -1235,10 +1309,6 @@ static void abilOnFirstHit(int j)
                 if (nl > 0.01f) { b[j].vx = nx2 / nl * sp; b[j].vy = ny2 / nl * sp; }
             }
         } else abilCD[cur] = 0;                       /* nao funcionou: devolve a recarga */
-    }
-    else if (abilKind == AB_MARRETA) {                /* CHAPULIN: a marretada faz a bola alvo dar um PULO DE GAFANHOTO e passar por cima das outras bolas */
-        if (j != lockBall) { b[j].vz = CHAP_HOP; b[j].z = 0.01f; }
-        abilFx = 36; fxX = b[j].x; fxY = b[j].y;
     }
     else if (abilKind == AB_CORTE) { b[0].vx = b[0].vy = 0; abilFx = 36; fxX = b[0].x; fxY = b[0].y; }
     else if (abilKind == AB_FOGO) {
@@ -1258,6 +1328,9 @@ static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     float tpk = tabPock();
+    if (cornBall > 0 && b[cornBall].in) {              /* CHAPOLIN: a bola paralisada nao se mexe de jeito nenhum ate o fim da partida */
+        b[cornBall].x = cornX; b[cornBall].y = cornY; b[cornBall].vx = b[cornBall].vy = 0.0f; b[cornBall].vz = 0.0f; b[cornBall].z = 0.0f;
+    }
     if (lockBall > 0 && b[lockBall].in) {              /* POLICIAL: a bola presa nao se mexe de jeito nenhum (nenhum poder a move) */
         b[lockBall].x = lockX; b[lockBall].y = lockY; b[lockBall].vx = b[lockBall].vy = 0.0f; b[lockBall].vz = 0.0f; b[lockBall].z = 0.0f;
     }
@@ -1320,7 +1393,7 @@ static int stepPhysics(float dt)
         int inMouth = 0, air, wl = 0;
         float mdx = 0.0f, mdy = 0.0f, mpr = 0.0f, mpx = 0.0f, mpy = 0.0f;
         if (!b[i].in) continue;
-        if (lockBall > 0 && i == lockBall) { b[i].vx = b[i].vy = 0.0f; continue; }     /* presa: sem movimento, sem cacapa */
+        if (LOCKED(i)) { b[i].vx = b[i].vy = 0.0f; continue; }     /* presa / paralisada: sem movimento, sem cacapa */
         if (b[i].z > 0.0f) {                       /* pulo: sobe e desce sem atrito */
             b[i].vz -= JUMP_G * dt; b[i].z += b[i].vz * dt;
             if (b[i].z <= 0.0f) {
@@ -1392,17 +1465,19 @@ static int stepPhysics(float dt)
     for (i = 0; i < 16; i++) {
         if (!b[i].in) continue;
         for (j = i + 1; j < 16; j++) {
-            float dx, dy, d2, d, nx, ny, rv, ov;
+            float dx, dy, d2, d, nx, ny, rv, ov, rs;
             if (!b[j].in) continue;
             if (b[i].z > JUMP_CLEAR || b[j].z > JUMP_CLEAR) continue;      /* pulando (branca ou bola do CHAPULIN): passa por cima das outras */
             if (ghostBall > 0 && (i == ghostBall || j == ghostBall)) continue;   /* RESSUSCITAR: a bola que voltou e um fantasma (sem fisica) */
             dx = b[j].x - b[i].x; dy = b[j].y - b[i].y; d2 = dx*dx + dy*dy;
-            if (d2 >= 4*R*R || d2 < 0.0001f) continue;
+            rs = ballRad(i) + ballRad(j);                  /* CHIQUITOLINA: bolas menores */
+            if (d2 >= rs*rs || d2 < 0.0001f) continue;
             d = sqrtf(d2); nx = dx / d; ny = dy / d;
-            if (lockBall > 0 && (i == lockBall || j == lockBall)) {          /* POLICIAL: a bola presa e como uma parede - quem bate nela rebate e ela nao cede */
-                int mv = (i == lockBall) ? j : i, lk = (i == lockBall) ? i : j;
-                float mnx = (i == lockBall) ? nx : -nx, mny = (i == lockBall) ? ny : -ny, vn;
-                b[mv].x = b[lk].x + mnx * 2 * R; b[mv].y = b[lk].y + mny * 2 * R;
+            if (LOCKED(i) || LOCKED(j)) {          /* POLICIAL / CHAPOLIN: a bola presa ou paralisada e como uma parede - quem bate nela rebate e ela nao cede */
+                int mv = LOCKED(i) ? j : i, lk = LOCKED(i) ? i : j;
+                float mnx = LOCKED(i) ? nx : -nx, mny = LOCKED(i) ? ny : -ny, vn;
+                if (LOCKED(mv)) continue;
+                b[mv].x = b[lk].x + mnx * rs; b[mv].y = b[lk].y + mny * rs;
                 vn = b[mv].vx * mnx + b[mv].vy * mny;
                 if (vn < 0.0f) {
                     if (-vn > 8.0f) SFX(SFX_BALL, 15 + (int)(-vn * 0.16f));
@@ -1411,7 +1486,7 @@ static int stepPhysics(float dt)
                 }
                 continue;
             }
-            ov = (2*R - d) * 0.5f;
+            ov = (rs - d) * 0.5f;
             b[i].x -= nx*ov; b[i].y -= ny*ov; b[j].x += nx*ov; b[j].y += ny*ov;
             rv = (b[i].vx - b[j].vx) * nx + (b[i].vy - b[j].vy) * ny;
             if (rv > 0) {
@@ -1478,6 +1553,7 @@ static int stepPhysics(float dt)
         if (sp < 9.0f) { b[i].vx = b[i].vy = 0; continue; }
         s2 = sp * (1.0f - FRIC_K * dt * fricMul) - FRIC_C * dt * fricMul;
         if (sp < 40.0f) s2 -= 30.0f * dt * fricMul;     /* freio suave no final */
+        if (chiqBall(i)) s2 -= sp * CHIQ_DRAG * dt;      /* CHIQUITOLINA: as bolas do adversario perdem velocidade mais rapido */
         if (s2 < 0) s2 = 0;
         b[i].vx *= s2 / sp; b[i].vy *= s2 / sp;
         if (s2 > 0) moving = 1;
@@ -1567,7 +1643,7 @@ static void endTurn(int foul, int ownPocket)
     }
     bloodShot = 0;
     botTimer = 0; botPlanned = 0; botCue = 0;
-    abilArm = 0; graveOpen = 0; copOpen = 0; hackOn = 0;
+    abilArm = 0; graveOpen = 0; copOpen = 0; chOpen = 0; hackOn = 0;
     if (foul && FORGIVE_ON(abilForgive)) {               /* PRESENTE do Noel / NOVA VIDA do Gato: perdoa a falta */
         foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
         if (!b[0].in) {
@@ -1873,6 +1949,12 @@ static void resolve(void)
     }
     if (lockBall > 0 && cur != lockOwner) lockBall = 0;     /* POLICIAL: a prisao dura ate o fim da jogada do adversario */
     sirenT[cur] = 0;                                  /* POLICIAL: a sirene vale so para esta jogada */
+    if (chiqOn && cur != chiqOwner) chiqOn = 0;       /* CHAPOLIN: a chiquitolina dura ate o fim da jogada do adversario */
+    if (cornBall > 0) {                               /* CHAPOLIN: a corneta vale ate o fim da partida; so solta a ultima bola do adversario (senao ele nunca poderia vencer) */
+        int cg = ballGroup(cornBall);
+        if (!b[cornBall].in) cornBall = 0;
+        else if (cg >= 0 && cg < 2 && countGroup(cg) <= 1) { cornBall = 0; setmsg("CORNETA ACABOU: ULTIMA BOLA LIBERADA"); }
+    }
     ghostSettle(ghostBall); ghostBall = 0;            /* COVEIRO: a ressuscitada volta ao normal (so na proxima rodada ela tem fisica) */
     if (gmode == GM_BR) { resolveBR(); return; }
 
@@ -1949,7 +2031,7 @@ static void autoAim(void)
     if (!b[0].in) return;
     for (t = 1; t < 16; t++) {
         float dx, dy, d;
-        if (!b[t].in || t == lockBall || !ownBall(t)) continue;
+        if (!b[t].in || LOCKED(t) || !ownBall(t)) continue;
         dx = b[t].x - b[0].x; dy = b[t].y - b[0].y; d = sqrtf(dx * dx + dy * dy);
         if (d < 2 * R) continue;
         d = fabsf(dy) / d + d * 0.00001f;                /* quanto mais reta (no meio), melhor; empate: a mais perto */
@@ -1966,7 +2048,7 @@ static void botKit(int found, int tgt, float dist, float cc)
 {
     int ab = AB_NONE, k, p, r = (int)(rnd() % 100), hard;
     float nd = 1e9f;
-    botCue = 0; abilArm = 0; graveOpen = 0; copOpen = 0;
+    botCue = 0; abilArm = 0; graveOpen = 0; copOpen = 0; chOpen = 0;
     if (!botMaster()) return;
     if (breakShot) { botCue = 1; return; }               /* quebra: taco de POTENCIA */
     if (abilCD[cur] > 0) return;
@@ -2019,7 +2101,7 @@ static void botPlan(void)
 
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
-        if (t == lockBall) continue;                  /* bola presa pelo policial: nao da para encacapar */
+        if (LOCKED(t)) continue;                  /* bola presa pelo policial: nao da para encacapar */
         if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
@@ -4545,6 +4627,21 @@ static void drawHUD(void)
             outlineRect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? (ok ? COL(110,255,140) : COL(255,110,100)) : COL(80,88,100));
             text(x1 + 22.5f - tw(0.2f, SH[k]) * 0.5f, y1 + 4.0f, 0.2f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH[k]);
         }
+    } else if (state == S_AIM && !isBot() && curAb() == AB_MARRETA && abilCD[cur] == 0) {   /* mini seletor do Chapolin */
+        static const char *SH3[3] = { "CORNETA", "CHIQUI.", "BIONICA" };
+        int k;
+        for (k = 0; k < 3; k++) {
+            float x1 = 454.0f + k * 47.0f, y1 = 400.0f;
+            int ok = chWhy(k) == NULL, sel = chOpen && chSel == k;
+            rect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? CA(60, 44, 10, 0x80) : CA(14, 20, 34, 0x70));
+            outlineRect(x1, y1, x1 + 45.0f, y1 + 15.0f, sel ? (ok ? COL(255,214,70) : COL(255,110,100)) : COL(80,88,100));
+            text(x1 + 22.5f - tw(0.2f, SH3[k]) * 0.5f, y1 + 4.0f, 0.2f, ok ? (sel ? COL(255,255,255) : COL(200,210,220)) : COL(100,106,118), SH3[k]);
+        }
+        if (chOpen && chSel == 0 && abilArm) {
+            char tb3[48];
+            sprintf(tb3, "BOLA %d - QUADRADO TROCA O ALVO", copTgt);
+            hudText(454.0f, 388.0f, 0.24f, COL(255,230,60), tb3, 150.0f);
+        }
     } else if (state == S_AIM && !isBot() && curAb() == AB_POLICIAL && abilCD[cur] == 0) {   /* mini seletor do Policial */
         static const char *SH2[2] = { "ALGEMAS", "SIRENE" };
         int k;
@@ -5274,16 +5371,16 @@ static u64 rarCol(int r)
     default: return COL(255,215,70);
     }
 }
-/* ULTRA LENDARIO: Coveiro | LENDARIO: Grinch e Policial | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker e Poseidon |
-   SUPER RARO: Viking, Ninja, Chapolin, Pirata e Gato | RARO: Pinguim, Robo, Alien e Cowboy */
-static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 1, 1, 2, 3, 3, 4, 2, 5, 4 };
+/* ULTRA LENDARIO: Coveiro e Chapolin | LENDARIO: Grinch e Policial | MISTICO: Vampiro, Mago, Papai Noel e Mestre do Tempo | EPICO: Hacker, Poseidon e Gato |
+   SUPER RARO: Viking, Ninja e Pirata | RARO: Pinguim, Robo, Alien e Cowboy */
+static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 2, 5, 2, 3, 3, 4, 2, 5, 4 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 #define NCAT_SEC 8
-static const int CATH[NCAT_SEC] = { 0, 8, 14, 18, 23, 26, 29, 31 };     /* 1a ficha de cada categoria */
+static const int CATH[NCAT_SEC] = { 0, 8, 14, 18, 21, 25, 28, 30 };     /* 1a ficha de cada categoria */
 static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO", "ULTRA LENDARIO" };
 static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
-static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27,   11, 10, 6, 17, 29,   16, 18, 25,   14, 15, 28,   24, 31, 30 };
+static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27,   11, 10, 6,   16, 18, 25, 29,   14, 15, 28,   24, 31,   30, 17 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
 static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
 static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
@@ -5320,7 +5417,7 @@ static void drawCueMenu(void)
         { "AS SUAS BOLAS SAO PUXADAS PARA A CACAPA MAIS PROXIMA", "(FORCA FRACA). MESA ABERTA: TODAS, MENOS A 8." },
         { "AMALDICOA O ADVERSARIO: NA PROXIMA TACADA DELE", "OS BOTOES DE MIRAR FICAM INVERTIDOS E A FORCA FALHA AS VEZES." },
         { "NAO PERDE A VEZ: SE NAO ENCACAPAR, VOCE JOGA DE NOVO.", "PERDOA FALTA E SUICIDIO. SE ENCACAPAR, NAO GASTA." },
-        { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" } };
+        { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" } };
     const CueDef *cd = &CUES[cueMenuSel];
     int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
     char buf[64];
@@ -5397,6 +5494,10 @@ static void drawCueMenu(void)
             textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: CURVA UM POUCO A BOLA ALVO PARA A CACAPA A FRENTE", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
+        } else if (ab == AB_MARRETA) {                           /* 3 poderes, voce escolhe */
+            textFit(236, 311, 0.25f, COL(215,220,232), "CORNETA: PARALISA UMA BOLA DO ADVERSARIO ATE A ULTIMA DELE", 375.0f);
+            textFit(236, 322, 0.25f, COL(215,220,232), "CHIQUITOLINA: BOLAS DO ADVERSARIO MENORES, LENTAS E -25% DE FORCA", 375.0f);
+            textFit(236, 333, 0.25f, COL(215,220,232), "MARRETA BIONICA: BOLAS MAIS RAPIDAS E DEMORAM PARA PARAR", 375.0f);
         } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
             textFit(236, 311, 0.25f, COL(215,220,232), "ALGEMAS: PRENDE UMA BOLA DO ADVERSARIO POR 1 JOGADA. NADA A MOVE", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "SIRENE: O ADVERSARIO JOGA SEM LINHA GUIA NA PROXIMA JOGADA", 375.0f);
@@ -5405,7 +5506,7 @@ static void drawCueMenu(void)
             textFit(236, 316, 0.28f, COL(215,220,232), AD[ab][0], 345.0f);
             textFit(236, 329, 0.28f, COL(215,220,232), AD[ab][1], 345.0f);
         }
-        sprintf(buf, (ab == AB_COVEIRO || ab == AB_POLICIAL) ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
+        sprintf(buf, (ab == AB_COVEIRO || ab == AB_POLICIAL || ab == AB_MARRETA) ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
         textFit(236, 344, 0.26f, COL(0,255,200), buf, 345.0f);
     } else {
         text(236, 303, 0.4f, COL(130,138,155), "SEM HABILIDADE ESPECIAL");
@@ -6301,7 +6402,7 @@ static void drawNameScreen(void)
 }
 
 /* ---------- OPCOES (som, musica, volume, efeitos, dicas, creditos) ---------- */
-enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_CRED, NOP };
+enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_RPL, OP_CRED, NOP };
 static int optSel;
 
 static void optInput(u32 pr)
@@ -6316,6 +6417,7 @@ static void optInput(u32 pr)
     case OP_VOL:  if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case OP_FX:   if (tog) fxOn = !fxOn; break;
     case OP_TIPS: if (tog) tipsOn = !tipsOn; break;
+    case OP_RPL:  if (tog) rplMode = (rplMode + (d < 0 ? 2 : 1)) % 3; break;
     case OP_CRED: if (pr & PAD_CROSS) state = S_CREDITS; break;
     }
 }
@@ -6336,11 +6438,11 @@ static void selBar(float x1, float x2, float y, float h)
 
 static void drawOptionsScreen(void)
 {
-    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CREDITOS" };
+    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "REPLAY", "CREDITOS" };
     static const char *DS[NOP] = { "EFEITOS SONOROS DA MESA, DOS MENUS E DA VITORIA", "LIGA E DESLIGA AS MUSICAS DO PEN DRIVE",
                                    "VOLUME DAS MUSICAS (OS EFEITOS NAO MUDAM)", "ANIMACOES DAS MESAS E BRILHO DA MIRA",
-                                   "BARRA DE TECLAS E DICAS NA MIRA", "CRIADOR E VERSAO DO JOGO" };
-    static const float OY0[NOP] = { 74, 102, 130, 184, 212, 266 };
+                                   "BARRA DE TECLAS E DICAS NA MIRA", "REPLAY: SO NO FIM, EM TODA JOGADA OU DESLIGADO", "CRIADOR E VERSAO DO JOGO" };
+    static const float OY0[NOP] = { 74, 102, 130, 182, 207, 232, 278 };
     static const int fk[4] = { 6, 7, 0, 1 };
     static const char *const fl[4] = { "ESCOLHER", "MUDAR", "OK", "VOLTAR" };
     char buf[32];
@@ -6349,7 +6451,7 @@ static void drawOptionsScreen(void)
     panel(70, 46, 570, 306);
     uiSection(94, 548, 54, COL(120,200,255), "AUDIO");
     uiSection(94, 548, 164, COL(200,140,255), "VISUAL");
-    uiSection(94, 548, 246, COL(255,190,110), "SOBRE");
+    uiSection(94, 548, 260, COL(255,190,110), "SOBRE");
     for (i = 0; i < NOP; i++) {
         float y = OY0[i];
         int sel = (i == optSel);
@@ -6361,6 +6463,10 @@ static void drawOptionsScreen(void)
         case OP_MUS:  uiToggle(544, y, musOn, "LIGADA", "DESLIGADA"); break;
         case OP_FX:   uiToggle(544, y, fxOn, "LIGADOS", "DESLIGADOS"); break;
         case OP_TIPS: uiToggle(544, y, tipsOn, "LIGADAS", "DESLIGADAS"); break;
+        case OP_RPL: {
+            static const char *const RN[3] = { "< SO NO FIM >", "< TODA JOGADA >", "< DESLIGADO >" };
+            text(544 - tw(0.34f, RN[rplMode]), y + 3, 0.34f, COL(255,255,255), RN[rplMode]);
+            break; }
         case OP_VOL: {
             int q;
             for (q = 0; q < 10; q++) {
@@ -7133,6 +7239,20 @@ static void drawCopMarks(void)
         discN(x, y, R * 0.62f, CA(20, 24, 40, 0x90), 12);
         drawCuffs(x, y, 0xd0);
     }
+    if (cornBall > 0 && b[cornBall].in) {                           /* CHAPOLIN: bola paralisada pela corneta (aro amarelo/vermelho e um Z) */
+        float x = b[cornBall].x, y = b[cornBall].y, pu = 1.2f * sinf(menuT * 0.25f);
+        ringN(x, y, R + 2.6f + pu, 2.2f, 22, rb ? CA(255, 214, 40, 0xa0) : CA(255, 80, 60, 0xa0));
+        discN(x, y, R * 0.62f, CA(20, 24, 40, 0x90), 12);
+        line(x - 3.0f, y - 3.0f, x + 3.0f, y - 3.0f, CA(255, 255, 255, 0xc0));
+        line(x + 3.0f, y - 3.0f, x - 3.0f, y + 3.0f, CA(255, 255, 255, 0xc0));
+        line(x - 3.0f, y + 3.0f, x + 3.0f, y + 3.0f, CA(255, 255, 255, 0xc0));
+    }
+    if (state == S_AIM && !isBot() && abilArm && curAb() == AB_MARRETA && chOpen && chSel == 0 && copTgt > 0 && b[copTgt].in) {   /* alvo da corneta */
+        float bx = b[copTgt].x, by = b[copTgt].y, bob = 3.0f * sinf(menuT * 0.2f);
+        ringN(bx, by, R + 3.5f, 1.8f, 24, CA(255, 214, 40, 0x7c));
+        ringN(bx, by, R + 6.5f + bob * 0.4f, 1.2f, 24, CA(255, 214, 40, 0x40));
+        tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,214,40));
+    }
     if (state == S_AIM && !isBot() && abilArm && curAb() == AB_POLICIAL && copSel == 0 && copTgt > 0 && b[copTgt].in) {   /* alvo das algemas */
         float bx = b[copTgt].x, by = b[copTgt].y, bob = 3.0f * sinf(menuT * 0.2f);
         ringN(bx, by, R + 3.5f, 1.8f, 24, CA(255, 230, 60, 0x7c));
@@ -7145,6 +7265,8 @@ static void drawCopMarks(void)
         ringN(gx, gy, R + 2.5f + pu, 1.6f, 22, CA(150, 255, 170, 0x90));
         discN(gx, gy, R + 1.0f, CA(150, 255, 170, 0x18), 16);
     }
+    if (chiqOn && (state == S_AIM || state == S_ROLL))               /* CHAPOLIN: aviso da chiquitolina */
+        textC(88, 0.28f, COL(255,235,90), "CHIQUITOLINA! BOLAS DO ADVERSARIO PEQUENAS E LENTAS");
     if (state == S_AIM && !isBot() && sirenT[cur]) {                /* SIRENE sobre quem esta mirando */
         u64 sc = rb ? CA(255, 50, 60, 0x50) : CA(70, 130, 255, 0x50);
         rect(0, 0, 640, 8, sc); rect(0, 440, 640, 448, sc); rect(0, 0, 8, 448, sc); rect(632, 0, 640, 448, sc);
@@ -7199,7 +7321,7 @@ static void drawScene(void)
     if (state == S_ROLL && shEq[SC_RASTRO]) for (i = 0; i < 16; i++) if (b[i].in && b[i].z <= 0.0f) trailDraw(shEq[SC_RASTRO], b[i].x, b[i].y, b[i].vx, b[i].vy);   /* LOJA: rastro */
     for (i = 1; i < 16; i++) if (b[i].in) {
         if (b[i].z > 0.0f) drawBallAt(i, b[i].x, b[i].y - b[i].z * 0.55f, R * (1.0f + b[i].z * 0.022f));   /* CHAPULIN: a bola sobe na tela */
-        else drawBallAt(i, b[i].x, b[i].y, R);
+        else drawBallAt(i, b[i].x, b[i].y, ballRad(i));   /* CHIQUITOLINA: bolas do adversario menores */
     }
     if (b[0].in) {
         if (state == S_PLACE) {
@@ -7251,7 +7373,14 @@ static void drawScene(void)
             } else if (abilKind == AB_FOGO) {
                 ringN(fxX, fxY, 8.0f + u * 70.0f, 3.0f, 28, CA(255, 120, 30, (int)(0x78 * fl)));
                 ringN(fxX, fxY, 4.0f + u * 45.0f, 2.0f, 24, CA(255, 220, 90, (int)(0x78 * fl)));
-            } else if (abilKind == AB_MARRETA) {
+            } else if (abilKind == AB_CHIQUI) {                        /* CHAPOLIN: ondas verdes que encolhem */
+                ringN(TCX, TCY, 140.0f * (1.0f - u) + 6.0f, 2.4f, 36, CA(120, 255, 110, (int)(0x70 * fl)));
+                ringN(TCX, TCY, 70.0f * (1.0f - u) + 4.0f, 1.6f, 28, CA(255, 240, 120, (int)(0x60 * fl)));
+            } else if (abilKind == AB_BIONICA) {                       /* CHAPOLIN: faiscas laranja saem da branca */
+                ringN(fxX, fxY, 6.0f + u * 34.0f, 2.6f, 20, CA(255, 150, 40, (int)(0x78 * fl)));
+                line(fxX - 18.0f * u - 4.0f, fxY, fxX + 18.0f * u + 4.0f, fxY, CA(255, 240, 160, (int)(0x78 * fl)));
+                line(fxX, fxY - 18.0f * u - 4.0f, fxX, fxY + 18.0f * u + 4.0f, CA(255, 240, 160, (int)(0x78 * fl)));
+            } else if (abilKind == AB_CORNETA) {
                 ringN(fxX, fxY, 6.0f + u * 30.0f, 3.0f, 24, CA(255, 214, 40, (int)(0x78 * fl)));
                 for (i = 0; i < 4; i++) {
                     float aa = i * 1.5708f + 0.785f, rr = 10.0f + u * 28.0f;
@@ -7517,7 +7646,7 @@ static void hackSolve(void)
     }
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
-        if (t == lockBall) continue;                  /* bola presa pelo policial: nao da para encacapar */
+        if (LOCKED(t)) continue;                  /* bola presa pelo policial: nao da para encacapar */
         if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
@@ -7558,7 +7687,7 @@ static void hackSolve(void)
     }
     if (hCandN < 6) {                                                       /* poucas tacadas diretas: tenta tacadas de TABELA (1 rebote) */
         for (t = 1; t < 16; t++) {
-            if (!b[t].in || t == lockBall) continue;
+            if (!b[t].in || LOCKED(t)) continue;
             if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
             else if (gr >= 0 && ballGroup(t) != gr) continue;
             for (p = 0; p < 6; p++) {
@@ -7697,6 +7826,19 @@ static void useAbility(void)
         if (why) setmsg(why);
         else if (copSel == 0) { sprintf(tb, "ALGEMAS NA BOLA %d (QUADRADO TROCA O ALVO)", copTgt); setmsg(tb); }
         else setmsg("SIRENE PRONTA (O: TROCAR)");
+        return;
+    }
+    if (ab == AB_MARRETA) {                               /* O: abre o seletor e passa CORNETA > CHIQUITOLINA > MARRETA BIONICA > fechar */
+        const char *why;
+        if (!chOpen) { chOpen = 1; chSel = 0; } else chSel++;
+        if (chSel > 2) { chOpen = 0; chSel = 0; abilArm = 0; setmsg("HABILIDADE CANCELADA: CHAPOLIN"); return; }
+        why = chWhy(chSel);
+        abilArm = (why == NULL);
+        if (chSel == 0 && abilArm) copTgt = cornBest();   /* alvo inicial: a bola do adversario mais perto da cacapa */
+        SFX(SFX_ABIL, 70);
+        if (why) setmsg(why);
+        else if (chSel == 0) { sprintf(tb, "CORNETA NA BOLA %d (QUADRADO TROCA O ALVO)", copTgt); setmsg(tb); }
+        else { sprintf(tb, "%s PRONTA (O: TROCAR)", CH_NAME[chSel]); setmsg(tb); }
         return;
     }
     abilArm = !abilArm;
@@ -7869,7 +8011,13 @@ int main(int argc, char *argv[])
                         setmsg(jumpArm ? "PULO ATIVADO: A BRANCA VAI PULAR" : "PULO DESLIGADO");
                     }
                     else if (pressed & PAD_SQUARE) {
-                        if (curAb() == AB_POLICIAL && copOpen && copSel == 0 && abilArm) {   /* POLICIAL: QUADRADO troca a bola que sera presa */
+                        if (curAb() == AB_MARRETA && chOpen && chSel == 0 && abilArm) {   /* CHAPOLIN: QUADRADO troca a bola que sera paralisada */
+                            char tb2[48];
+                            int nt = cornNext(copTgt, 1);
+                            if (nt > 0) copTgt = nt;
+                            sprintf(tb2, "CORNETA NA BOLA %d", copTgt); setmsg(tb2);
+                        }
+                        else if (curAb() == AB_POLICIAL && copOpen && copSel == 0 && abilArm) {   /* POLICIAL: QUADRADO troca a bola que sera presa */
                             char tb2[48];
                             int nt = copNext(copTgt, 1);
                             if (nt > 0) copTgt = nt;
