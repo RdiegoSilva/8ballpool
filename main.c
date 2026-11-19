@@ -91,8 +91,11 @@ static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com 
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
-#define ENTERRO_ALCANCE 100000.0f                     /* distancia maxima ate a cacapa: sem limite (o ENTERRO puxa a bola de qualquer lugar) */
-#define ENTERRO_PUXAO 0.90f                           /* o ENTERRO desvia a bola alvo 90% em direcao a cacapa na batida e continua guiando ate cair */
+#define ENTERRO_ALCANCE 340.0f                        /* NERF: distancia maxima ate a cacapa (antes sem limite) */
+#define ENTERRO_PUXAO 0.35f                           /* NERF: desvia a bola alvo so 35% em direcao a cacapa na batida (antes 90%) */
+#define ENTERRO_COS 0.55f                             /* NERF: so ajuda cacapas mais ou menos a frente da bola (ate ~57 graus); sem cacapa na frente, nao funciona */
+#define ENTERRO_GIRO 1.6f                             /* NERF: velocidade da curva depois da batida, em rad/s (antes 7: a bola nunca errava) */
+#define ENTERRO_TEMPO 260                             /* NERF: por quantos passos de fisica a bola continua sendo guiada (antes 1500) */
 #define ENTERRO_RECARGA 3                             /* o ENTERRO recarrega em 3 tacadas */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
@@ -140,13 +143,13 @@ static int   jumpArm;                              /* 1 = a proxima tacada faz a
 static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 7.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
-#define POM 9.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
+#define POC 10.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
+#define POM 5.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
 static const float PR[6] = { 15.5f, 13.5f, 15.5f, 15.5f, 13.5f, 15.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 22.0f, 19.0f, 22.0f, 22.0f, 19.0f, 22.0f };
+static const float PRC[6] = { 22.0f, 18.0f, 22.0f, 22.0f, 18.0f, 22.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -1130,13 +1133,23 @@ static void abilOnFirstHit(int j)
 #if ENTERRO_SO_ULTIMA
         ok = grp[cur] >= 0 && grp[cur] < 2 && ballGroup(j) == grp[cur] && countGroup(grp[cur]) == 1;
 #endif
-        for (pp = 0; pp < 6; pp++) { float ddx = PX[pp] - b[j].x, ddy = PY[pp] - b[j].y, d2 = ddx * ddx + ddy * ddy; if (d2 < bd) { bd = d2; bpp = pp; } }
+        {   /* NERF: escolhe a cacapa mais alinhada com o rumo da bola (nao a mais perto); sem nenhuma na frente, o poder falha */
+            float vsp = sqrtf(b[j].vx * b[j].vx + b[j].vy * b[j].vy), bcs = -2.0f;
+            for (pp = 0; pp < 6; pp++) {
+                float ddx = PX[pp] - b[j].x, ddy = PY[pp] - b[j].y, dl2 = sqrtf(ddx * ddx + ddy * ddy), cs = 1.0f;
+                if (dl2 < 1.0f) continue;
+                if (vsp > 1.0f) cs = (ddx * b[j].vx + ddy * b[j].vy) / (dl2 * vsp);
+                if (cs > bcs) { bcs = cs; bpp = pp; bd = dl2 * dl2; }
+            }
+            if (bcs < ENTERRO_COS) ok = 0;
+        }
         if (j == lockBall) { ok = 0; setmsg("BOLA PRESA: O ENTERRO NAO FUNCIONA"); }
         else if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
         else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
+        else if (!ok) setmsg("ENTERRO: SEM CACAPA NA FRENTE DA BOLA");
         if (ok) {
             float sp = sqrtf(b[j].vx * b[j].vx + b[j].vy * b[j].vy), pdx = PX[bpp] - b[j].x, pdy = PY[bpp] - b[j].y, pdl = sqrtf(pdx * pdx + pdy * pdy);
-            buryP = bpp; buryBall = j; buryT = 1500; b[j].vx *= 1.15f; b[j].vy *= 1.15f; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
+            buryP = bpp; buryBall = j; buryT = ENTERRO_TEMPO; abilFx = 36; fxX = b[j].x; fxY = b[j].y;
             if (sp > 1.0f && pdl > 1.0f) {                /* puxa so uma parte: mistura a direcao da bola com a direcao da cacapa */
                 float nx2 = b[j].vx / sp * (1.0f - ENTERRO_PUXAO) + pdx / pdl * ENTERRO_PUXAO, ny2 = b[j].vy / sp * (1.0f - ENTERRO_PUXAO) + pdy / pdl * ENTERRO_PUXAO;
                 float nl = sqrtf(nx2 * nx2 + ny2 * ny2);
@@ -1191,10 +1204,9 @@ static int stepPhysics(float dt)
         Ball *q = &b[buryBall];
         float ddx = PX[buryP] - q->x, ddy = PY[buryP] - q->y, dl = sqrtf(ddx * ddx + ddy * ddy), sp = sqrtf(q->vx * q->vx + q->vy * q->vy);
         if (dl > 1.0f && sp > 12.0f) {                    /* guia a bola para a cacapa: gira rapido e mantem velocidade para chegar la */
-            float ux = q->vx / sp, uy = q->vy / sp, da = normAng(atan2f(ddy, ddx) - atan2f(uy, ux)), mx = 7.0f * dt, c, sn, ns = sp;
+            float ux = q->vx / sp, uy = q->vy / sp, da = normAng(atan2f(ddy, ddx) - atan2f(uy, ux)), mx = ENTERRO_GIRO * dt, c, sn, ns = sp;
             if (da > mx) da = mx; else if (da < -mx) da = -mx;
             c = cosf(da); sn = sinf(da);
-            if (ns < 70.0f && dl > 25.0f) ns = fminf(70.0f, ns + 60.0f * dt);   /* nao deixa morrer antes de cair */
             q->vx = (ux * c - uy * sn) * ns; q->vy = (ux * sn + uy * c) * ns;
         }
         buryT--;
@@ -5300,7 +5312,7 @@ static void drawCueMenu(void)
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
         textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
         if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: DESVIA 30% A BOLA ALVO EM DIRECAO A CACAPA", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: CURVA UM POUCO A BOLA ALVO PARA A CACAPA A FRENTE", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
         } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
