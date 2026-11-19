@@ -77,8 +77,8 @@ static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com 
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
 #define GRAVE_R 12.0f                                 /* raio da COVA (buraco extra no meio da mesa; era 20) */
-#define ENTERRO_ALCANCE 100.0f                        /* NERF: o ENTERRO so pega a bola que estiver a ate esta distancia de uma cacapa */
-#define ENTERRO_RECARGA 5                             /* NERF: o ENTERRO recarrega em 5 tacadas (os outros poderes: AB_COOL) */
+#define ENTERRO_ALCANCE 100000.0f                     /* distancia maxima ate a cacapa: sem limite (o ENTERRO puxa a bola de qualquer lugar) */
+#define ENTERRO_RECARGA 3                             /* o ENTERRO recarrega em 3 tacadas */
 static int graveSel, graveOpen, graveOn, graveIn[16], buryBall, buryP, buryT, potLog[32], potN;   /* COVEIRO: poder escolhido, bolas na cova, bola enterrada, cemiterio (bolas encacapadas) */
 static float graveOX[16], graveOY[16];                /* COVA: onde cada bola estava antes da tacada */
 static const int GV_KIND[3] = { AB_ENTERRO, AB_COVA, AB_RESSUS };
@@ -258,20 +258,20 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "2.5.0"
+#define GAME_VERSION "2.6.0"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
-#define NLEVELS 4
+#define NLEVELS 5
 static int botLevel = 1, menuT;
 static int sndOn = 1, musOn = 1, volLvl = 8, fxOn = 1, tipsOn = 1;   /* opcoes do menu de pausa */
 static int sfxMute;                                                    /* > 0 durante simulacoes (HACK): sem som */
 #define SFX(id, v) do { if (sndOn && !sfxMute) sfxPlay((id), (v)); } while (0)   /* efeito sonoro (opcao SOM) */
-static const char  *LVL_NAME[NLEVELS]  = { "FACIL", "MEDIO", "DIFICIL", "PROFISSIONAL" };
-static const float  BOT_ERR[NLEVELS]   = { 0.075f, 0.02f, 0.004f, 0.0006f };  /* erro de mira (rad) */
-static const float  BOT_POWV[NLEVELS]  = { 0.20f, 0.06f, 0.0f, 0.0f };        /* erro de forca */
-static const int    BOT_MISS[NLEVELS]  = { 30, 0, 0, 0 };                      /* % de jogadas ruins */
-static const int    BOT_DELAY[NLEVELS] = { 75, 40, 22, 12 };                   /* tempo para pensar */
+static const char  *LVL_NAME[NLEVELS]  = { "FACIL", "MEDIO", "DIFICIL", "PROFISSIONAL", "MESTRE" };
+static const float  BOT_ERR[NLEVELS]   = { 0.075f, 0.02f, 0.004f, 0.0006f, 0.0006f };  /* erro de mira (rad) */
+static const float  BOT_POWV[NLEVELS]  = { 0.20f, 0.06f, 0.0f, 0.0f, 0.0f };        /* erro de forca */
+static const int    BOT_MISS[NLEVELS]  = { 30, 0, 0, 0, 0 };                      /* % de jogadas ruins */
+static const int    BOT_DELAY[NLEVELS] = { 75, 40, 22, 12, 12 };                   /* tempo para pensar */
 
 static unsigned int rs = 2463534242u;
 static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; return rs; }
@@ -676,8 +676,10 @@ static int countGroup(int gr)
 static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer = 150; }
 static int isBot(void) { return mode == 0 && cur == 1; }
 static const char *pname(int pl) { return (pl == 1 && mode == 0) ? (tourney ? tName[tOpp] : "BOT") : pnames[pl]; }
-static int curCue(void) { return (isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]; }
-static int curAb(void) { return (abilOn && !isBot() && !(tourney && !tAbil)) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
+static int botCue;                                       /* MESTRE: taco que o bot escolheu para esta tacada */
+static int botMaster(void) { return mode == 0 && cur == 1 && botLevel == 4 && !(tourney && !tAbil); }   /* dificuldade MESTRE: o bot usa tacos e poderes */
+static int curCue(void) { return botMaster() ? botCue : ((isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]); }
+static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !(tourney && !tAbil))) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
 static float cuePowMul(int c)     { return 0.60f + 0.0060f * CUES[c].force; }
 static float cueSpinK(int c)      { return 0.08f + 0.0055f * CUES[c].effect; }
 static float cueGuideScale(int c) { return 0.45f + 0.004f * CUES[c].aim; }
@@ -1267,7 +1269,7 @@ static void endTurn(int foul, int ownPocket)
     char buf[64];
     int forgiven = 0, saved = 0, keep = abilExtra, kept = 0;   /* keep: NOVA VIDA do gato */
     abilExtra = 0;
-    botTimer = 0; botPlanned = 0;
+    botTimer = 0; botPlanned = 0; botCue = 0;
     abilArm = 0; graveOpen = 0; copOpen = 0; hackOn = 0;
     if (foul && abilForgive == 1) {                      /* PRESENTE do Papai Noel: perdoa a falta */
         foul = 0; forgiven = 1;                          /* se encacapou uma bola sua, ainda joga de novo */
@@ -1523,10 +1525,53 @@ static float normAng(float a)
     return a;
 }
 
+/* MESTRE: o bot escolhe o taco e o poder conforme a situacao da mesa
+   (quebra: POTENCIA | tacada dificil: ENTERRO, PUXAO ou CHAMINE | sem tacada: NOVA VIDA | tacada facil: ALGEMAS, RESSUSCITAR, MALDICAO ou SIRENE) */
+static void botKit(int found, int tgt, float dist, float cc)
+{
+    int ab = AB_NONE, k, p, r = (int)(rnd() % 100), hard;
+    float nd = 1e9f;
+    botCue = 0; abilArm = 0; graveOpen = 0; copOpen = 0;
+    if (!botMaster()) return;
+    if (breakShot) { botCue = 1; return; }               /* quebra: taco de POTENCIA */
+    if (abilCD[cur] > 0) return;
+    hard = !found || dist > 380.0f || cc < 0.7f;
+    k = copBest();                                       /* bola do jogador mais perto de uma cacapa */
+    if (k > 0) for (p = 0; p < 6; p++) { float dx = b[k].x - PX[p], dy = b[k].y - PY[p], d = sqrtf(dx * dx + dy * dy); if (d < nd) nd = d; }
+    if (found && hard) {
+        ab = r < 45 ? AB_ENTERRO : (r < 75 ? AB_SUGAR : AB_CHAMINE);
+        if (tgt <= 0) ab = AB_CHAMINE;
+    } else if (!found) {
+        ab = r < 40 ? AB_VIDAS : (r < 65 ? AB_ENTERRO : (k > 0 ? AB_PRENDER : AB_VIDAS));
+    } else {
+        if (graveFindRevive() >= 0 && r < 35) ab = AB_RESSUS;
+        else if (k > 0 && nd < 110.0f && r < 75) ab = AB_PRENDER;
+        else if (r < 88) ab = AB_MALDICAO;
+        else ab = AB_SIRENE;
+    }
+    switch (ab) {
+    case AB_ENTERRO:  botCue = 30; graveSel = 0; graveOpen = 1; break;
+    case AB_RESSUS:   botCue = 30; graveSel = 2; graveOpen = 1; break;
+    case AB_PRENDER:  botCue = 31; copSel = 0; copOpen = 1; copTgt = k; break;
+    case AB_SIRENE:   botCue = 31; copSel = 1; copOpen = 1; break;
+    case AB_SUGAR:    botCue = 14; break;
+    case AB_CHAMINE:  botCue = 15; break;
+    case AB_VIDAS:    botCue = 29; break;
+    case AB_MALDICAO: botCue = 28; break;
+    default: break;
+    }
+    if (ab != AB_NONE) {
+        abilArm = 1;
+        botPow *= cuePowMul(0) / cuePowMul(botCue);      /* o taco muda a forca: compensa para a tacada sair igual */
+        if (botPow > 1.0f) botPow = 1.0f;
+        setmsg("BOT TROCOU DE TACO E USOU UM PODER");
+    }
+}
+
 static void botPlan(void)
 {
-    int t, p, found = 0, gr = grp[cur];
-    float best = 1e9f, cx = b[0].x, cy = b[0].y;
+    int t, p, found = 0, gr = grp[cur], bt = 0;
+    float best = 1e9f, cx = b[0].x, cy = b[0].y, bdist = 0.0f, bcc = 1.0f;
 
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
@@ -1546,11 +1591,11 @@ static void botPlan(void)
             if (cc < 0.35f) continue;
             if (!pathClear(cx, cy, gx, gy, t)) continue;
             if (!pathClear(tx, ty, PX[p], PY[p], t)) continue;
-            sc = al + dl + (1.0f - cc) * (botLevel == 3 ? 900.0f : 400.0f);   /* profissional prefere tacadas retas */
+            sc = al + dl + (1.0f - cc) * (botLevel >= 3 ? 900.0f : 400.0f);   /* profissional prefere tacadas retas */
             if (sc < best) {
-                best = sc; found = 1;
+                best = sc; found = 1; bt = t; bdist = al + dl; bcc = cc;
                 botAng = atan2f(gy - cy, gx - cx);
-                botPow = (botLevel == 3 ? 0.30f : 0.35f) + (al + dl) / (botLevel == 3 ? 640.0f : 600.0f);
+                botPow = (botLevel >= 3 ? 0.30f : 0.35f) + (al + dl) / (botLevel >= 3 ? 640.0f : 600.0f);
             }
         }
     }
@@ -1573,6 +1618,7 @@ static void botPlan(void)
     if (breakShot) botPow = 1.0f;
     if (botPow > 1.0f) botPow = 1.0f;
     botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f) + (sirenT[cur] ? 0.05f : 0.0f));   /* maldicao e sirene: o bot erra mais */
+    botKit(found, bt, bdist, bcc);
 }
 
 /* ---------- entrada ---------- */
@@ -4795,7 +4841,7 @@ static void drawCueMenu(void)
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
         textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
         if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: ENTERRA A BOLA ALVO PERTO DA CACAPA (RECARGA 5)", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: PUXA A BOLA ALVO PARA A CACAPA DE QUALQUER DISTANCIA", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
         } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
@@ -5410,7 +5456,7 @@ static void drawSetupScreen(void)
                                     "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM" };
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA" };
-    static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255} };
+    static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
     const float rh = 36.0f;
     float y2 = 86.0f + n * rh - 4.0f;
@@ -5517,6 +5563,8 @@ static void drawSetupScreen(void)
         hint = "USA A MESA DO PERSONAGEM DO JOGADOR 1 (VEJA NO CATALOGO DE TACOS)";
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
+    else if (v[setSel] == SR_LVL && botLevel == 4)
+        hint = "MESTRE: COMO O PROFISSIONAL, MAS O BOT USA TACOS E PODERES CONFORME A SITUACAO";
     else if (v[setSel] == SR_WB)
         hint = "A COR DA BOLA BRANCA VALE PARA A PARTIDA TODA";
     else if (v[setSel] == SR_GD)

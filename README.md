@@ -3,7 +3,7 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 2.5.0
+- Versão: 2.6.0
 
 ## Visual dos menus (novo)
 Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveamento do torneio) seguem o mesmo padrão:
@@ -26,6 +26,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
     - Médio: comportamento padrão
     - Difícil: mira quase perfeita e responde rápido
     - Profissional: mira praticamente perfeita, responde na hora, prefere tacadas retas e não perdoa erro
+    - **Mestre** (nova): joga como o Profissional, mas o BOT **usa tacos e poderes** e troca conforme a situação: taco de POTENCIA na quebra; em tacada difícil usa ENTERRO, PUXÃO (Vampiro) ou CHAMINE; sem tacada boa usa NOVA VIDA ou ALGEMAS; em tacada fácil usa ALGEMAS (na sua bola mais perto da caçapa), RESSUSCITAR, MALDIÇÃO ou SIRENE. Respeita a recarga de 3 tacadas. No torneio só usa poderes se a regra HABILIDADES estiver LIGADA
   - MODO: BOLA 8 ou SINUCA BRASILEIRA
   - **MESA DO PERSONAGEM** (SIM/NÃO): usa automaticamente a mesa do personagem do Jogador 1 (veja a tabela de kits abaixo). Escolher uma mesa na mão desliga essa opção
   - **HABILIDADES** (só no versus): LIGADAS ou DESLIGADAS. Contra o BOT as habilidades ficam sempre ligadas para você
@@ -253,9 +254,9 @@ Arquivos: `main.c`, `music.c`, `music.h`, `minimp3.h`, `Makefile`.
 
 ## Coveiro (ultra lendário) e mesa Cemitério
 
-Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas (o ENTERRO recarrega em **5**).
+Combo **COVEIRO** (personagem + taco + mesa **Cemitério**: grade de ferro, lápides, névoa e fogo-fátuo). Diferente do Grinch, **você escolhe** o poder: na mira, **O** arma o poder e **O de novo troca** (ENTERRO > COVA > RESSUSCITAR > cancelar). Recarrega em 3 tacadas.
 
-- **ENTERRO** (nerfado): a bola alvo (a primeira que a branca toca) é enterrada na caçapa mais próxima com uma pá, mas **só se estiver a até 100 px de uma caçapa** (`ENTERRO_ALCANCE`); se estiver longe, o poder não é gasto. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
+- **ENTERRO**: a bola alvo (a primeira que a branca toca) é puxada para a caçapa mais próxima com uma pá, **de qualquer distância**. Se cair, conta como encaçapada; se errar, fica na mesa. Só a bola 8 não é enterrada antes de você limpar as suas (seria derrota). Para voltar à regra "só na última bola", ponha `ENTERRO_SO_ULTIMA` em 1 no `main.c`.
 - **COVA**: abre uma caçapa extra (agora bem menor, raio 12 em vez de 20) no meio da mesa durante a tacada. A bola que cair lá (menos a branca) **conta como encaçapada** e não volta.
 - **RESSUSCITAR**: traz de volta à mesa a última bola do adversário que foi encaçapada (contra-ataque). A bola que volta é um **fantasma**: nesta jogada a branca e as outras bolas **passam por ela, sem física**; na rodada seguinte ela volta ao normal.
 
