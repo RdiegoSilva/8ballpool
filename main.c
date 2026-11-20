@@ -2243,27 +2243,29 @@ static const TableDef TABLES[NTABLES] = {
     { "DELEGACIA",{ 38, 66,122}, { 20, 26, 48}, {255,215, 80}, 20 },
     { "POOL AZUL",{ 36,136,204}, {142, 26, 38}, {238,232,214}, 21 },   /* feltro azul, madeira vermelha, diamantes claros, cacapas pretas */
 };
-static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail;     /* cores derivadas da mesa escolhida */
+static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores derivadas da mesa escolhida (tcMouth: boca escura das cacapas) */
 
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
-    float la = ra > 8.0f ? xa - 20 : xa - ra, lb = rb > 8.0f ? xb + 20 : xb + rb;
-    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcCush);   /* canto: completa com a cor da borracha (sem triangulo vermelho) */
-    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcCush);
+    float la = xa - ra, lb = xb + rb;
+    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcMouth);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
-    if (ra <= 8.0f) line(xa - ra, yo, xa, yi, tcCushHi);                 /* pontas inclinadas (so no meio) */
-    if (rb <= 8.0f) line(xb + rb, yo, xb, yi, tcCushHi);
+    line(xa - ra, yo, xa, yi, tcCushHi);                                 /* pontas inclinadas (meio e cantos) */
+    line(xb + rb, yo, xb, yi, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcCush);          /* canto: completa com a cor da borracha (sem triangulo vermelho) */
-    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcCush);
+    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcMouth);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
-    line(xi, ya - 20, xi, yb + 20, tcCushHi);
-    line(xo, ya - 20, xo, yb + 20, tcCushLo);
+    line(xi, ya, xi, yb, tcCushHi);
+    line(xo, ya - 11, xo, yb + 11, tcCushLo);
+    line(xo, ya - 11, xi, ya, tcCushHi);                                  /* pontas inclinadas dos cantos */
+    line(xo, yb + 11, xi, yb, tcCushHi);
 }
 
 static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, u64 c)   /* faixa de arco (chapa metalica do canto) */
@@ -3735,6 +3737,7 @@ static void drawTable(void)
 
     tcRail = w2;
     tcCush = shade(T->felt, 1.06f, 8); tcCushHi = shade(T->felt, 1.55f, 36); tcCushLo = shade(T->felt, 0.62f, 0);   /* borracha mais clara que o feltro */
+    tcMouth = shade(T->wood, 0.34f, 0);                                                                              /* mesma cor da boca do buraco */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
     /* sombra da mesa no chao */
