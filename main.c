@@ -159,13 +159,13 @@ static int   jumpArm;                              /* 1 = a proxima tacada faz a
 static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 10.5f                                  /* quina: o buraco encosta no canto do feltro mas NAO invade a mesa (so cobre as pontas das tabelas) */
-#define POM 11.0f                                   /* meio: o buraco fica na tabela, encostando no feltro sem invadir */
+#define POC 12.0f                                  /* quina: o buraco encosta no canto do feltro mas NAO invade a mesa (so cobre as pontas das tabelas) */
+#define POM 14.2f                                   /* meio: o buraco fica na tabela, encostando no feltro sem invadir */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 14.5f, 13.0f, 14.5f, 14.5f, 13.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
+static const float PR[6] = { 14.5f, 12.0f, 14.5f, 14.5f, 12.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
-static const float PRC[6] = { 25.0f, 21.0f, 25.0f, 25.0f, 21.0f, 25.0f };
+static const float PRC[6] = { 26.0f, 22.0f, 26.0f, 26.0f, 22.0f, 26.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -3800,8 +3800,8 @@ static void drawTable(void)
     for (p = 0; p < 6; p++) {
         float r0 = PR[p] * tabPock(), px = PX[p], py = PY[p];
         int a;
-        discN(px + 1.0f, py + 1.5f, r0 + 5.0f, CA(0, 0, 0, 0x14), 28);    /* sombra suave em volta */
-        discN(px + 0.6f, py + 1.0f, r0 + 3.4f, CA(0, 0, 0, 0x26), 28);
+        discN(px, py, r0 + 4.2f, CA(0, 0, 0, 0x14), 28);    /* sombra suave em volta (sem invadir o feltro) */
+        discN(px, py, r0 + 3.2f, CA(0, 0, 0, 0x26), 28);
         discN(px, py, r0 + 2.2f, COL(30,32,38), 28);                      /* aro externo escuro */
         discN(px, py, r0 + 1.5f, COL(96,102,114), 28);                   /* aro metalico */
         discN(px, py, r0 + 0.9f, COL(168,174,186), 28);                   /* fio de luz do aro */
