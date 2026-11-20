@@ -4395,6 +4395,7 @@ static void hbox(float x1, float y1, float x2, float y2, u64 border, u64 fill)
         float ya = y1 + c + (h - 2 * c) * k / 4.0f, yb = y1 + c + (h - 2 * c) * (k + 1) / 4.0f;
         rect(x1, ya, x2, yb, k < 2 ? CA(255, 255, 255, 0x08 - k * 3) : CA(0, 0, 0, 0x06 + (k - 2) * 8));
     }
+    cham(x1, y1, x2, y2, c, CA(84, 40, 160, 0x1c));       /* verniz roxo (combina com os menus) */
     rect(x1 + c, y1, x2 - c, y1 + 1.0f, CA(255, 255, 255, 0x2c));
     rect(x1 + c, y2 - 1.0f, x2 - c, y2, CA(0, 0, 0, 0x30));
 }
@@ -4420,8 +4421,9 @@ static void drawPowerBar(void)
     char buf[16];
     int k;
 
-    rect(bx - 4, by0 - 4, bx + bw + 4, by1 + 4, COL(170,170,176));
-    rect(bx - 3, by0 - 3, bx + bw + 3, by1 + 3, COL(24,24,28));
+    cham(bx - 5.5f, by0 - 5.5f, bx + bw + 5.5f, by1 + 5.5f, 5.0f, COL(226,172,44));      /* moldura dourada */
+    cham(bx - 4.0f, by0 - 4.0f, bx + bw + 4.0f, by1 + 4.0f, 4.0f, COL(30,16,56));
+    rect(bx - 2.0f, by0 - 2.0f, bx - 1.0f, by1 + 2.0f, CA(255, 255, 255, 0x1c));
     for (k = 0; k < nseg; k++) {
         float t = (k + 0.5f) / nseg;
         int r = (int)(255 * (t * 2 > 1 ? 1 : t * 2));
@@ -4441,9 +4443,11 @@ static void drawPowerBar(void)
         rect(bx - 8, hy - 1.5f, bx + bw + 8, hy + 1.5f, COL(0, 255, 220));
         text(bx + bw + 10, hy - 6, 0.26f, COL(0, 255, 220), "IDEAL");
     }
-    text(5, 58, 0.36f, COL(230,230,230), "FORCA");
+    hbox(2, 44, 40, 62, CA(226, 172, 44, 0x90), CA(8, 12, 22, 0x78));
+    text(21.0f - tw(0.3f, "FORCA") * 0.5f, 49, 0.3f, COL(255,235,150), "FORCA");
     sprintf(buf, "%d%%", (int)(barLevel * 100 + 0.5f));
-    text(8, by1 + 12, 0.36f, COL(255,230,60), buf);
+    hbox(4, by1 + 8, 38, by1 + 24, CA(226, 172, 44, 0x70), CA(8, 12, 22, 0x78));
+    text(21.0f - tw(0.34f, buf) * 0.5f, by1 + 12, 0.34f, COL(255,230,60), buf);
 }
 
 /* indicador de efeito (estilo 8 Ball Pool): bola branca com aro metalico; o ponto vermelho mostra o lado (L2/R2)
@@ -4655,7 +4659,8 @@ static void drawHUD(void)
     /* barra inferior: mensagem + teclas + taco equipado */
     hbox(70, 396, 598, 443, CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x70));
     rect(70, 396, 74, 443, cur == 0 ? COL(80,140,225) : COL(225,90,92));          /* faixa na cor de quem joga */
-    rect(74, 396, 598, 397, CA(255, 215, 60, 0x30));
+    rect(74, 396, 598, 398, CA(255, 215, 60, 0x60));
+    rect(74, 398, 448, 410, cur == 0 ? CA(80, 140, 225, 0x14) : CA(225, 90, 92, 0x14));
     rect(448, 401, 449, 438, CA(120, 130, 150, 0x40));                           /* divisoria: dicas | taco e poder */
     if (msgTimer > 0) {                                                          /* linha de cima: mensagem */
         float msc = 0.42f, mw = tw(msc, msg);
@@ -5679,7 +5684,7 @@ static void palmTree(float x, float h, float lean)         /* silhueta de palmei
         tri(tx, ty, tx + FX[k] * 0.55f + sw, ty + FY[k] * 0.55f - 9.0f, tx + FX[k] + sw, ty + FY[k] + 9.0f, c);
 }
 
-static void drawBackdrop(void)
+static void drawBackdropEx(int withBalls)
 {
     int k, i, layer;
     /* ceu do por do sol: roxo -> rosa -> laranja */
@@ -5720,7 +5725,7 @@ static void drawBackdrop(void)
         rect(0, y, 640, y + 17.0f, COL(24 - (int)(18 * u), 160 - (int)(90 * u), 178 - (int)(86 * u)));
     }
     for (k = 0; k < 2; k++) discN(320.0f, 370.0f, 300.0f - k * 90.0f, CA(120, 235, 240, 0x08), 30);   /* luz sobre o feltro */
-    for (k = 0; k < NMB; k++) {                                      /* bolas rolando na mesa */
+    for (k = 0; withBalls && k < NMB; k++) {                         /* bolas rolando na mesa */
         int id = MB_ID[k];
         discN(b[id].x + 5, b[id].y + 7, MBR * 1.05f, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00), 14);
         drawBallAt(id, b[id].x, b[id].y, MBR);
@@ -5732,8 +5737,10 @@ static void drawBackdrop(void)
         rect(d, 0, d + 12, 448, CA(0, 0, 8, a - 6));
         rect(640 - d - 12, 0, 640 - d, 448, CA(0, 0, 8, a - 6));
     }
-    if (state != S_MENU) rect(0, 0, 640, 448, CA(0, 0, 20, 0x26));      /* sub-telas: cenario um pouco mais escuro */
+    if (state != S_MENU) rect(0, 0, 640, 448, CA(0, 0, 20, withBalls ? 0x26 : 0x4a));   /* sub-telas e partida: cenario mais escuro */
 }
+
+static void drawBackdrop(void) { drawBackdropEx(1); }
 
 static void panel(float x1, float y1, float x2, float y2)
 {
@@ -6368,39 +6375,55 @@ static void nameInput(u32 pr)
 
 static void selBar(float x1, float x2, float y, float h);
 
+static void rarRGB(int r, int *R3, int *G3, int *B3)                /* mesma cor do rarCol, em numeros */
+{
+    static const unsigned char RC[5][3] = { {120,190,255}, {110,230,150}, {200,120,255}, {255,110,190}, {255,215,70} };
+    if (r >= 0 && r < 5) { *R3 = RC[r][0]; *G3 = RC[r][1]; *B3 = RC[r][2]; }
+    else hue3(menuT * 0.01f, R3, G3, B3);
+}
+
 static void csTile(int slot, float x, float y)
 {
     const float w = 62.0f, h = 50.0f;
     int i, ch = csChooser(), isCur = (slot == csPos && csStage < 2), own = -1, col;
     float pu = 0.5f + 0.5f * sinf(menuT * 0.2f);
-    u64 bc, fc;
+    u64 bc;
+    int rr = 96, rg = 104, rb = 122;                              /* cor da carta: a da raridade (ou cinza se vazia) */
     for (i = 0; i < (tourney ? 1 : 2); i++) if (csReady[i] && slot == csSlot(i)) own = i;
     col = isCur ? ch : own;
-    if (col >= 0) {                                               /* brilho em volta da moldura */
+    if (isCur) { y -= 3.0f; }                                     /* a carta escolhida sobe um pouco */
+    if (slot < NCHARS) rarRGB(CHAR_RAR[slot], &rr, &rg, &rb);
+    if (col >= 0) {                                               /* brilho em volta da carta */
         int a = isCur ? 0x28 + (int)(0x28 * pu) : 0x30;
         outlineRect(x - 4.0f, y - 4.0f, x + w + 4.0f, y + h + 4.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a / 2));
         outlineRect(x - 3.0f, y - 3.0f, x + w + 3.0f, y + h + 3.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a));
         outlineRect(x - 2.0f, y - 2.0f, x + w + 2.0f, y + h + 2.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a + 0x10));
     }
-    bc = col >= 0 ? COL(CSC[col][0], CSC[col][1], CSC[col][2]) : COL(96,104,122);
-    fc = col >= 0 ? CA(CSC[col][0] / 5, CSC[col][1] / 5, CSC[col][2] / 5, 0x80) : CA(8, 14, 28, 0x78);
-    hbox(x, y, x + w, y + h, bc, fc);
+    bc = col >= 0 ? COL(CSC[col][0], CSC[col][1], CSC[col][2]) : COL(rr / 2 + 30, rg / 2 + 30, rb / 2 + 30);
+    rect(x + 2, y + 4, x + w + 2, y + h + 4, CA(0, 0, 0, 0x34));                              /* sombra */
+    cham(x - 1.5f, y - 1.5f, x + w + 1.5f, y + h + 1.5f, 5.0f, bc);                          /* borda */
+    cham(x, y, x + w, y + h, 4.0f, COL(rr / 7 + 6, rg / 7 + 6, rb / 7 + 12));                /* fundo escuro com tom da raridade */
+    rect(x + 3, y + h * 0.55f, x + w - 3, y + h - 3, CA(rr, rg, rb, 0x1c));                  /* degrade de baixo na cor da raridade */
+    rect(x + 4, y + 1, x + w - 4, y + 3, CA(255, 255, 255, 0x22));                           /* brilho no topo */
     if (slot < NCHARS) {
+        discN(x + w * 0.5f, y + 22.0f, 17.0f, CA(rr, rg, rb, 0x20), 14);                     /* aura atras do rosto */
         drawChar(slot, x + w * 0.5f, y + 30.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
         rect(x + 6.0f, y + h - 6.0f, x + w - 6.0f, y + h - 4.0f, rarCol(CHAR_RAR[slot]));      /* faixa da raridade */
     } else if (slot == CS_RND) {
         text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(255,230,120), "?");
         text(x + w * 0.5f - tw(0.22f, "ALEATORIO") * 0.5f, y + h - 12.0f, 0.22f, COL(215,220,232), "ALEATORIO");
     } else {
-        text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(40,46,60), "?");
+        text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(60,56,86), "?");
     }
     if (isCur && slot < NCHARS && csTaken(ch, slot)) {
         rect(x + 1.0f, y + 1.0f, x + w - 1.0f, y + h - 1.0f, CA(0, 0, 0, 0x50));
         text(x + w * 0.5f - tw(0.24f, "EM USO") * 0.5f, y + 18.0f, 0.24f, COL(255,120,110), "EM USO");
     }
-    if (col >= 0) {                                               /* etiqueta: de quem e a casa */
+    if (col >= 0) {                                               /* etiqueta: de quem e a carta */
         const char *tg = (col == 1 && oppSel == 0) ? "BOT" : (col == 1 ? "P2" : "P1");
-        text(x + 4.0f, y + 3.0f, 0.24f, COL(CSC[col][0], CSC[col][1], CSC[col][2]), tg);
+        float tgw = tw(0.24f, tg) + 8.0f;
+        cham(x + 1, y + 1, x + 1 + tgw, y + 13, 3.0f, COL(CSC[col][0], CSC[col][1], CSC[col][2]));
+        text(x + 5.0f, y + 3.0f, 0.24f, COL(10, 12, 24), tg);
     }
 }
 
@@ -6409,16 +6432,29 @@ static void csPed(int pl, float px)                               /* pedestal: o
     int ci = charRand[pl] ? (menuT / 90) % NCHARS : charSel[pl];
     int hot = (csStage < 2 && csChooser() == pl), rdy = csReady[pl];
     float bob = hot ? -3.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
-    u64 ac = (hot || rdy) ? COL(CSC[pl][0], CSC[pl][1], CSC[pl][2]) : COL(70,80,104);
+    int on = hot || rdy;
+    u64 ac = on ? COL(CSC[pl][0], CSC[pl][1], CSC[pl][2]) : COL(70,80,104);
     const char *nm = charRand[pl] ? "ALEATORIO" : CHAR_NAME[ci], *st;
     const char *who = (pl == 1 && oppSel == 0) ? "BOT" : pnames[pl];
     u64 sc;
+    int k;
+    if (on) {                                                    /* holofote: cone de luz + aura no chao */
+        float pu = 0.5f + 0.5f * sinf(menuT * 0.1f);
+        quad(px - 12.0f, 268.0f, px + 12.0f, 268.0f, px + 62.0f, 392.0f, px - 62.0f, 392.0f, CA(CSC[pl][0], CSC[pl][1], CSC[pl][2], 0x0c + (int)(6 * pu)));
+        for (k = 0; k < 3; k++) discN(px, 386.0f, 70.0f - k * 18.0f, CA(CSC[pl][0], CSC[pl][1], CSC[pl][2], 0x0a), 20);
+    }
+    ell(px, 396.0f, 50.0f, 9.0f, CA(0, 0, 0, 0x50));             /* sombra no chao */
     ell(px, 393.0f, 46.0f, 8.0f, COL(26,30,48));                 /* plataforma */
     ell(px, 391.0f, 42.0f, 6.0f, ac);
     ell(px, 390.0f, 36.0f, 4.0f, COL(18,22,38));
-    drawChar(ci, px, 306.0f + bob, 0.74f, (hot || rdy) ? 1 : 0, menuT, 1);
-    text(px - tw(0.3f, who) * 0.5f, 266.0f, 0.3f, ac, who);
-    text(px - tw(0.34f, nm) * 0.5f, 399.0f, 0.34f, (hot || rdy) ? COL(255,240,150) : COL(175,185,195), nm);
+    drawChar(ci, px, 306.0f + bob, 0.74f, on ? 1 : 0, menuT, 1);
+    {                                                            /* placa do jogador */
+        float pw = tw(0.3f, who) + 22.0f;
+        hbox(px - pw * 0.5f, 264.0f, px + pw * 0.5f, 280.0f, on ? CA(CSC[pl][0], CSC[pl][1], CSC[pl][2], 0xa0) : CA(70, 78, 96, 0x60), CA(8, 12, 22, 0x78));
+        text(px - tw(0.3f, who) * 0.5f, 267.0f, 0.3f, ac, who);
+    }
+    text(px - tw(0.34f, nm) * 0.5f + 1.5f, 400.0f, 0.34f, CA(0, 0, 0, 0x70), nm);
+    text(px - tw(0.34f, nm) * 0.5f, 399.0f, 0.34f, on ? COL(255,240,150) : COL(175,185,195), nm);
     if (rdy)      { st = "PRONTO!";            sc = COL(120,255,150); }
     else if (hot) { st = "ESCOLHENDO...";      sc = ((menuT / 20) & 1) ? COL(255,230,90) : COL(190,160,50); }
     else          { st = pl == 1 && oppSel == 0 ? "BOT" : "AGUARDANDO"; sc = COL(120,130,148); }
@@ -6436,9 +6472,9 @@ static void drawCharSelect(void)
     for (i = 0; i < CS_COLS * CS_ROWS; i++)
         csTile(i, x0 + (i % CS_COLS) * (tw0 + gx), y0 + (i / CS_COLS) * (th0 + gy));
     /* faixa de informacao (estilo letreiro) */
-    rect(0, 244, 640, 262, CA(20, 150, 210, 0x26));
-    rect(0, 244, 640, 245, CA(120, 230, 255, 0x50));
-    rect(0, 261, 640, 262, CA(120, 230, 255, 0x50));
+    rect(0, 244, 640, 262, CA(74, 34, 130, 0x50));
+    rect(0, 244, 640, 246, CA(255, 205, 60, 0x70));
+    rect(0, 260, 640, 262, CA(255, 205, 60, 0x70));
     if (csStage == 2) {
         if ((menuT / 25) & 1) textC(248, 0.34f, COL(120,255,150), "PRONTO! X OU START: PROXIMA ETAPA   O: VOLTAR");
         else                  textC(248, 0.34f, COL(255,240,150), "OS DOIS JOGADORES ESTAO PRONTOS");
@@ -6452,7 +6488,10 @@ static void drawCharSelect(void)
         textFit(320.0f - 300.0f, 248.0f, 0.32f, (sl < CS_RND && !csTaken(ch, sl)) ? rarCol(CHAR_RAR[sl]) : COL(255,150,130), buf, 600.0f);
     }
     if (tourney) csPed(0, 320.0f);
-    else { csPed(0, 170.0f); csPed(1, 470.0f); }
+    else {
+        csPed(0, 170.0f); csPed(1, 470.0f);
+        textC(318.0f, 0.9f, COL(255, 215 + (int)(30 * sinf(menuT * 0.07f)), 70), "VS");        /* VS entre os pedestais */
+    }
 }
 
 static void drawSetupScreen(void)
@@ -7294,7 +7333,6 @@ static void drawMenuScreen(void)
                                    "GASTE SUAS MOEDAS: GIZ, BOLAS, RASTROS, EFEITOS E MOLDURAS",
                                    "SOM, MUSICA, VOLUME, EFEITOS E CREDITOS" };
     char buf[48];
-    int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
 
     drawBackdrop();
@@ -7705,6 +7743,7 @@ static void drawScene(void)
         }
         return;
     }
+    drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
     drawTable();
     if ((state == S_ROLL || state == S_STRIKE) && abilKind == AB_COVA) drawGraveHole(1.0f);          /* COVEIRO: a cova aberta */
     else if (state == S_AIM && !isBot() && abilArm && curAb() == AB_COVEIRO && graveSel == 1) drawGraveHole(0.45f);
