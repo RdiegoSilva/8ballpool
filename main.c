@@ -165,7 +165,7 @@ static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + PO
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
 static const float PR[6] = { 14.5f, 12.0f, 14.5f, 14.5f, 12.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
-static const float PRC[6] = { 30.0f, 19.0f, 30.0f, 30.0f, 19.0f, 30.0f };
+static const float PRC[6] = { 31.0f, 17.0f, 31.0f, 31.0f, 17.0f, 31.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -2245,17 +2245,15 @@ static const TableDef TABLES[NTABLES] = {
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail;     /* cores derivadas da mesa escolhida */
 
-static void cushH(float xa, float xb, float yo, float yi)
+static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
-    {   /* ponta da madeira: preenche o canto entre o buraco e a ponta inclinada (sem triangulo escuro) */
-        quad(xa - 20, yo, xa - 11, yo, xa, yi, xa - 20, yi, tcRail);
-        quad(xb + 11, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcRail);
-    }
-    quad(xa - 11, yo, xb + 11, yo, xb, yi, xa, yi, tcCush);
+    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcRail);   /* ponta da madeira: sem triangulo escuro */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcRail);
+    quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
-    line(xa - 11, yo, xb + 11, yo, tcCushLo);
-    line(xa - 11, yo, xa, yi, tcCushHi);                 /* pontas inclinadas (linhas da cacapa) */
-    line(xb + 11, yo, xb, yi, tcCushHi);
+    line(xa - ra, yo, xb + rb, yo, tcCushLo);
+    line(xa - ra, yo, xa, yi, tcCushHi);                 /* pontas inclinadas */
+    line(xb + rb, yo, xb, yi, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
@@ -2265,8 +2263,18 @@ static void cushV(float ya, float yb, float xo, float xi)
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
-    line(xo, ya - 11, xi, ya, tcCushHi);                 /* pontas inclinadas (linhas da cacapa) */
+    line(xo, ya - 11, xi, ya, tcCushHi);                 /* pontas inclinadas */
     line(xo, yb + 11, xi, yb, tcCushHi);
+}
+
+static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, u64 c)   /* faixa de arco (chapa metalica do canto) */
+{
+    int n = 16, i;
+    for (i = 0; i < n; i++) {
+        float t0 = a0 + (a1 - a0) * i / n, t1 = a0 + (a1 - a0) * (i + 1) / n;
+        quad(cx + cosf(t0) * r0, cy + sinf(t0) * r0, cx + cosf(t1) * r0, cy + sinf(t1) * r0,
+             cx + cosf(t1) * r1, cy + sinf(t1) * r1, cx + cosf(t0) * r1, cy + sinf(t0) * r1, c);
+    }
 }
 
 static void diamond(float cx, float cy)
@@ -3727,7 +3735,7 @@ static void drawTable(void)
     float x, y;
 
     tcRail = w2;
-    tcCush = shade(T->felt, 0.50f, 0); tcCushHi = shade(T->felt, 1.35f, 12); tcCushLo = shade(T->felt, 0.33f, 0);
+    tcCush = shade(T->felt, 1.06f, 8); tcCushHi = shade(T->felt, 1.55f, 36); tcCushLo = shade(T->felt, 0.62f, 0);   /* borracha mais clara que o feltro */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
     /* sombra da mesa no chao */
@@ -3778,10 +3786,13 @@ static void drawTable(void)
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
         float ce = PRC[0] * tabPock() - POC, cm = PRC[1] * tabPock();
-        cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0);
-        cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0);
-        cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1);
-        cushH(TCX + cm, TX1 - ce, TY1 + 11, TY1);
+        u64 scoop = shade(T->felt, 0.70f, 0);
+        rect(TCX - cm, TY0 - 11, TCX + cm, TY0, scoop);                  /* meio: o vao entre as pontas mostra o feltro (sombra do buraco) */
+        rect(TCX - cm, TY1, TCX + cm, TY1 + 11, scoop);
+        cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0, 11.0f, 3.0f);
+        cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0, 3.0f, 11.0f);
+        cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1, 11.0f, 3.0f);
+        cushH(TCX + cm, TX1 - ce, TY1 + 11, TY1, 3.0f, 11.0f);
         cushV(TY0 + ce, TY1 - ce, TX0 - 11, TX0);
         cushV(TY0 + ce, TY1 - ce, TX1 + 11, TX1);
     }
@@ -3796,27 +3807,23 @@ static void drawTable(void)
         diamond(TX0 - 18.5f, y);  diamond(TX1 + 18.5f, y);
     }
 
-    /* cacapas: buraco fundo com aro metalico, brilho e degrade (mais bonitas) */
+    /* cacapas iguais ao 8 Ball Pool: buraco redondo com degrade vinho->preto e chapa prateada so no lado de fora dos cantos */
     for (p = 0; p < 6; p++) {
         float r0 = PR[p] * tabPock(), px = PX[p], py = PY[p];
-        int a;
-        discN(px, py, r0 + 4.2f, CA(0, 0, 0, 0x14), 28);    /* sombra suave em volta (sem invadir o feltro) */
-        discN(px, py, r0 + 3.2f, CA(0, 0, 0, 0x26), 28);
-        discN(px, py, r0 + 2.2f, COL(30,32,38), 28);                      /* aro externo escuro */
-        discN(px, py, r0 + 1.5f, COL(96,102,114), 28);                   /* aro metalico */
-        discN(px, py, r0 + 0.9f, COL(168,174,186), 28);                   /* fio de luz do aro */
-        discN(px, py, r0 + 0.45f, COL(52,55,64), 28);                      /* borda interna do aro */
-        discN(px, py, r0, COL(14,14,20), 28);                             /* boca do buraco */
-        discN(px + 0.7f, py + 0.9f, r0 * 0.86f, COL(6,6,10), 28);         /* degrade para o fundo */
-        discN(px + 1.4f, py + 1.8f, r0 * 0.66f, COL(0,0,0), 24);          /* fundo bem escuro */
-        for (a = 0; a < 7; a++) {                                         /* brilho do aro (canto de cima/esquerda) */
-            float ang = 3.45f + a * 0.17f;
-            disc(px + cosf(ang) * (r0 + 1.0f), py + sinf(ang) * (r0 + 1.0f), 0.95f, CA(255, 255, 255, 0x50 - a * 6));
+        int mid = (p % 3 == 1);
+        static const float IA[6] = { 0.7854f, 1.5708f, 2.3562f, 5.4978f, 4.7124f, 3.9270f };
+        float ia = IA[p];                                                            /* direcao do buraco para dentro da mesa */
+        if (!mid) {                                                                  /* chapa prateada do canto (nao entra no feltro) */
+            float a0 = ia + 0.75f, a1 = ia + 6.283f - 0.75f;
+            arcBand(px, py, r0 + 0.2f, r0 + 4.2f, a0, a1, COL(150,154,166));
+            arcBand(px, py, r0 + 0.2f, r0 + 1.4f, a0, a1, COL(226,228,238));         /* brilho interno */
+            arcBand(px, py, r0 + 3.4f, r0 + 4.2f, a0, a1, COL(78,80,92));            /* borda externa */
         }
-        for (a = 0; a < 5; a++) {                                         /* reflexo fraco na parede interna (baixo/direita) */
-            float ang = 0.35f + a * 0.16f;
-            disc(px + cosf(ang) * (r0 - 1.6f), py + sinf(ang) * (r0 - 1.6f), 0.8f, CA(120, 125, 140, 0x2c));
-        }
+        discN(px, py, r0 + 1.0f, CA(0, 0, 0, 0x30), 28);                             /* contorno escuro */
+        discN(px, py, r0, shade(T->wood, 0.34f, 0), 28);                             /* boca: vinho nas bordas */
+        discN(px + 0.9f, py + 1.1f, r0 * 0.86f, shade(T->wood, 0.20f, 0), 28);       /* degrade para o fundo */
+        discN(px + 1.8f, py + 2.2f, r0 * 0.68f, COL(8,3,4), 28);
+        discN(px + 2.6f, py + 3.1f, r0 * 0.48f, COL(0,0,0), 24);                     /* fundo preto */
     }
 
     /* linha da cabeceira e marcas do feltro */
