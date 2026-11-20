@@ -22,6 +22,13 @@
 
 #include "music.h"
 
+/* printf no PS2 (SIO/ps2link) e LENTO e bloqueia o quadro: so liga com -DMUS_DEBUG */
+#ifdef MUS_DEBUG
+#define DBGP(...) printf(__VA_ARGS__)
+#else
+#define DBGP(...) ((void)0)
+#endif
+
 int __iomanX_id = -1;
 int __fileXio_id = -1;
 
@@ -41,6 +48,7 @@ typedef struct { char path[PATH_LEN]; char name[NAME_LEN]; } Track;
 
 static Track tr[MUS_MAX];
 static int idleRun, budget, idleTail;
+static int autoWait = -1, prefill;
 static int dbgT, dbgM, dbgN, dbgLibsd, dbgAud, dbgInit, lateTries, lateWait;   /* diagnostico do audsrv */
 static int nTr, cur = -1, state, audioOK, volume = 8, enabled = 1;
 static int scanTries, scanWait = 120, scanDone, wantAuto = 1, ending, failStreak, toastT;
@@ -218,15 +226,29 @@ static unsigned char mixbuf[8192] __attribute__((aligned(64)));   /* alinhado: o
 
 static float nz(void) { nzSeed = nzSeed * 1664525u + 1013904223u; return ((nzSeed >> 8) & 0xFFFF) / 32768.0f - 1.0f; }
 
-static int build(int id)                         /* sintetiza o efeito (mono, 16 bits, SFX_HZ) */
+static short *bo[SFX_COUNT];                     /* estado da sintese incremental de cada efeito */
+static int    bi[SFX_COUNT];
+static float  blp[SFX_COUNT], bph[SFX_COUNT];
+
+/* sintetiza o efeito (mono, 16 bits, SFX_HZ) em pedacos de maxN amostras (0 = tudo de uma vez).
+   devolve 1 = pronto, 0 = ainda falta, -1 = sem memoria. Fazer tudo num quadro so (sinf/expf em software)
+   travava o jogo logo depois de abrir. */
+static int buildRun(int id, int maxN)
 {
     static const float DUR[SFX_COUNT] = { 0.12f, 0.09f, 0.15f, 0.45f, 0.07f, 0.22f, 0.22f, 1.00f, 1.00f, 0.40f, 0.28f, 0.50f };
     const float TP = 6.2831853f;
-    int i, n = (int)(DUR[id] * SFX_HZ);
-    short *o = (short *)malloc((size_t)n * sizeof(short));
-    float lp = 0.0f, lp2 = 0.0f, ph = 0.0f;
-    if (!o) return 0;
-    for (i = 0; i < n; i++) {
+    int i, end, n = (int)(DUR[id] * SFX_HZ);
+    short *o;
+    float lp, lp2 = 0.0f, ph;
+    if (sfx[id].d) return 1;
+    if (!bo[id]) {
+        bo[id] = (short *)malloc((size_t)n * sizeof(short));
+        if (!bo[id]) return -1;
+        bi[id] = 0; blp[id] = 0.0f; bph[id] = 0.0f;
+    }
+    o = bo[id]; lp = blp[id]; ph = bph[id];
+    end = (maxN > 0 && bi[id] + maxN < n) ? bi[id] + maxN : n;
+    for (i = bi[id]; i < end; i++) {
         float t = (float)i / SFX_HZ, v = 0.0f, x;
         switch (id) {
         case SFX_HIT:                                        /* "toc" grave do taco na bola branca */
@@ -296,9 +318,13 @@ static int build(int id)                         /* sintetiza o efeito (mono, 16
         v = v / (1.0f + 0.6f * fabsf(v));                    /* saturacao suave: picos nao estouram */
         o[i] = (short)(v * 26000.0f);
     }
-    sfx[id].d = o; sfx[id].len = n;
+    bi[id] = end; blp[id] = lp; bph[id] = ph;
+    if (end < n) return 0;
+    sfx[id].d = o; sfx[id].len = n; bo[id] = NULL;
     return 1;
 }
+
+static int build(int id) { return buildRun(id, 0) > 0; }
 
 static int ensureFmt(int hz, int ch, int bits, int force)   /* aplica o formato no audsrv (so se mudou) */
 {
@@ -395,13 +421,13 @@ void sfxPlay(int id, int vol)
 static void sfxIdle(void)                         /* sem musica tocando: manda so os efeitos */
 {
     int avail, n, want, qd;
-    if (dbgT++ % 300 == 0 && dbgM++ < 6) printf("pool8: musicUpdate state=%d nTr=%d voices=%d fmtSet=%d\n", state, nTr, nVoice, fmtSet);
+    DBGP("pool8: musicUpdate state=%d nTr=%d voices=%d fmtSet=%d\n", state, nTr, nVoice, fmtSet);
     if (!nVoice) {                                /* efeitos acabaram: limpa a fila do audsrv para ele nao repetir o ultimo trecho (chiado) */
         if (idleRun && state != 1 && ++idleTail >= 15) { audsrv_stop_audio(); outHz = 0; idleRun = 0; }
         return;
     }
     idleTail = 0;
-    if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { if (dbgN++ < 5) printf("pool8: ensureFmt falhou\n"); return; }
+    if (!(state == 1 && fmtSet) && !ensureFmt(44100, 2, 16, 0)) { DBGP("pool8: ensureFmt falhou\n"); return; }
     avail = audsrv_available();
     /* ritmo de reproducao: a cada quadro entra so o que o som consome em 1/60 s (44100 Hz * 4 bytes / 60 = 2940).
        nao usa audsrv_queued(): em alguns audsrv/PCSX2 ele devolve o mesmo valor de available */
@@ -413,13 +439,14 @@ static void sfxIdle(void)                         /* sem musica tocando: manda s
     n = avail < want ? avail : want;
     if (n > (int)sizeof(mixbuf)) n = (int)sizeof(mixbuf);
     n -= n % (outCh * (outBits / 8));
-    if (n <= 0) { if (dbgN++ < 40) printf("pool8: sfxIdle sem espaco avail=%d queued=%d want=%d\n", avail, audsrv_queued(), want); return; }
+    if (n <= 0) { DBGP("pool8: sfxIdle sem espaco avail=%d queued=%d want=%d\n", avail, audsrv_queued(), want); return; }
     mixOut(mixbuf, NULL, n, 0);
     FlushCache(0);
     {
         int r = audsrv_play_audio((const char *)mixbuf, n);
         budget -= n;
-        if (dbgN++ < 40) printf("pool8: sfx avail=%d queued=%d want=%d n=%d voices=%d play=%d\n", avail, qd, want, n, nVoice, r);
+        (void)r;
+        DBGP("pool8: sfx avail=%d queued=%d want=%d n=%d voices=%d play=%d\n", avail, qd, want, n, nVoice, r);
     }
 }
 
@@ -474,8 +501,8 @@ static void startTrack(int i, int dir)
         ext = strrchr(tr[i].path, '.');
         isMp3 = (ext && !strcasecmp(ext, ".mp3"));
         if (fp) {
-            if (isMp3) { mp3dec_init(&dec); state = 1; toastT = 240; failStreak = 0; return; }
-            if (openWav()) { state = 1; toastT = 240; failStreak = 0; return; }
+            if (isMp3) { mp3dec_init(&dec); state = 1; prefill = 40; toastT = 240; failStreak = 0; return; }
+            if (openWav()) { state = 1; prefill = 40; toastT = 240; failStreak = 0; return; }
         }
         closeTrack();
         i = (i + dir + nTr) % nTr;                              /* arquivo ruim: tenta o proximo */
@@ -521,7 +548,7 @@ void musicSetEnabled(int on)
 
 void musicUpdate(void)
 {
-    int it, fed = 0;
+    int it, fed = 0, heavy = 0, iters;
     if (!audioOK) {                               /* o audsrv pode subir tarde no console: continua tentando */
         if (lateTries < 20 && --lateWait <= 0) {
             lateWait = 120; lateTries++;
@@ -533,22 +560,30 @@ void musicUpdate(void)
         if (!audioOK) return;
     }
     if (toastT > 0) toastT--;
-    if (sfxBuilt < SFX_COUNT) { if (!sfx[sfxBuilt].d) build(sfxBuilt); sfxBuilt++; }   /* gera um efeito por quadro */
 
     if (nTr == 0 && !scanDone && --scanWait <= 0) {              /* o USB demora um pouco para aparecer */
-        scanWait = 240;
+        scanWait = 240; heavy = 1;
         if (musicScan() > 0) scanDone = 1;
         else if (++scanTries >= 8) scanDone = 1;
     }
-    if (nTr > 0 && wantAuto) {                                    /* comeca sozinho, numa faixa qualquer */
-        wantAuto = 0;
-        if (enabled) { srand((unsigned)(scanTries * 7919 + nTr)); musicPlay(rand() % nTr); }
+    if (nTr > 0 && wantAuto && !heavy) {                          /* comeca sozinho, numa faixa qualquer (alguns quadros depois da busca) */
+        if (autoWait < 0) autoWait = 20;
+        if (--autoWait <= 0) {
+            wantAuto = 0; heavy = 1;
+            if (enabled) { srand((unsigned)(scanTries * 7919 + nTr)); musicPlay(rand() % nTr); }
+        }
+    }
+    if (!heavy && sfxBuilt < SFX_COUNT) {                         /* gera os efeitos aos poucos (500 amostras por quadro) */
+        int r = buildRun(sfxBuilt, 500);
+        if (r != 0) sfxBuilt++;
     }
 
     if (state == 1 && ending) {                                   /* espera o som acabar e vai para a proxima */
         if (audsrv_queued() < 1024 && !nVoice) { musicNext(1); return; }
     } else if (state == 1) {
-        for (it = 0; it < 2; it++) {
+        iters = prefill > 0 ? 6 : 2;                              /* no comeco enche a fila do audsrv mais rapido (sem falhas se o quadro demorar) */
+        if (prefill > 0) prefill--;
+        for (it = 0; it < iters; it++) {
             int avail, n, fb;
             if (pcmPos >= pcmLen) {
                 if (!decodeNext()) { if (!fmtSet) { if (++failStreak > nTr) { state = 0; return; } musicNext(1); return; } ending = 1; break; }

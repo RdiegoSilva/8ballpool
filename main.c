@@ -7793,6 +7793,7 @@ static void splashScreen(void)
         if (f < 36) a = f * 0x80 / 36;
         if (f > total - 30) a = (total - f) * 0x80 / 30;
         if (f > 40 && (readpad(0) & (PAD_START | PAD_CROSS))) { f = total - 30; }
+        musicUpdate();                                  /* busca musicas e gera os efeitos ja na abertura (nao trava depois) */
         menuT++;
         menuUpdate();
         gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x80, 0x00));
