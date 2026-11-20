@@ -159,13 +159,13 @@ static int   jumpArm;                              /* 1 = a proxima tacada faz a
 static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 15.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
-#define POM 10.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
+#define POC 2.0f                                  /* quina: o buraco fica no canto da mesa, metade na moldura e metade no feltro (como no 8 Ball Pool) */
+#define POM 2.0f                                   /* meio: meia-lua que morde a borda da tabela, entrando no feltro */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 12.0f, 12.0f, 12.0f, 12.0f, 12.0f, 12.0f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
-/* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 27.0f, 25.0f, 27.0f, 27.0f, 25.0f, 27.0f };
+static const float PR[6] = { 15.5f, 15.5f, 15.5f, 15.5f, 15.5f, 15.5f };   /* raio DESENHADO do buraco (grande, encostado no feltro) */
+/* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
+static const float PRC[6] = { 16.0f, 20.0f, 16.0f, 16.0f, 20.0f, 16.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -3412,7 +3412,7 @@ static void tableDecoPool(int stage)
         for (k = 0; k < 4; k++)                                                                        /* borda do feltro mais escura */
             outlineRect(TX0 + k, TY0 + k, TX1 - k, TY1 - k, CA(6, 30, 62, 0x30 - k * 8));
     } else {
-        float ce = PRC[0] - POC + 2.0f, cm = PRC[1] + 1.0f;                                            /* mesmas aberturas das tabelas */
+        float ce = PRC[0] - POC, cm = PRC[1];                                            /* mesmas aberturas das tabelas */
         u64 hi = CA(170, 230, 255, 0x5a);
         line(TX0 + ce, TY0 + 0.5f, TCX - cm, TY0 + 0.5f, hi);                                          /* brilho azul-claro no gume das tabelas */
         line(TCX + cm, TY0 + 0.5f, TX1 - ce, TY0 + 0.5f, hi);
@@ -3770,7 +3770,7 @@ static void drawTable(void)
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
-        float ce = PRC[0] * tabPock() - POC + 2.0f, cm = PRC[1] * tabPock() + 1.0f;
+        float ce = PRC[0] * tabPock() - POC, cm = PRC[1] * tabPock();
         cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0);
         cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0);
         cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1);
@@ -3795,16 +3795,16 @@ static void drawTable(void)
         int a;
         discN(px + 1.0f, py + 1.5f, r0 + 5.0f, CA(0, 0, 0, 0x14), 28);    /* sombra suave em volta */
         discN(px + 0.6f, py + 1.0f, r0 + 3.4f, CA(0, 0, 0, 0x26), 28);
-        discN(px, py, r0 + 2.8f, COL(34,36,42), 28);                      /* aro externo escuro */
-        discN(px, py, r0 + 2.0f, COL(122,128,140), 28);                   /* aro metalico */
-        discN(px, py, r0 + 1.2f, COL(206,212,224), 28);                   /* fio de luz do aro */
-        discN(px, py, r0 + 0.6f, COL(64,68,78), 28);                      /* borda interna do aro */
+        discN(px, py, r0 + 2.2f, COL(30,32,38), 28);                      /* aro externo escuro */
+        discN(px, py, r0 + 1.5f, COL(96,102,114), 28);                   /* aro metalico */
+        discN(px, py, r0 + 0.9f, COL(168,174,186), 28);                   /* fio de luz do aro */
+        discN(px, py, r0 + 0.45f, COL(52,55,64), 28);                      /* borda interna do aro */
         discN(px, py, r0, COL(14,14,20), 28);                             /* boca do buraco */
         discN(px + 0.7f, py + 0.9f, r0 * 0.86f, COL(6,6,10), 28);         /* degrade para o fundo */
         discN(px + 1.4f, py + 1.8f, r0 * 0.66f, COL(0,0,0), 24);          /* fundo bem escuro */
         for (a = 0; a < 7; a++) {                                         /* brilho do aro (canto de cima/esquerda) */
             float ang = 3.45f + a * 0.17f;
-            disc(px + cosf(ang) * (r0 + 1.4f), py + sinf(ang) * (r0 + 1.4f), 0.95f, CA(255, 255, 255, 0x50 - a * 6));
+            disc(px + cosf(ang) * (r0 + 1.0f), py + sinf(ang) * (r0 + 1.0f), 0.95f, CA(255, 255, 255, 0x50 - a * 6));
         }
         for (a = 0; a < 5; a++) {                                         /* reflexo fraco na parede interna (baixo/direita) */
             float ang = 0.35f + a * 0.16f;
