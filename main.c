@@ -3785,7 +3785,7 @@ static void drawTable(void)
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
         float ce = PRC[0] * tabPock() - POC, cm = PRC[1] * tabPock();
-        u64 scoop = shade(T->felt, 0.70f, 0);
+        u64 scoop = shade(T->felt, 0.42f, 0);                            /* vao das cacapas do meio: escuro, continua o buraco ate o feltro */
         rect(TCX - cm, TY0 - 11, TCX + cm, TY0, scoop);                  /* meio: o vao entre as pontas mostra o feltro (sombra do buraco) */
         rect(TCX - cm, TY1, TCX + cm, TY1 + 11, scoop);
         cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0, 11.0f, 3.0f);
@@ -3812,6 +3812,7 @@ static void drawTable(void)
         int mid = (p % 3 == 1);
         static const float IA[6] = { 0.7854f, 1.5708f, 2.3562f, 5.4978f, 4.7124f, 3.9270f };
         float ia = IA[p];                                                            /* direcao do buraco para dentro da mesa */
+        if (mid) { float cmv = PRC[1] * tabPock() - 1.0f; if (r0 < cmv) r0 = cmv; }   /* so visual: o buraco do meio preenche o vao entre as tabelas (abertura para a bola entrar) */
         if (!mid) {                                                                  /* chapa prateada do canto (nao entra no feltro) */
             float a0 = ia + 0.75f, a1 = ia + 6.283f - 0.75f;
             arcBand(px, py, r0 + 0.2f, r0 + 4.2f, a0, a1, COL(150,154,166));
@@ -7669,6 +7670,8 @@ static void drawScene(void)
             }
         }
     }
+    /* o taco (290 de comprimento) nao pode vazar da moldura da mesa para a barra de forca / HUD */
+    gsKit_set_scissor(g, GS_SETREG_SCISSOR((int)(TX0 - 30.0f + OX), (int)(TX1 + 30.0f + OX), (int)(TY0 - 30.0f + OY), (int)(TY1 + 30.0f + OY)));
     cueChalk = isBot() ? 1.0f : chalk[cur];
     if (state == S_AIM) {
         float cd0 = R + 4 + pwr * 70;
@@ -7683,6 +7686,7 @@ static void drawScene(void)
         float f = (float)(FOLLOWN - follow) / FOLLOWN;
         drawCue(hitX, hitY, R + 1.0f - 16.0f * f, (int)(0x80 * (1.0f - f)), ang, hitCue);
     }
+    gsKit_set_scissor(g, GS_SCISSOR_RESET);
     if (state == S_TAKE && takeN > 0) {
         float bob = 3.0f * sinf(menuT * 0.2f);
         float bx = b[takeList[takeSel]].x, by = b[takeList[takeSel]].y;
