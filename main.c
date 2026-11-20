@@ -159,13 +159,13 @@ static int   jumpArm;                              /* 1 = a proxima tacada faz a
 static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o personagem / a mesa ao iniciar a partida */
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
-#define POC 2.0f                                  /* quina: o buraco fica no canto da mesa, metade na moldura e metade no feltro (como no 8 Ball Pool) */
-#define POM 2.0f                                   /* meio: meia-lua que morde a borda da tabela, entrando no feltro */
+#define POC 10.5f                                  /* quina: o buraco encosta no canto do feltro mas NAO invade a mesa (so cobre as pontas das tabelas) */
+#define POM 11.0f                                   /* meio: o buraco fica na tabela, encostando no feltro sem invadir */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 15.5f, 15.5f, 15.5f, 15.5f, 15.5f, 15.5f };   /* raio DESENHADO do buraco (grande, encostado no feltro) */
+static const float PR[6] = { 14.5f, 13.0f, 14.5f, 14.5f, 13.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
-static const float PRC[6] = { 16.0f, 20.0f, 16.0f, 16.0f, 20.0f, 16.0f };
+static const float PRC[6] = { 25.0f, 21.0f, 25.0f, 25.0f, 21.0f, 25.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -2243,10 +2243,14 @@ static const TableDef TABLES[NTABLES] = {
     { "DELEGACIA",{ 38, 66,122}, { 20, 26, 48}, {255,215, 80}, 20 },
     { "POOL AZUL",{ 36,136,204}, {142, 26, 38}, {238,232,214}, 21 },   /* feltro azul, madeira vermelha, diamantes claros, cacapas pretas */
 };
-static u64 tcCush, tcCushHi, tcCushLo, tcDia;      /* cores derivadas da mesa escolhida */
+static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail;     /* cores derivadas da mesa escolhida */
 
 static void cushH(float xa, float xb, float yo, float yi)
 {
+    {   /* ponta da madeira: preenche o canto entre o buraco e a ponta inclinada (sem triangulo escuro) */
+        quad(xa - 20, yo, xa - 11, yo, xa, yi, xa - 20, yi, tcRail);
+        quad(xb + 11, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcRail);
+    }
     quad(xa - 11, yo, xb + 11, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(xa - 11, yo, xb + 11, yo, tcCushLo);
@@ -2256,6 +2260,8 @@ static void cushH(float xa, float xb, float yo, float yi)
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
+    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcRail);          /* ponta da madeira (sem triangulo escuro) */
+    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcRail);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
@@ -3720,6 +3726,7 @@ static void drawTable(void)
     int p, k;
     float x, y;
 
+    tcRail = w2;
     tcCush = shade(T->felt, 0.50f, 0); tcCushHi = shade(T->felt, 1.35f, 12); tcCushLo = shade(T->felt, 0.33f, 0);
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
