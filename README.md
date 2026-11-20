@@ -5,6 +5,11 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.2
 
+## Chapolin: corneta so 1 rodada + rever replay (novo)
+- **CORNETA** paralisa a bola do adversario apenas por **1 rodada**: ela fica parada ate o fim da proxima jogada dele e depois volta ao normal (nao dura mais ate o fim da partida)
+- Na tela **Configurar partida, etapa 1 (Partida)** aparece a linha **VER REPLAY ANTERIOR** — **so quando existe replay** da partida que acabou de terminar. **X** assiste (a ultima bola, em camera lenta, com a bola normal, sem aros de corneta/algemas) e **X ou START** volta as opcoes. A linha some assim que a proxima partida comeca a primeira tacada
+- No replay, a mesa, as cores e os personagens sao os da partida anterior, mesmo que voce tenha mudado as opcoes
+
 ## Jogo mais rápido (3.1.1)
 - A tacada sai bem mais forte (velocidade máxima da branca de 640 para 1200) e o atrito da mesa é um pouco menor, então as bolas correm muito mais e **andam mais longe** antes de parar
 - Os números ficam em `MAXV`, `FRIC_K` e `FRIC_C` no começo do `main.c`: para ficar ainda mais rápido aumente `MAXV`; para as bolas pararem antes, aumente `FRIC_K` ou `FRIC_C`

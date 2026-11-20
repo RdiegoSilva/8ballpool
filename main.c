@@ -111,7 +111,7 @@ static float lockX, lockY;
 static const int CP_KIND[2] = { AB_PRENDER, AB_SIRENE };
 static const char *CP_NAME[2] = { "ALGEMAS", "SIRENE" };
 /* CHAPOLIN (ultra lendario): 3 poderes que o jogador escolhe.
-   CORNETA PARALISADORA: uma bola do adversario nao se mexe mais ate o fim da partida (solta so quando e a ultima dele)
+   CORNETA PARALISADORA: uma bola do adversario nao se mexe por 1 rodada (ate o fim da proxima jogada dele)
    PASTILHAS DE CHIQUITOLINA: ate o fim da proxima jogada do adversario, as bolas dele ficam menores, mais lentas e a forca dele cai
    MARRETA BIONICA: nesta tacada as bolas saem mais rapidas e demoram para parar */
 #define CHIQ_R    0.70f                               /* tamanho das bolas do adversario sob a CHIQUITOLINA */
@@ -160,12 +160,12 @@ static int   charRand[2], tableRandom;            /* ALEATORIO: sorteia o person
 static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) e relogio da tela de fim */
 
 #define POC 15.0f                                  /* quina: o centro do buraco fica na moldura, no canto da mesa (entra so um pouco no feltro) */
-#define POM 9.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
+#define POM 10.0f                                   /* meio: em cima da borda da tabela, quase todo na moldura */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 10.5f, 9.0f, 10.5f, 10.5f, 9.0f, 10.5f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
+static const float PR[6] = { 12.0f, 12.0f, 12.0f, 12.0f, 12.0f, 12.0f };   /* raio DESENHADO do buraco (menor, embutido na moldura) */
 /* raio de captura (fisica): como o buraco ficou mais para fora, a bola cai quando o centro dela passa da borda da mesa */
-static const float PRC[6] = { 27.0f, 19.0f, 27.0f, 27.0f, 19.0f, 27.0f };
+static const float PRC[6] = { 27.0f, 25.0f, 27.0f, 27.0f, 25.0f, 27.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
@@ -765,7 +765,24 @@ static Ball repSaveB[16];
 static int repSaveFT[16], repSaveFP[16], repSavePk[16];
 static float repSaveFX[16], repSaveFY[16], repSaveM[16][9];
 
-static void repReset(void) { repFrame = 0; repPotF = -1; }
+/* contexto da partida (mesa, cores, personagens...) para rever o replay depois, pela tela de configurar */
+typedef struct { int tableSel, tTable, tourney, gmode, mode, colSel[2], charSel[2], ballTheme, wbSel[2], gdSel[2]; } RepCtx;
+static RepCtx repCtx, repCtxTmp;
+static int repHave, repFromSetup;                     /* repHave: existe replay da partida anterior (so ate a proxima tacada) */
+static void repCtxGet(RepCtx *c)
+{
+    c->tableSel = tableSel; c->tTable = tTable; c->tourney = tourney; c->gmode = gmode; c->mode = mode; c->ballTheme = ballTheme;
+    memcpy(c->colSel, colSel, sizeof colSel); memcpy(c->charSel, charSel, sizeof charSel);
+    memcpy(c->wbSel, wbSel, sizeof wbSel); memcpy(c->gdSel, gdSel, sizeof gdSel);
+}
+static void repCtxSet(const RepCtx *c)
+{
+    tableSel = c->tableSel; tTable = c->tTable; tourney = c->tourney; gmode = c->gmode; mode = c->mode; ballTheme = c->ballTheme;
+    memcpy(colSel, c->colSel, sizeof colSel); memcpy(charSel, c->charSel, sizeof charSel);
+    memcpy(wbSel, c->wbSel, sizeof wbSel); memcpy(gdSel, c->gdSel, sizeof gdSel);
+}
+
+static void repReset(void) { repFrame = 0; repPotF = -1; repHave = 0; }
 
 static void repRecord(void)                           /* chamada 1x por quadro enquanto as bolas rolam */
 {
@@ -791,6 +808,7 @@ static void repApply(int fi)
     }
 }
 
+static void repLaunch(int ret);
 static void repMaybeStart(void)                       /* chamar logo depois de resolve(): fim de partida ou (opcao) toda jogada */
 {
     int lo, over = (state == S_OVER);
@@ -805,10 +823,16 @@ static void repMaybeStart(void)                       /* chamar logo depois de r
         repA = lo; repB = repFrame - 1;
     }
     if (repB - repA < 20) return;
+    if (over) { repHave = 1; repCtxGet(&repCtx); }       /* guarda para rever na tela de configurar a partida */
+    repLaunch(state);
+}
+
+static void repLaunch(int ret)                        /* guarda o estado atual e comeca o replay (ret = estado para onde voltar) */
+{
     memcpy(repSaveB, b, sizeof b); memcpy(repSaveFT, fallT, sizeof fallT); memcpy(repSaveFP, fallP, sizeof fallP);
     memcpy(repSavePk, pocketed, sizeof pocketed); memcpy(repSaveFX, fallX, sizeof fallX); memcpy(repSaveFY, fallY, sizeof fallY);
     memcpy(repSaveM, ballM, sizeof ballM);
-    repRet = state; repSaveMsgT = msgTimer;
+    repRet = ret; repSaveMsgT = msgTimer;
     repPos = (float)repA; repT = 0; repHold = 0; repSfx = 0;
     msgTimer = 0;
     state = S_REPLAY;
@@ -820,7 +844,15 @@ static void repEnd(void)                              /* volta para o estado de 
     memcpy(pocketed, repSavePk, sizeof pocketed); memcpy(fallX, repSaveFX, sizeof fallX); memcpy(fallY, repSaveFY, sizeof fallY);
     memcpy(ballM, repSaveM, sizeof ballM);
     if (repRet == S_OVER) overT = 0; else msgTimer = repSaveMsgT;
+    if (repFromSetup) { repCtxSet(&repCtxTmp); repFromSetup = 0; }   /* volta as opcoes da tela de configurar */
     state = repRet;
+}
+
+static void repWatchPrev(void)                        /* configurar partida: rever o replay da partida anterior */
+{
+    if (!repHave) return;
+    repCtxGet(&repCtxTmp); repCtxSet(&repCtx); repFromSetup = 1;
+    repLaunch(S_SETUP);
 }
 
 static void repUpdate(int pressed)                    /* 1 passo do replay (estado S_REPLAY): repete ate apertar X */
@@ -1215,7 +1247,7 @@ static void shoot(float p)
         case AB_RESSUS:   { int id = graveFindRevive(); if (id > 0) { respot(id, TCX, TCY); ghostBall = id; fxX = b[id].x; fxY = b[id].y; } } break;   /* a ressuscitada e um fantasma: sem fisica ate o fim desta jogada */
         case AB_PRENDER:  if (copTgt > 0 && b[copTgt].in) { lockBall = copTgt; lockOwner = cur; lockX = b[copTgt].x; lockY = b[copTgt].y; fxX = lockX; fxY = lockY; } break;   /* POLICIAL: prende a bola */
         case AB_CORNETA:  if (copTgt > 0 && b[copTgt].in && cornCand(copTgt)) { cornBall = copTgt; cornOwner = cur; cornX = b[copTgt].x; cornY = b[copTgt].y; fxX = cornX; fxY = cornY; }
-                          else { abilCD[cur] = 0; abilKind = AB_NONE; setmsg("CORNETA: NENHUMA BOLA VALIDA"); } break;   /* CHAPOLIN: paralisa a bola ate o fim da partida */
+                          else { abilCD[cur] = 0; abilKind = AB_NONE; setmsg("CORNETA: NENHUMA BOLA VALIDA"); } break;   /* CHAPOLIN: paralisa a bola por 1 rodada */
         case AB_CHIQUI:   chiqOn = 1; chiqOwner = cur; fxX = TCX; fxY = TCY; break;                                   /* CHAPOLIN: bolas do adversario menores e lentas */
         case AB_BIONICA:  b[0].vx *= BION_VEL; b[0].vy *= BION_VEL; fricMul = BION_FRIC; break;                        /* CHAPOLIN: tudo mais rapido, demora para parar */
         case AB_SIRENE:   sirenT[1 - cur] = 1; fxX = TCX; fxY = TCY; break;                                                                        /* POLICIAL: o adversario joga sem linha guia */
@@ -1328,7 +1360,7 @@ static int stepPhysics(float dt)
 {
     int i, j, p, moving = 0;
     float tpk = tabPock();
-    if (cornBall > 0 && b[cornBall].in) {              /* CHAPOLIN: a bola paralisada nao se mexe de jeito nenhum ate o fim da partida */
+    if (cornBall > 0 && b[cornBall].in) {              /* CHAPOLIN: a bola paralisada nao se mexe de jeito nenhum durante a rodada */
         b[cornBall].x = cornX; b[cornBall].y = cornY; b[cornBall].vx = b[cornBall].vy = 0.0f; b[cornBall].vz = 0.0f; b[cornBall].z = 0.0f;
     }
     if (lockBall > 0 && b[lockBall].in) {              /* POLICIAL: a bola presa nao se mexe de jeito nenhum (nenhum poder a move) */
@@ -1950,10 +1982,9 @@ static void resolve(void)
     if (lockBall > 0 && cur != lockOwner) lockBall = 0;     /* POLICIAL: a prisao dura ate o fim da jogada do adversario */
     sirenT[cur] = 0;                                  /* POLICIAL: a sirene vale so para esta jogada */
     if (chiqOn && cur != chiqOwner) chiqOn = 0;       /* CHAPOLIN: a chiquitolina dura ate o fim da jogada do adversario */
-    if (cornBall > 0) {                               /* CHAPOLIN: a corneta vale ate o fim da partida; so solta a ultima bola do adversario (senao ele nunca poderia vencer) */
-        int cg = ballGroup(cornBall);
+    if (cornBall > 0) {                               /* CHAPOLIN: a corneta dura so 1 rodada (ate o fim da jogada do adversario), depois a bola volta ao normal */
         if (!b[cornBall].in) cornBall = 0;
-        else if (cg >= 0 && cg < 2 && countGroup(cg) <= 1) { cornBall = 0; setmsg("CORNETA ACABOU: ULTIMA BOLA LIBERADA"); }
+        else if (cur != cornOwner) { cornBall = 0; setmsg("CORNETA ACABOU: BOLA LIBERADA"); }
     }
     ghostSettle(ghostBall); ghostBall = 0;            /* COVEIRO: a ressuscitada volta ao normal (so na proxima rodada ela tem fisica) */
     if (gmode == GM_BR) { resolveBR(); return; }
@@ -3758,16 +3789,27 @@ static void drawTable(void)
         diamond(TX0 - 18.5f, y);  diamond(TX1 + 18.5f, y);
     }
 
-    /* cacapas estilo 8 Ball Pool: buraco preto grande com aro fino metalico */
+    /* cacapas: buraco fundo com aro metalico, brilho e degrade (mais bonitas) */
     for (p = 0; p < 6; p++) {
-        float r0 = PR[p] * tabPock();
-        discN(PX[p], PY[p], r0 + 2.0f, CA(0, 0, 0, 0x22), 24);            /* sombra no feltro/madeira */
-        discN(PX[p], PY[p], r0 + 1.5f, COL(96,100,108), 24);              /* aro metalico fino */
-        discN(PX[p], PY[p], r0 + 0.8f, COL(30,32,38), 24);
-        discN(PX[p], PY[p], r0, COL(2,2,4), 24);                          /* buraco */
-        discN(PX[p] + 0.8f, PY[p] + 1.0f, r0 * 0.78f, COL(0,0,0), 20);    /* fundo mais escuro */
-        ring(PX[p], PY[p], r0 + 0.2f, COL(18,18,22));
-        discN(PX[p] - r0 * 0.5f, PY[p] - r0 * 0.7f, 1.4f, CA(210, 215, 230, 0x30), 6);
+        float r0 = PR[p] * tabPock(), px = PX[p], py = PY[p];
+        int a;
+        discN(px + 1.0f, py + 1.5f, r0 + 5.0f, CA(0, 0, 0, 0x14), 28);    /* sombra suave em volta */
+        discN(px + 0.6f, py + 1.0f, r0 + 3.4f, CA(0, 0, 0, 0x26), 28);
+        discN(px, py, r0 + 2.8f, COL(34,36,42), 28);                      /* aro externo escuro */
+        discN(px, py, r0 + 2.0f, COL(122,128,140), 28);                   /* aro metalico */
+        discN(px, py, r0 + 1.2f, COL(206,212,224), 28);                   /* fio de luz do aro */
+        discN(px, py, r0 + 0.6f, COL(64,68,78), 28);                      /* borda interna do aro */
+        discN(px, py, r0, COL(14,14,20), 28);                             /* boca do buraco */
+        discN(px + 0.7f, py + 0.9f, r0 * 0.86f, COL(6,6,10), 28);         /* degrade para o fundo */
+        discN(px + 1.4f, py + 1.8f, r0 * 0.66f, COL(0,0,0), 24);          /* fundo bem escuro */
+        for (a = 0; a < 7; a++) {                                         /* brilho do aro (canto de cima/esquerda) */
+            float ang = 3.45f + a * 0.17f;
+            disc(px + cosf(ang) * (r0 + 1.4f), py + sinf(ang) * (r0 + 1.4f), 0.95f, CA(255, 255, 255, 0x50 - a * 6));
+        }
+        for (a = 0; a < 5; a++) {                                         /* reflexo fraco na parede interna (baixo/direita) */
+            float ang = 0.35f + a * 0.16f;
+            disc(px + cosf(ang) * (r0 - 1.6f), py + sinf(ang) * (r0 - 1.6f), 0.8f, CA(120, 125, 140, 0x2c));
+        }
     }
 
     /* linha da cabeceira e marcas do feltro */
@@ -5495,7 +5537,7 @@ static void drawCueMenu(void)
             textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
         } else if (ab == AB_MARRETA) {                           /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "CORNETA: PARALISA UMA BOLA DO ADVERSARIO ATE A ULTIMA DELE", 375.0f);
+            textFit(236, 311, 0.25f, COL(215,220,232), "CORNETA: PARALISA UMA BOLA DO ADVERSARIO POR 1 RODADA", 375.0f);
             textFit(236, 322, 0.25f, COL(215,220,232), "CHIQUITOLINA: BOLAS DO ADVERSARIO MENORES, LENTAS E -25% DE FORCA", 375.0f);
             textFit(236, 333, 0.25f, COL(215,220,232), "MARRETA BIONICA: BOLAS MAIS RAPIDAS E DEMORAM PARA PARAR", 375.0f);
         } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
@@ -5948,7 +5990,7 @@ static void drawOverScreen(void)
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, SR_ABIL, SR_TAUTO, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, SR_ABIL, SR_TAUTO, SR_RPL, NSR };
 #define NSTEPS 4                          /* configurar partida em etapas: 0 partida, 1 personagens, 2 mesa e bolas, 3 bola branca e guia */
 static int setStep;
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
@@ -5965,6 +6007,7 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
         if (oppSel == 0) v[n++] = SR_LVL;
         if (oppSel == 1 || tourney) { v[n++] = SR_TIME; v[n++] = SR_ABIL; }   /* tempo e habilidades: versus e torneio */
         v[n++] = SR_MODE;
+        if (repHave) v[n++] = SR_RPL;                            /* so aparece quando ha replay da partida anterior */
         v[n++] = SR_NEXT;
         break;
     case 1:
@@ -6189,6 +6232,7 @@ static void setupInput(u32 pr)
     if (pr & PAD_R1) { if (setStep < NSTEPS - 1) { setStep++; setSel = 0; } return; }
     if (pr & PAD_L1) { if (setStep > 0) { setStep--; setSel = 0; } return; }
     row = v[setSel];
+    if (row == SR_RPL && (pr & PAD_CROSS)) { repWatchPrev(); return; }                       /* X: assiste o replay da partida anterior */
     if (row == SR_NEXT && (pr & (PAD_CROSS | PAD_START))) { setStep++; setSel = 0; return; }
     if (row == SR_GO && (pr & (PAD_CROSS | PAD_START))) { nameOpen(0); return; }   /* abre a tela para digitar o nome */
     if (pr & PAD_START) {
@@ -6328,7 +6372,7 @@ static void drawCharSelect(void)
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
-                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM" };
+                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM", "VER REPLAY ANTERIOR" };
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
@@ -6372,6 +6416,11 @@ static void drawSetupScreen(void)
             text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
             sprintf(nx, "%d: %s", setStep + 2, STEPN[setStep + 1]);
             text(556 - tw(0.34f, nx), y + 3, 0.34f, COL(150,160,175), nx);
+            continue;
+        }
+        if (row == SR_RPL) {
+            text(98, y, 0.5f, sel ? COL(255,225,110) : COL(230,190,70), LBL[row]);
+            text(556 - tw(0.34f, "X: ASSISTIR"), y + 3, 0.34f, COL(150,160,175), "X: ASSISTIR");
             continue;
         }
         if (row == SR_GO) {
@@ -6456,6 +6505,8 @@ static void drawSetupScreen(void)
         hint = "DURANTE O JOGO, START MUDA A COR DA LINHA GUIA";
     else if (v[setSel] == SR_BALLS)
         hint = "MUDA AS CORES DAS BOLAS LISAS E LISTRADAS (BOLA 8)";
+    else if (v[setSel] == SR_RPL)
+        hint = "X: REVER A ULTIMA BOLA DA PARTIDA ANTERIOR   (X OU START NO REPLAY: VOLTAR)";
     else if (v[setSel] == SR_NEXT)
         hint = "X OU START: PROXIMA ETAPA   O: VOLTAR";
     else if (v[setSel] == SR_GO)
@@ -7392,13 +7443,13 @@ static void drawCuffs(float x, float y, int al)
 static void drawCopMarks(void)
 {
     int rb = (menuT / 8) & 1;
-    if (lockBall > 0 && b[lockBall].in) {                           /* bola presa: aro vermelho/azul e algemas por cima */
+    if (state != S_REPLAY && lockBall > 0 && b[lockBall].in) {      /* bola presa: aro vermelho/azul e algemas por cima */
         float x = b[lockBall].x, y = b[lockBall].y, pu = 1.2f * sinf(menuT * 0.25f);
         ringN(x, y, R + 2.6f + pu, 2.2f, 22, rb ? CA(255, 60, 70, 0xa0) : CA(80, 140, 255, 0xa0));
         discN(x, y, R * 0.62f, CA(20, 24, 40, 0x90), 12);
         drawCuffs(x, y, 0xd0);
     }
-    if (cornBall > 0 && b[cornBall].in) {                           /* CHAPOLIN: bola paralisada pela corneta (aro amarelo/vermelho e um Z) */
+    if (state != S_REPLAY && cornBall > 0 && b[cornBall].in) {      /* CHAPOLIN: bola paralisada pela corneta (aro amarelo/vermelho e um Z) */
         float x = b[cornBall].x, y = b[cornBall].y, pu = 1.2f * sinf(menuT * 0.25f);
         ringN(x, y, R + 2.6f + pu, 2.2f, 22, rb ? CA(255, 214, 40, 0xa0) : CA(255, 80, 60, 0xa0));
         discN(x, y, R * 0.62f, CA(20, 24, 40, 0x90), 12);
