@@ -6125,12 +6125,49 @@ static void cycleColor(int pl, int d)      /* cada jogador usa uma cor diferente
     do { colSel[pl] = (colSel[pl] + d + NBRC) % NBRC; } while (colSel[pl] == o);
 }
 
+/* ordem de exibicao: personagens por raridade (do mais comum ao mais raro; empate: ordem alfabetica) e mesas em ordem alfabetica.
+   so muda a ordem em que aparecem/rodam nos menus: os numeros internos (CHAR_*, TABLES) continuam os mesmos */
+static int csOrd[NCHARS], csInv[NCHARS], csOrdOk;        /* casa da grade -> personagem, e o inverso */
+static int tabOrd[NTABLES], tabInv[NTABLES], tabOrdOk;   /* posicao na lista -> mesa, e o inverso */
+static void csOrdInit(void)
+{
+    int i, j;
+    if (csOrdOk) return;
+    for (i = 0; i < NCHARS; i++) csOrd[i] = i;
+    for (i = 1; i < NCHARS; i++) {                        /* insercao: estavel e simples */
+        int c = csOrd[i];
+        for (j = i - 1; j >= 0; j--) {
+            int o = csOrd[j];
+            if (CHAR_RAR[o] < CHAR_RAR[c] || (CHAR_RAR[o] == CHAR_RAR[c] && strcmp(CHAR_NAME[o], CHAR_NAME[c]) <= 0)) break;
+            csOrd[j + 1] = o;
+        }
+        csOrd[j + 1] = c;
+    }
+    for (i = 0; i < NCHARS; i++) csInv[csOrd[i]] = i;
+    csOrdOk = 1;
+}
+static void tabOrdInit(void)
+{
+    int i, j;
+    if (tabOrdOk) return;
+    for (i = 0; i < NTABLES; i++) tabOrd[i] = i;
+    for (i = 1; i < NTABLES; i++) {
+        int t = tabOrd[i];
+        for (j = i - 1; j >= 0 && strcmp(TABLES[tabOrd[j]].name, TABLES[t].name) > 0; j--) tabOrd[j + 1] = tabOrd[j];
+        tabOrd[j + 1] = t;
+    }
+    for (i = 0; i < NTABLES; i++) tabInv[tabOrd[i]] = i;
+    tabOrdOk = 1;
+}
+
 static void cycleChar(int pl, int d)       /* cada jogador usa um personagem diferente */
 {
-    int o = charSel[1 - pl], v = charRand[pl] ? NCHARS : charSel[pl];   /* NCHARS = ALEATORIO */
-    do { v = (v + d + NCHARS + 1) % (NCHARS + 1); } while (v < NCHARS && v == o && !charRand[1 - pl]);
+    int o = charSel[1 - pl], v;
+    csOrdInit();
+    v = charRand[pl] ? NCHARS : csInv[charSel[pl]];                     /* posicao na lista por raridade; NCHARS = ALEATORIO */
+    do { v = (v + d + NCHARS + 1) % (NCHARS + 1); } while (v < NCHARS && csOrd[v] == o && !charRand[1 - pl]);
     charRand[pl] = (v == NCHARS);
-    if (!charRand[pl]) charSel[pl] = v;
+    if (!charRand[pl]) charSel[pl] = csOrd[v];
     if (pl == 0 && !charRand[0] && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio (pode desligar em MESA DO PERSONAGEM) */
 }
 
@@ -6210,12 +6247,13 @@ static void bracketInput(u32 pr)
 static int csStage, csReady[2], csPos, csInit;        /* csStage: 0 jogador 1 escolhe, 1 jogador 2 (ou BOT) escolhe, 2 os dois prontos */
 static const u8 CSC[2][3] = { {255,215,60}, {90,220,255} };   /* cor de cada jogador: dourado e ciano */
 
-static int csSlot(int pl) { return charRand[pl] ? CS_RND : charSel[pl]; }
+static int csSlot(int pl) { csOrdInit(); return charRand[pl] ? CS_RND : csInv[charSel[pl]]; }
 static int csChooser(void) { return csStage < 2 ? csStage : (tourney ? 0 : 1); }
 static int csTaken(int pl, int slot)                  /* o outro jogador ja travou este personagem? */
 {
     int o = 1 - pl;
-    return !tourney && slot < NCHARS && csReady[o] && !charRand[o] && charSel[o] == slot;
+    csOrdInit();
+    return !tourney && slot < NCHARS && csReady[o] && !charRand[o] && charSel[o] == csOrd[slot];
 }
 static void csEnsure(void)
 {
@@ -6234,7 +6272,7 @@ static int csMove(int pos, int dx, int dy)            /* anda pela grade pulando
 static void csApply(int pl)                           /* aplica a casa do cursor ao jogador pl */
 {
     if (csPos == CS_RND) charRand[pl] = 1;
-    else if (!csTaken(pl, csPos)) { charRand[pl] = 0; charSel[pl] = csPos; }
+    else if (!csTaken(pl, csPos)) { csOrdInit(); charRand[pl] = 0; charSel[pl] = csOrd[csPos]; }
     if (pl == 0 && !charRand[0] && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio */
     if (pl == 0 && !tourney && !charRand[0] && !charRand[1] && charSel[0] == charSel[1]) {     /* o 2o jogador ainda nao escolheu: sai da frente */
         int c = charSel[1];
@@ -6338,7 +6376,7 @@ static void setupInput(u32 pr)
     case SR_LVL:   botLevel = (botLevel + d + NLEVELS) % NLEVELS; break;
     case SR_TIME:  timeSel = (timeSel + d + NTIMES) % NTIMES; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
-    case SR_TABLE: { int v = tableRandom ? NTABLES : tableSel; v = (v + d + NTABLES + 1) % (NTABLES + 1); tableRandom = (v == NTABLES); if (!tableRandom) tableSel = v; tableAuto = 0; } break;   /* ultima opcao: ALEATORIA */
+    case SR_TABLE: { int v; tabOrdInit(); v = tableRandom ? NTABLES : tabInv[tableSel]; v = (v + d + NTABLES + 1) % (NTABLES + 1); tableRandom = (v == NTABLES); if (!tableRandom) tableSel = tabOrd[v]; tableAuto = 0; } break;   /* ordem alfabetica; ultima opcao: ALEATORIA */
     case SR_ABIL:  if (tourney) tAbil = !tAbil; else abilSel = !abilSel; break;
     case SR_TAUTO: tableAuto = !tableAuto; break;
     case SR_BALLS: ballTheme = (ballTheme + d + NTHEMES) % NTHEMES; break;
@@ -6392,7 +6430,8 @@ static void csTile(int slot, float x, float y)
     for (i = 0; i < (tourney ? 1 : 2); i++) if (csReady[i] && slot == csSlot(i)) own = i;
     col = isCur ? ch : own;
     if (isCur) { y -= 3.0f; }                                     /* a carta escolhida sobe um pouco */
-    if (slot < NCHARS) rarRGB(CHAR_RAR[slot], &rr, &rg, &rb);
+    csOrdInit();
+    if (slot < NCHARS) rarRGB(CHAR_RAR[csOrd[slot]], &rr, &rg, &rb);
     if (col >= 0) {                                               /* brilho em volta da carta */
         int a = isCur ? 0x28 + (int)(0x28 * pu) : 0x30;
         outlineRect(x - 4.0f, y - 4.0f, x + w + 4.0f, y + h + 4.0f, CA(CSC[col][0], CSC[col][1], CSC[col][2], a / 2));
@@ -6407,8 +6446,8 @@ static void csTile(int slot, float x, float y)
     rect(x + 4, y + 1, x + w - 4, y + 3, CA(255, 255, 255, 0x22));                           /* brilho no topo */
     if (slot < NCHARS) {
         discN(x + w * 0.5f, y + 22.0f, 17.0f, CA(rr, rg, rb, 0x20), 14);                     /* aura atras do rosto */
-        drawChar(slot, x + w * 0.5f, y + 30.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
-        rect(x + 6.0f, y + h - 6.0f, x + w - 6.0f, y + h - 4.0f, rarCol(CHAR_RAR[slot]));      /* faixa da raridade */
+        drawChar(csOrd[slot], x + w * 0.5f, y + 30.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
+        rect(x + 6.0f, y + h - 6.0f, x + w - 6.0f, y + h - 4.0f, rarCol(CHAR_RAR[csOrd[slot]]));      /* faixa da raridade */
     } else if (slot == CS_RND) {
         text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(255,230,120), "?");
         text(x + w * 0.5f - tw(0.22f, "ALEATORIO") * 0.5f, y + h - 12.0f, 0.22f, COL(215,220,232), "ALEATORIO");
@@ -6479,13 +6518,15 @@ static void drawCharSelect(void)
         if ((menuT / 25) & 1) textC(248, 0.34f, COL(120,255,150), "PRONTO! X OU START: PROXIMA ETAPA   O: VOLTAR");
         else                  textC(248, 0.34f, COL(255,240,150), "OS DOIS JOGADORES ESTAO PRONTOS");
     } else {
-        int sl = csPos;
+        int sl = csPos, id;
+        csOrdInit();
+        id = sl < NCHARS ? csOrd[sl] : 0;
         if (sl == CS_RND)        sprintf(buf, "J%d: ALEATORIO - SORTEIA UM PERSONAGEM NA HORA DE JOGAR", ch + 1);
         else if (sl > CS_RND)    sprintf(buf, "EM BREVE");
-        else if (csTaken(ch, sl)) sprintf(buf, "%s ESTA EM USO PELO JOGADOR %d", CHAR_NAME[sl], 2 - ch);
-        else sprintf(buf, "%s - %s - TACO: %s - MESA: %s", CHAR_NAME[sl], RAR_NAME[CHAR_RAR[sl]],
-                     CHAR_CUE[sl] >= 0 ? CUES[CHAR_CUE[sl]].name : "PADRAO", CHAR_TAB[sl] >= 0 ? TABLES[CHAR_TAB[sl]].name : "LIVRE");
-        textFit(320.0f - 300.0f, 248.0f, 0.32f, (sl < CS_RND && !csTaken(ch, sl)) ? rarCol(CHAR_RAR[sl]) : COL(255,150,130), buf, 600.0f);
+        else if (csTaken(ch, sl)) sprintf(buf, "%s ESTA EM USO PELO JOGADOR %d", CHAR_NAME[id], 2 - ch);
+        else sprintf(buf, "%s - %s - TACO: %s - MESA: %s", CHAR_NAME[id], RAR_NAME[CHAR_RAR[id]],
+                     CHAR_CUE[id] >= 0 ? CUES[CHAR_CUE[id]].name : "PADRAO", CHAR_TAB[id] >= 0 ? TABLES[CHAR_TAB[id]].name : "LIVRE");
+        textFit(320.0f - 300.0f, 248.0f, 0.32f, (sl < CS_RND && !csTaken(ch, sl)) ? rarCol(CHAR_RAR[id]) : COL(255,150,130), buf, 600.0f);
     }
     if (tourney) csPed(0, 320.0f);
     else {
