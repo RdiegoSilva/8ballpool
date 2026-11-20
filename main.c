@@ -2247,24 +2247,23 @@ static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail;     /* cores derivadas da 
 
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
-    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcRail);   /* ponta da madeira: sem triangulo escuro */
-    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcRail);
+    float la = ra > 8.0f ? xa - 20 : xa - ra, lb = rb > 8.0f ? xb + 20 : xb + rb;
+    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcCush);   /* canto: completa com a cor da borracha (sem triangulo vermelho) */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcCush);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
-    line(xa - ra, yo, xb + rb, yo, tcCushLo);
-    line(xa - ra, yo, xa, yi, tcCushHi);                 /* pontas inclinadas */
-    line(xb + rb, yo, xb, yi, tcCushHi);
+    line(la, yo, lb, yo, tcCushLo);
+    if (ra <= 8.0f) line(xa - ra, yo, xa, yi, tcCushHi);                 /* pontas inclinadas (so no meio) */
+    if (rb <= 8.0f) line(xb + rb, yo, xb, yi, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcRail);          /* ponta da madeira (sem triangulo escuro) */
-    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcRail);
+    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcCush);          /* canto: completa com a cor da borracha (sem triangulo vermelho) */
+    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcCush);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
-    line(xi, ya, xi, yb, tcCushHi);
-    line(xo, ya - 11, xo, yb + 11, tcCushLo);
-    line(xo, ya - 11, xi, ya, tcCushHi);                 /* pontas inclinadas */
-    line(xo, yb + 11, xi, yb, tcCushHi);
+    line(xi, ya - 20, xi, yb + 20, tcCushHi);
+    line(xo, ya - 20, xo, yb + 20, tcCushLo);
 }
 
 static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, u64 c)   /* faixa de arco (chapa metalica do canto) */
