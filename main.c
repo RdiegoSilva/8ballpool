@@ -5640,7 +5640,7 @@ static void menuUpdate(void)
 {
     int i, j;
     const float dt = 1.0f / 60.0f;
-    const float ymin = (state == S_MENU) ? 292.0f : 0.0f;      /* menu principal: as bolas ficam na faixa da mesa */
+    const float ymin = 292.0f;                                 /* as bolas rolam so na faixa da mesa */
     for (i = 0; i < NMB; i++) {
         Ball *p = &b[MB_ID[i]];
         p->x += p->vx * dt; p->y += p->vy * dt;
@@ -5667,81 +5667,116 @@ static void menuUpdate(void)
 static void textC(float y, float sc, u64 c, const char *t)
 { text(320.0f - tw(sc, t) * 0.5f, y, sc, c, t); }
 
-/* fundo: degrade, brilho do feltro, feixes de luz, bolas rolando */
+/* fundo (estilo 8 Ball Pool): por do sol, predios, palmeiras e mesa com bolas rolando */
+static void palmTree(float x, float h, float lean)         /* silhueta de palmeira */
+{
+    static const float FX[7] = { -50, -38, -20, 0, 20, 38, 50 }, FY[7] = { 10, -4, -15, -20, -15, -4, 10 };
+    float tx = x + lean, ty = 270.0f - h, sw = 3.0f * sinf(menuT * 0.03f + x);
+    int k;
+    u64 c = COL(24, 10, 44);
+    quad(x - 3.5f, 270, x + 3.5f, 270, tx + 2.0f, ty, tx - 2.0f, ty, c);
+    for (k = 0; k < 7; k++)
+        tri(tx, ty, tx + FX[k] * 0.55f + sw, ty + FY[k] * 0.55f - 9.0f, tx + FX[k] + sw, ty + FY[k] + 9.0f, c);
+}
+
 static void drawBackdrop(void)
 {
-    int k;
-    float t = menuT * 0.02f;
-    for (k = 0; k < 28; k++)                                  /* degrade suave (28 faixas) */
-        rect(0, k * 16.0f, 640, k * 16.0f + 16.0f, COL(5 + k / 4, 8 + k / 2, 34 - k / 2));
-    for (k = 0; k < 5; k++)                                   /* brilho verde do feltro */
-        discN(320.0f + 40.0f * sinf(t), 250.0f, 330.0f - k * 55.0f,
-              GS_SETREG_RGBAQ(24, 120, 78, 0x0c, 0x00), 28);
-    for (k = 0; k < 3; k++)                                   /* luz quente do alto */
-        discN(320.0f - 60.0f * sinf(t * 0.7f), -40.0f, 300.0f - k * 80.0f,
-              GS_SETREG_RGBAQ(255, 190, 90, 0x06, 0x00), 28);
-    for (k = 0; k < 2; k++) {
-        float x = fmodf(menuT * 1.6f + k * 420.0f, 1100.0f) - 260.0f;
-        quad(x, 0, x + 50, 0, x - 70, 448, x - 120, 448, GS_SETREG_RGBAQ(255,255,255,0x0a,0x00));
+    int k, i, layer;
+    /* ceu do por do sol: roxo -> rosa -> laranja */
+    for (k = 0; k < 17; k++) {
+        float f = k / 16.0f;
+        int r, gg, bl;
+        if (f < 0.55f) { float u = f / 0.55f; r = 54 + (int)(150 * u); gg = 20 + (int)(30 * u); bl = 100 + (int)(10 * u); }
+        else           { float u = (f - 0.55f) / 0.45f; r = 204 + (int)(51 * u); gg = 50 + (int)(100 * u); bl = 110 - (int)(40 * u); }
+        rect(0, k * 16.0f, 640, k * 16.0f + 17.0f, COL(r, gg, bl));
     }
-    for (k = 0; k < 14; k++) {                                /* particulas de luz subindo */
-        float px = fmodf(k * 97.0f + menuT * (0.15f + (k % 4) * 0.08f), 680.0f) - 20.0f;
-        float py = 448.0f - fmodf(k * 61.0f + menuT * (0.35f + (k % 3) * 0.15f), 470.0f);
-        float pr = 2.0f + (k % 3) * 1.5f;
-        discN(px, py, pr, CA(255, 225, 150, 0x10 + (k % 3) * 4), 8);
-        discN(px, py, pr * 0.5f, CA(255, 240, 200, 0x24), 6);
+    for (k = 0; k < 4; k++) discN(380.0f, 266.0f, 240.0f - k * 55.0f, CA(255, 190, 100, 0x0a), 28);   /* brilho do horizonte */
+    /* predios: camada de tras (clara, sem janelas) e da frente (escura, com janelas acesas) */
+    for (layer = 0; layer < 2; layer++) {
+        float x = layer ? -10.0f : -30.0f;
+        int n = 0;
+        while (x < 650.0f) {
+            float w = 20.0f + ((n * 13 + layer * 7) % 5) * 7.0f;
+            float h = (layer ? 46.0f : 76.0f) + ((n * 37 + layer * 19) % 11) * (layer ? 7.0f : 9.0f);
+            rect(x, 270.0f - h, x + w, 271.0f, layer ? COL(40, 18, 72) : COL(108, 48, 124));
+            if (layer) {
+                int wy, wx;
+                for (wy = (int)(270.0f - h) + 6; wy < 262; wy += 9)
+                    for (wx = (int)x + 3; wx + 3 < (int)(x + w) - 2; wx += 7)
+                        if ((n * 7 + wy * 3 + wx) % 5 == 0) rect((float)wx, (float)wy, (float)wx + 3.0f, (float)wy + 4.0f, CA(255, 200, 110, 0x60));
+            }
+            x += w + (layer ? 2.0f : 1.0f); n++;
+        }
     }
-    for (k = 0; k < NMB; k++) {
+    rect(0, 244, 640, 270, CA(255, 150, 90, 0x14));                  /* neblina quente na base dos predios */
+    palmTree(32.0f, 150.0f, 14.0f); palmTree(84.0f, 96.0f, 9.0f); palmTree(610.0f, 132.0f, -12.0f);
+    /* mesa: borda de madeira com losangos e feltro azul-petroleo */
+    rect(0, 268, 640, 281, COL(88, 44, 28));
+    rect(0, 268, 640, 271, COL(168, 104, 56));
+    rect(0, 279, 640, 281, CA(0, 0, 0, 0x50));
+    for (i = 0; i < 8; i++) { float cx = 40.0f + i * 80.0f; quad(cx, 271, cx + 4, 274, cx, 277, cx - 4, 274, COL(235, 200, 110)); }
+    for (k = 0; k < 11; k++) {
+        float u = k / 10.0f, y = 281.0f + k * 16.0f;
+        rect(0, y, 640, y + 17.0f, COL(24 - (int)(18 * u), 160 - (int)(90 * u), 178 - (int)(86 * u)));
+    }
+    for (k = 0; k < 2; k++) discN(320.0f, 370.0f, 300.0f - k * 90.0f, CA(120, 235, 240, 0x08), 30);   /* luz sobre o feltro */
+    for (k = 0; k < NMB; k++) {                                      /* bolas rolando na mesa */
         int id = MB_ID[k];
         discN(b[id].x + 5, b[id].y + 7, MBR * 1.05f, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00), 14);
         drawBallAt(id, b[id].x, b[id].y, MBR);
     }
-    for (k = 0; k < 6; k++) {                                 /* vinheta nas bordas */
-        int a = 0x2c - k * 6;
+    for (k = 0; k < 5; k++) {                                        /* vinheta lateral e de baixo */
+        int a = 0x26 - k * 6;
         float d = k * 12.0f;
-        rect(0, d, 640, d + 12, CA(0, 0, 8, a));
         rect(0, 448 - d - 12, 640, 448 - d, CA(0, 0, 8, a));
         rect(d, 0, d + 12, 448, CA(0, 0, 8, a - 6));
         rect(640 - d - 12, 0, 640 - d, 448, CA(0, 0, 8, a - 6));
     }
-    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 10, 0x38, 0x00));   /* escurece p/ ler o menu */
+    if (state != S_MENU) rect(0, 0, 640, 448, CA(0, 0, 20, 0x26));      /* sub-telas: cenario um pouco mais escuro */
 }
 
 static void panel(float x1, float y1, float x2, float y2)
 {
     int k, n = 8;
-    float L = 14.0f;
+    float c = 5.0f, mid = y2 - y1 - 2.0f * c;
     u64 gold = CA(255, 215, 80, 0x7c);
-    rect(x1 - 5, y1 - 4, x2 + 6, y2 + 7, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00));      /* sombra */
-    for (k = 0; k < n; k++)                                                          /* fundo em degrade */
-        rect(x1, y1 + (y2 - y1) * k / n, x2, y1 + (y2 - y1) * (k + 1) / n,
-             CA(5 + (n - k) * 2, 12 + (n - k) * 2, 22 + (n - k) * 3, 0x68));
-    rect(x1, y1, x2, y1 + (y2 - y1) * 0.35f, CA(255, 255, 255, 0x06));
-    frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 1.0f, CA(150, 200, 170, 0x44));            /* friso externo */
-    frameR(x1, y1, x2, y2, 1.0f, CA(20, 40, 36, 0x70));                                /* friso interno */
-    rect(x1 + 2, y1 + 1, x2 - 2, y1 + 2, CA(255, 255, 255, 0x20));                     /* brilho */
-    /* cantoneiras douradas */
-    rect(x1 - 3, y1 - 3, x1 - 3 + L, y1 - 1, gold); rect(x1 - 3, y1 - 3, x1 - 1, y1 - 3 + L, gold);
-    rect(x2 + 3 - L, y1 - 3, x2 + 3, y1 - 1, gold); rect(x2 + 1, y1 - 3, x2 + 3, y1 - 3 + L, gold);
-    rect(x1 - 3, y2 + 1, x1 - 3 + L, y2 + 3, gold); rect(x1 - 3, y2 + 3 - L, x1 - 1, y2 + 3, gold);
-    rect(x2 + 3 - L, y2 + 1, x2 + 3, y2 + 3, gold); rect(x2 + 1, y2 + 3 - L, x2 + 3, y2 + 3, gold);
+    cham(x1 - 4, y1 - 2, x2 + 6, y2 + 7, 6.0f, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00));          /* sombra */
+    cham(x1 - 2.5f, y1 - 2.5f, x2 + 2.5f, y2 + 2.5f, 6.5f, CA(255, 205, 60, 0x88));            /* borda dourada */
+    cham(x1 - 1.0f, y1 - 1.0f, x2 + 1.0f, y2 + 1.0f, 5.5f, COL(22, 12, 46));                   /* aro escuro */
+    rect(x1 + c, y1, x2 - c, y1 + c, CA(52, 28, 100, 0x6c));                                   /* topo (arredondado) */
+    for (k = 0; k < n; k++)                                                                    /* miolo em degrade roxo -> azul-noite */
+        rect(x1, y1 + c + mid * k / n, x2, y1 + c + mid * (k + 1) / n,
+             CA(48 - k * 4, 26 - k, 96 - k * 6, 0x6c));
+    rect(x1 + c, y2 - c, x2 - c, y2, CA(18, 14, 46, 0x6c));                                    /* base (arredondada) */
+    rect(x1 + c, y1 + 1, x2 - c, y1 + 2, CA(255, 255, 255, 0x28));                             /* brilho */
+    rect(x1 + 2, y1 + c, x2 - 2, y1 + c + mid * 0.18f, CA(200, 150, 255, 0x0e));
+    frameR(x1 + 3, y1 + 3, x2 - 3, y2 - 3, 1.0f, CA(255, 215, 80, 0x22));                      /* filete interno */
+    discN(x1 + 1, y1 + 1, 2.2f, gold, 6); discN(x2 - 1, y1 + 1, 2.2f, gold, 6);                /* pinos dourados */
+    discN(x1 + 1, y2 - 1, 2.2f, gold, 6); discN(x2 - 1, y2 - 1, 2.2f, gold, 6);
 }
 
 
 /* ===== visual dos menus: titulo, rodape com botoes, pilulas e barras ===== */
-static void uiTitle(const char *t)                    /* faixa do topo com titulo dourado */
+static void uiTitle(const char *t)                    /* faixa do topo (roxo + dourado) com titulo */
 {
     float sc = 0.62f, w = tw(sc, t) * 1.08f, x0 = 320.0f - w * 0.5f, sh = fmodf(menuT * 3.0f, 560.0f);
     u64 gd = COL(255, 205 + (int)(40 * sinf(menuT * 0.05f)), 60);
-    rect(0, 0, 640, 34, CA(0, 0, 12, 0x58));
-    rect(0, 34, 640, 36, CA(255, 205, 60, 0x58));
+    int e;
+    rect(0, 0, 640, 17, CA(74, 34, 130, 0x84));
+    rect(0, 17, 640, 34, CA(34, 14, 70, 0x84));
+    rect(0, 0, 640, 2, CA(255, 255, 255, 0x18));
+    rect(0, 34, 640, 36, CA(255, 205, 60, 0x70));
     rect(40.0f + sh, 34, 90.0f + sh, 36, CA(255, 255, 220, 0x70));        /* brilho que corre */
     text(x0 + 3, 10, sc, CA(0, 0, 0, 0x70), t);
     text(x0, 7, sc, gd, t);
-    rect(x0 - 96, 15, x0 - 26, 17, CA(255, 205, 60, 0x60));
-    rect(x0 + w + 26, 15, x0 + w + 96, 17, CA(255, 205, 60, 0x60));
-    discN(x0 - 16, 16, 4.0f, gd, 10);
-    discN(x0 + w + 16, 16, 4.0f, gd, 10);
+    rect(x0 - 96, 15, x0 - 34, 17, CA(255, 205, 60, 0x60));
+    rect(x0 + w + 34, 15, x0 + w + 96, 17, CA(255, 205, 60, 0x60));
+    for (e = 0; e < 2; e++) {                                             /* bolas 8 nos lados do titulo */
+        float ex = e ? x0 + w + 20.0f : x0 - 20.0f;
+        discN(ex, 17, 9.0f, COL(12, 12, 18), 14);
+        discN(ex - 2.5f, 13.5f, 2.2f, CA(255, 255, 255, 0x50), 6);
+        discN(ex, 17, 4.4f, COL(245, 245, 245), 10);
+    }
 }
 
 /* botoes do controle: 0 X, 1 O, 2 TRIANGULO, 3 QUADRADO, 4 START, 5 SELECT, 6 CIMA/BAIXO, 7 ESQ/DIR, 8 L1/R1 */
@@ -5781,13 +5816,14 @@ static void uiFoot(int n, const int *ks, const char *const *ls)     /* rodape: b
     }
 }
 
-static void uiToggle(float xr, float y, int on, const char *lOn, const char *lOff)   /* pilula ligado/desligado */
+static void uiToggle(float xr, float y, int on, const char *lOn, const char *lOff)   /* chave ligado/desligado */
 {
     float x = xr - 90.0f;
-    rect(x - 1, y - 1, xr + 1, y + 21, on ? COL(70,200,120) : COL(100,106,124));
-    rect(x, y, xr, y + 20, on ? COL(24,90,52) : COL(32,36,50));
-    if (on) { discN(xr - 11, y + 10, 8.0f, COL(150,255,180), 12); text(x + 8, y + 5, 0.26f, COL(190,255,210), lOn); }
-    else    { discN(x + 11, y + 10, 8.0f, COL(150,155,170), 12); text(x + 25, y + 5, 0.26f, COL(170,176,190), lOff); }
+    cham(x - 1, y - 1, xr + 1, y + 21, 6.0f, on ? COL(70,210,110) : COL(150,76,84));
+    cham(x, y, xr, y + 20, 5.0f, on ? COL(24,110,58) : COL(66,30,40));
+    rect(x + 5, y + 1, xr - 5, y + 8, CA(255, 255, 255, 0x14));
+    if (on) { discN(xr - 11, y + 10, 8.0f, COL(235,255,240), 12); discN(xr - 11, y + 10, 5.5f, COL(110,235,150), 10); text(x + 8, y + 5, 0.26f, COL(200,255,220), lOn); }
+    else    { discN(x + 11, y + 10, 8.0f, COL(235,215,218), 12); discN(x + 11, y + 10, 5.5f, COL(170,120,126), 10); text(x + 25, y + 5, 0.26f, COL(235,170,176), lOff); }
 }
 
 static void uiSection(float x1, float x2, float y, u64 c, const char *t)       /* titulo de grupo de opcoes */
@@ -6437,9 +6473,10 @@ static void drawSetupScreen(void)
         int cur = (i == setStep), done = (i < setStep);
         char lb[24], nb[4];
         u64 dc = cur ? COL(255,215,60) : (done ? COL(90,200,120) : COL(60,70,88));
-        rect(x1, 40, x2, 58, cur ? CA(255, 215, 60, 0x50) : CA(20, 30, 44, 0x58));
-        rect(x1, 56, x2, 58, dc);
-        if (i > 0) rect(x1 - 8, 49, x1, 50, done || cur ? COL(90,200,120) : COL(60,70,88));
+        cham(x1 - 1.5f, 38.5f, x2 + 1.5f, 59.5f, 6.0f, dc);                                 /* pilula da etapa */
+        cham(x1, 40, x2, 58, 5.0f, cur ? COL(128,84,12) : (done ? COL(22,76,48) : COL(30,26,60)));
+        rect(x1 + 5, 40, x2 - 5, 47, CA(255, 255, 255, 0x14));
+        if (i > 0) rect(x1 - 8, 49, x1 - 1.5f, 50, done || cur ? COL(90,200,120) : COL(60,70,88));
         discN(x1 + 11, 49, 7.5f, dc, 12);
         sprintf(nb, "%d", i + 1);
         text(x1 + 11 - tw(0.26f, nb) * 0.5f, 45, 0.26f, COL(10,14,24), nb);
@@ -6460,12 +6497,18 @@ static void drawSetupScreen(void)
         float y = 86.0f + i * rh, vx;
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
 
-        if (sel) selBar(68, 572, y, 24);
+        if (row == SR_NEXT || row == SR_GO) {                     /* botao verde grande (como o JOGAR do 8 Ball Pool) */
+            cham(70.0f, y - 6, 570.0f, y + 25, 6.0f, sel ? COL(255,236,120) : COL(18,70,24));
+            cham(72.0f, y - 4, 568.0f, y + 23, 5.0f, COL(36,140,40));
+            rect(76, y - 4, 564, y + 9, sel ? COL(98,214,64) : COL(72,184,56));
+            rect(76, y - 4, 564, y - 1, CA(255, 255, 255, 0x30));
+        } else if (sel) selBar(68, 572, y, 24);
         if (row == SR_NEXT) {
             char nx[32];
-            text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
+            text(100, y + 2, 0.5f, CA(0, 40, 0, 0x70), LBL[row]);
+            text(98, y, 0.5f, COL(255,255,255), LBL[row]);
             sprintf(nx, "%d: %s", setStep + 2, STEPN[setStep + 1]);
-            text(556 - tw(0.34f, nx), y + 3, 0.34f, COL(150,160,175), nx);
+            text(556 - tw(0.34f, nx), y + 3, 0.34f, COL(225,250,225), nx);
             continue;
         }
         if (row == SR_RPL) {
@@ -6474,9 +6517,10 @@ static void drawSetupScreen(void)
             continue;
         }
         if (row == SR_GO) {
-            text(98, y, 0.5f, sel ? COL(120,255,150) : COL(90,200,120), LBL[row]);
+            text(100, y + 2, 0.5f, CA(0, 40, 0, 0x70), LBL[row]);
+            text(98, y, 0.5f, COL(255,255,255), LBL[row]);
             if (oppSel == 1)
-                text(556 - tw(0.34f, "PROXIMO: NOME"), y + 3, 0.34f, COL(150,160,175), "PROXIMO: NOME");
+                text(556 - tw(0.34f, "PROXIMO: NOME"), y + 3, 0.34f, COL(225,250,225), "PROXIMO: NOME");
             continue;
         }
         if (row == SR_CH0)      text(98, y, 0.5f, tc, oppSel ? "PERSONAGEM JOGADOR 1" : "SEU PERSONAGEM");
@@ -6686,13 +6730,12 @@ static void optInput(u32 pr)
 static void selBar(float x1, float x2, float y, float h)
 {
     float bob = 4.0f * sinf(menuT * 0.2f);
-    int k, pul = 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f)));
-    for (k = 0; k < 10; k++)                                  /* brilho que some para a direita */
-        rect(x1 + (x2 - x1) * k / 10.0f, y - 6, x1 + (x2 - x1) * (k + 1) / 10.0f, y + h,
-             CA(255, 215, 60, pul + 12 - k * 4));
-    rect(x1, y - 6, x2, y - 5, CA(255, 240, 150, 0x30));
-    rect(x1, y + h - 1, x2, y + h, CA(255, 200, 60, 0x20));
-    rect(x1, y - 6, x1 + 3, y + h, COL(255,230,60));
+    int pul = 0x10 + (int)(0x0c * (1.0f + sinf(menuT * 0.12f)));
+    cham(x1 - 1.5f, y - 7.5f, x2 + 1.5f, y + h + 1.5f, 5.0f, CA(255, 215, 60, 0xa0));           /* contorno dourado */
+    cham(x1, y - 6, x2, y + h, 4.0f, COL(70, 38, 140));                                         /* corpo roxo */
+    rect(x1 + 4, y - 6, x2 - 4, y - 6 + (h + 6) * 0.45f, CA(255, 255, 255, 0x18));              /* brilho de vidro */
+    cham(x1, y - 6, x2, y + h, 4.0f, CA(255, 215, 60, pul));                                    /* pulso */
+    rect(x1, y - 2, x1 + 3, y + h - 2, COL(255,230,60));
     tri(x1 + 10 + bob, y + 1, x1 + 10 + bob, y + 15, x1 + 23 + bob, y + 8, COL(255,230,60));
 }
 
@@ -7069,8 +7112,10 @@ static void drawShopScreen(void)
 
     uiTitle("LOJA");
     sprintf(buf, "%d", shCoins);
-    discN(548, 54, 8.0f, COL(255,205,60), 12); discN(548, 54, 5.5f, COL(210,150,20), 10);
-    text(560, 46, 0.4f, COL(255,235,120), buf);
+    cham(521.5f, 40.5f, 612.5f, 66.5f, 7.0f, CA(255, 205, 60, 0x90));                  /* pilula das moedas */
+    cham(523, 42, 611, 65, 6.0f, COL(30, 16, 56));
+    discN(538, 54, 8.0f, COL(255,205,60), 12); discN(538, 54, 5.5f, COL(210,150,20), 10);
+    text(552, 46, 0.4f, COL(255,235,120), buf);
 #if USE_MEMCARD
     if (shSaveFail) text(36, 46, 0.28f, COL(255,170,120), "SEM MEMORY CARD 1: O PROGRESSO NAO SERA SALVO");
     else
@@ -7080,9 +7125,18 @@ static void drawShopScreen(void)
     for (i = 0; i < SH_CATS; i++) {                      /* abas */
         float x1 = 36.0f + i * 94.0f, x2 = x1 + 90.0f;
         int sel = (i == shCat);
-        rect(x1, 70, x2, 92, sel ? CA(255, 215, 60, 0x40 + (int)(0x20 * pul)) : CA(10, 16, 30, 0x60));
-        frameR(x1, 70, x2, 92, 1.0f, sel ? CA(255, 215, 60, 0xa0) : CA(80, 96, 120, 0x50));
-        text(x1 + 45.0f - tw(0.3f, SH_CATN[i]) * 0.5f, 76, 0.3f, sel ? COL(255,240,150) : COL(160,170,190), SH_CATN[i]);
+        static const unsigned char TC[6][6] = {            /* cor do topo e da base de cada aba */
+            {92,206,60, 40,140,34}, {150,84,226, 84,44,160}, {40,196,196, 18,120,134},
+            {255,176,40, 222,108,12}, {112,126,150, 62,72,94}, {74,104,200, 40,62,142} };
+        const unsigned char *tc = TC[i % 6];
+        float ty1 = sel ? 66.0f : 70.0f, ty2 = sel ? 95.0f : 92.0f;
+        cham(x1 - 1.5f, ty1 - 1.5f, x2 + 1.5f, ty2 + 1.5f, 5.0f, sel ? COL(255,236,120) : COL(14,12,30));
+        cham(x1, ty1, x2, ty2, 4.0f, COL(tc[3], tc[4], tc[5]));
+        rect(x1 + 4, ty1, x2 - 4, ty1 + (ty2 - ty1) * 0.5f, COL(tc[0], tc[1], tc[2]));
+        rect(x1 + 4, ty1, x2 - 4, ty1 + 2, CA(255, 255, 255, 0x30));
+        if (!sel) cham(x1, ty1, x2, ty2, 4.0f, CA(0, 0, 10, 0x40));
+        text(x1 + 46.0f - tw(0.3f, SH_CATN[i]) * 0.5f, ty1 + 6, 0.3f, CA(0, 0, 0, 0x70), SH_CATN[i]);
+        text(x1 + 45.0f - tw(0.3f, SH_CATN[i]) * 0.5f, ty1 + 5, 0.3f, COL(255,255,255), SH_CATN[i]);
     }
 
     panel(36, 104, 340, 352);
@@ -7158,72 +7212,6 @@ static void textCF(float cx, float y, float sc, u64 c, const char *t, float maxw
     float w = tw(sc, t);
     if (w > maxw && w > 0.0f) sc *= maxw / w;
     text(cx - tw(sc, t) * 0.5f, y, sc, c, t);
-}
-
-static void palmTree(float x, float h, float lean)         /* silhueta de palmeira */
-{
-    static const float FX[7] = { -50, -38, -20, 0, 20, 38, 50 }, FY[7] = { 10, -4, -15, -20, -15, -4, 10 };
-    float tx = x + lean, ty = 270.0f - h, sw = 3.0f * sinf(menuT * 0.03f + x);
-    int k;
-    u64 c = COL(24, 10, 44);
-    quad(x - 3.5f, 270, x + 3.5f, 270, tx + 2.0f, ty, tx - 2.0f, ty, c);
-    for (k = 0; k < 7; k++)
-        tri(tx, ty, tx + FX[k] * 0.55f + sw, ty + FY[k] * 0.55f - 9.0f, tx + FX[k] + sw, ty + FY[k] + 9.0f, c);
-}
-
-static void drawMenuBackdrop(void)
-{
-    int k, i, layer;
-    /* ceu do por do sol: roxo -> rosa -> laranja */
-    for (k = 0; k < 17; k++) {
-        float f = k / 16.0f;
-        int r, gg, bl;
-        if (f < 0.55f) { float u = f / 0.55f; r = 54 + (int)(150 * u); gg = 20 + (int)(30 * u); bl = 100 + (int)(10 * u); }
-        else           { float u = (f - 0.55f) / 0.45f; r = 204 + (int)(51 * u); gg = 50 + (int)(100 * u); bl = 110 - (int)(40 * u); }
-        rect(0, k * 16.0f, 640, k * 16.0f + 17.0f, COL(r, gg, bl));
-    }
-    for (k = 0; k < 4; k++) discN(380.0f, 266.0f, 240.0f - k * 55.0f, CA(255, 190, 100, 0x0a), 28);   /* brilho do horizonte */
-    /* predios: camada de tras (clara, sem janelas) e da frente (escura, com janelas acesas) */
-    for (layer = 0; layer < 2; layer++) {
-        float x = layer ? -10.0f : -30.0f;
-        int n = 0;
-        while (x < 650.0f) {
-            float w = 20.0f + ((n * 13 + layer * 7) % 5) * 7.0f;
-            float h = (layer ? 46.0f : 76.0f) + ((n * 37 + layer * 19) % 11) * (layer ? 7.0f : 9.0f);
-            rect(x, 270.0f - h, x + w, 271.0f, layer ? COL(40, 18, 72) : COL(108, 48, 124));
-            if (layer) {
-                int wy, wx;
-                for (wy = (int)(270.0f - h) + 6; wy < 262; wy += 9)
-                    for (wx = (int)x + 3; wx + 3 < (int)(x + w) - 2; wx += 7)
-                        if ((n * 7 + wy * 3 + wx) % 5 == 0) rect((float)wx, (float)wy, (float)wx + 3.0f, (float)wy + 4.0f, CA(255, 200, 110, 0x60));
-            }
-            x += w + (layer ? 2.0f : 1.0f); n++;
-        }
-    }
-    rect(0, 244, 640, 270, CA(255, 150, 90, 0x14));                  /* neblina quente na base dos predios */
-    palmTree(32.0f, 150.0f, 14.0f); palmTree(84.0f, 96.0f, 9.0f); palmTree(610.0f, 132.0f, -12.0f);
-    /* mesa: borda de madeira com losangos e feltro azul-petroleo */
-    rect(0, 268, 640, 281, COL(88, 44, 28));
-    rect(0, 268, 640, 271, COL(168, 104, 56));
-    rect(0, 279, 640, 281, CA(0, 0, 0, 0x50));
-    for (i = 0; i < 8; i++) { float cx = 40.0f + i * 80.0f; quad(cx, 271, cx + 4, 274, cx, 277, cx - 4, 274, COL(235, 200, 110)); }
-    for (k = 0; k < 11; k++) {
-        float u = k / 10.0f, y = 281.0f + k * 16.0f;
-        rect(0, y, 640, y + 17.0f, COL(24 - (int)(18 * u), 160 - (int)(90 * u), 178 - (int)(86 * u)));
-    }
-    for (k = 0; k < 2; k++) discN(320.0f, 370.0f, 300.0f - k * 90.0f, CA(120, 235, 240, 0x08), 30);   /* luz sobre o feltro */
-    for (k = 0; k < NMB; k++) {                                      /* bolas rolando na mesa */
-        int id = MB_ID[k];
-        discN(b[id].x + 5, b[id].y + 7, MBR * 1.05f, GS_SETREG_RGBAQ(0, 0, 0, 0x28, 0x00), 14);
-        drawBallAt(id, b[id].x, b[id].y, MBR);
-    }
-    for (k = 0; k < 5; k++) {                                        /* vinheta lateral e de baixo */
-        int a = 0x26 - k * 6;
-        float d = k * 12.0f;
-        rect(0, 448 - d - 12, 640, 448 - d, CA(0, 0, 8, a));
-        rect(d, 0, d + 12, 448, CA(0, 0, 8, a - 6));
-        rect(640 - d - 12, 0, 640 - d, 448, CA(0, 0, 8, a - 6));
-    }
 }
 
 static void drawMenuTop(void)                                        /* barra do topo: jogador, musica e moedas */
@@ -7309,7 +7297,7 @@ static void drawMenuScreen(void)
     int i;
     float s1 = sinf(menuT * 0.05f), s2 = sinf(menuT * 0.05f + 2.1f);
 
-    if (state == S_MENU) drawMenuBackdrop(); else drawBackdrop();      /* menu principal tem cenario proprio */
+    drawBackdrop();
 
     if (state == S_SETUP) { drawSetupScreen(); return; }
     if (state == S_NAME)  { drawNameScreen();  return; }
