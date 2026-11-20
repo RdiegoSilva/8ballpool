@@ -3737,7 +3737,7 @@ static void drawTable(void)
 
     tcRail = w2;
     tcCush = shade(T->felt, 1.06f, 8); tcCushHi = shade(T->felt, 1.55f, 36); tcCushLo = shade(T->felt, 0.62f, 0);   /* borracha mais clara que o feltro */
-    tcMouth = shade(T->wood, 0.34f, 0);                                                                              /* mesma cor da boca do buraco */
+    tcMouth = shade(T->wood, 0.10f, 0);                                                                              /* quase preto: continua o fundo do buraco ate a ponta da tabela */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
     /* sombra da mesa no chao */
