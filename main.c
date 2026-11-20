@@ -165,7 +165,7 @@ static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + PO
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
 static const float PR[6] = { 14.5f, 12.0f, 14.5f, 14.5f, 12.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
-static const float PRC[6] = { 26.0f, 22.0f, 26.0f, 26.0f, 22.0f, 26.0f };
+static const float PRC[6] = { 30.0f, 19.0f, 30.0f, 30.0f, 19.0f, 30.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
 
 #define NBC 35
