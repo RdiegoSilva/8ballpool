@@ -125,7 +125,7 @@ static const int CH_KIND[3] = { AB_CORNETA, AB_CHIQUI, AB_BIONICA };
 static const char *CH_NAME[3] = { "CORNETA", "CHIQUITOLINA", "MARRETA BIONICA" };
 #define LOCKED(i) ((i) > 0 && ((i) == lockBall || (i) == cornBall))   /* bola presa (algemas) ou paralisada (corneta): nada a move */
 #define TAB_CEM 25                                    /* indice da mesa CEMITERIO em TABLES */
-static float tabPock(void) { return ((tourney && tTable >= 0) ? tTable : tableSel) == TAB_CEM ? 1.14f : 1.0f; }   /* cemiterio: cacapas um pouco mais largas */
+static float tabPock(void) { return 1.0f; }   /* todas as mesas (inclusive o cemiterio): cacapas e bordas no tamanho padrao da Pool Azul */
 static int grinchPend;                                /* poder que o Grinch tem agora (0 = ainda nao sorteado); aparece na tela antes de usar */
 static float fricMul = 1.0f, pockMul = 1.0f, hackPow, fxX, fxY;   /* pockMul: CHAMINE aumenta as cacapas */
 static float hCandAng[10], hCandPow[10], hCandSc[10];   /* HACK: melhores tacadas encontradas (a mais facil primeiro) */
@@ -893,6 +893,27 @@ static int isBot(void) { return mode == 0 && cur == 1; }
 static const char *pname(int pl) { return (pl == 1 && mode == 0) ? (tourney ? tName[tOpp] : "BOT") : pnames[pl]; }
 static int botCue;                                       /* MESTRE: taco que o bot escolheu para esta tacada */
 static int botMaster(void) { return mode == 0 && cur == 1 && botLevel == 4 && !(tourney && !tAbil); }   /* dificuldade MESTRE: o bot usa tacos e poderes */
+/* MESTRE: na tacada da bola 8 e preciso escolher (cantar) a cacapa; a bola 8 cair em outra cacapa e derrota */
+static int callPk = -1, callManual = 0, callAnn = 0, callShotPk = -1, pk8 = -1;   /* cacapa escolhida, se o jogador mexeu, aviso ja dado, cacapa cantada na tacada, cacapa onde a 8 caiu */
+static const char *const PK_NAME[6] = { "CIMA ESQUERDA", "CIMA MEIO", "CIMA DIREITA", "BAIXO ESQUERDA", "BAIXO MEIO", "BAIXO DIREITA" };
+static int eightCall(void)       /* esta e a tacada da bola 8 numa partida contra o BOT MESTRE? */
+{
+    return mode == 0 && botLevel == 4 && gmode != GM_BR && grp[cur] >= 0 && b[8].in && countGroup(grp[cur]) == 0;
+}
+static int eightBestPocket(void) /* cacapa mais alinhada com a linha branca -> 8 (padrao, ate o jogador escolher outra) */
+{
+    int q, best = 0;
+    float ux = b[8].x - b[0].x, uy = b[8].y - b[0].y, ul = sqrtf(ux * ux + uy * uy), bs = -1e9f;
+    if (ul < 1.0f) ul = 1.0f;
+    ux /= ul; uy /= ul;
+    for (q = 0; q < 6; q++) {
+        float vx = PX[q] - b[8].x, vy = PY[q] - b[8].y, vl = sqrtf(vx * vx + vy * vy), sc;
+        if (vl < 1.0f) vl = 1.0f;
+        sc = (ux * vx + uy * vy) / vl - vl * 0.0006f;
+        if (sc > bs) { bs = sc; best = q; }
+    }
+    return best;
+}
 static int curCue(void) { return botMaster() ? botCue : ((isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]); }
 static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !(tourney && !tAbil))) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
 /* VAMPIRO: barra de sangue. Cada tacada que encacapa uma bola sua enche 1/3; se errar, a barra seca.
@@ -1284,6 +1305,9 @@ static void openCueMenu(void)
 static void startStrike(float p)
 {
     strikePwr = p; strikeD0 = R + 4 + pwr * 70; strikeK = 0;
+    callShotPk = eightCall() ? (callPk >= 0 ? callPk : eightBestPocket()) : -1;   /* MESTRE: cacapa cantada para a bola 8 */
+    pk8 = -1;
+    callPk = -1; callManual = 0; callAnn = 0;                                     /* a escolha vale so para esta tacada */
     charging = 0; state = S_STRIKE;
 }
 
@@ -1447,7 +1471,7 @@ static int stepPhysics(float dt)
             float dx = b[i].x - PX[p], dy = b[i].y - PY[p], d2 = dx*dx + dy*dy, prc = PRC[p] * pockMul * tpk, mouth = prc + R;
             if (!air && d2 < prc*prc) {
                 fallT[i] = FALLN; fallP[i] = p; fallX[i] = b[i].x; fallY[i] = b[i].y;
-                b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; SFX(SFX_POCKET, 90); if (!sfxMute) pfxBurst(shEq[SC_CACAPA], PX[p], PY[p]); break;
+                b[i].in = 0; b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; pocketed[i] = 1; if (i == 8) pk8 = p; SFX(SFX_POCKET, 90); if (!sfxMute) pfxBurst(shEq[SC_CACAPA], PX[p], PY[p]); break;
             }
             if (d2 < mouth*mouth) {                       /* na boca da cacapa: a tabela abre, a bola pode entrar */
                 float d = sqrtf(d2), toward = -(b[i].vx * dx + b[i].vy * dy);
@@ -1991,11 +2015,14 @@ static void resolve(void)
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
+        int wrongPk = ok && callShotPk >= 0 && pk8 != callShotPk;      /* MESTRE: a 8 caiu fora da cacapa cantada */
+        if (wrongPk) ok = 0;
         if (!ok && FORGIVE_ON(abilForgive)) {              /* PRESENTE / NOVA VIDA: devolve a bola 8 e perdoa */
             respot(8, FOOTX, TCY);
             endTurn(1, 0);
             return;
         }
+        if (wrongPk) strcpy(overNote, "BOLA 8 NA CACAPA ERRADA");
         winner = ok ? cur : 1 - cur;
         (mode == 0 ? winsBot : winsVs)[winner]++;
         shopAward(winner);
@@ -2127,7 +2154,7 @@ static float botPowFix(float p)                   /* a heuristica do bot foi fei
 
 static void botPlan(void)
 {
-    int t, p, found = 0, gr = grp[cur], bt = 0;
+    int t, p, found = 0, gr = grp[cur], bt = 0, bpk = -1;
     float best = 1e9f, cx = b[0].x, cy = b[0].y, bdist = 0.0f, bcc = 1.0f;
 
     for (t = 1; t < 16; t++) {
@@ -2150,7 +2177,7 @@ static void botPlan(void)
             if (!pathClear(tx, ty, PX[p], PY[p], t)) continue;
             sc = al + dl + (1.0f - cc) * (botLevel >= 3 ? 900.0f : 400.0f);   /* profissional prefere tacadas retas */
             if (sc < best) {
-                best = sc; found = 1; bt = t; bdist = al + dl; bcc = cc;
+                best = sc; found = 1; bt = t; bdist = al + dl; bcc = cc; bpk = p;
                 botAng = atan2f(gy - cy, gx - cx);
                 botPow = (botLevel >= 3 ? 0.30f : 0.35f) + (al + dl) / (botLevel >= 3 ? 640.0f : 600.0f);
             }
@@ -2176,6 +2203,10 @@ static void botPlan(void)
     if (breakShot) botPow = 1.0f;
     if (botPow > 1.0f) botPow = 1.0f;
     botAng += (((int)(rnd() % 2001)) - 1000) / 1000.0f * (BOT_ERR[botLevel] + (curse[cur] ? 0.03f : 0.0f) + (sirenT[cur] ? 0.05f : 0.0f));   /* maldicao e sirene: o bot erra mais */
+    if (eightCall()) {                                       /* MESTRE: o bot canta a cacapa da bola 8 (a da tacada que ele planejou) */
+        callPk = (found && bt == 8 && bpk >= 0) ? bpk : eightBestPocket();
+        { char cb[64]; sprintf(cb, "BOT CANTOU A CACAPA DA 8: %s", PK_NAME[callPk]); setmsg(cb); }
+    }
     botKit(found, bt, bdist, bcc);
 }
 
@@ -6515,7 +6546,7 @@ static void drawSetupScreen(void)
     else if (v[setSel] == SR_LVL && botLevel == 3)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
     else if (v[setSel] == SR_LVL && botLevel == 4)
-        hint = "MESTRE: COMO O PROFISSIONAL, MAS O BOT USA TACOS E PODERES CONFORME A SITUACAO";
+        hint = "MESTRE: COMO O PROFISSIONAL, USA TACOS E PODERES, E A BOLA 8 EXIGE ESCOLHER A CACAPA";
     else if (v[setSel] == SR_WB)
         hint = "A COR DA BOLA BRANCA VALE PARA A PARTIDA TODA";
     else if (v[setSel] == SR_GD)
@@ -7697,6 +7728,18 @@ static void drawScene(void)
         ringN(bx, by, R + 6.5f + bob * 0.4f, 1.2f, 24, CA(255, 230, 60, 0x40));
         tri(bx - 6, by - R - 18 - bob, bx + 6, by - R - 18 - bob, bx, by - R - 9 - bob, COL(255,230,60));
     }
+    {   /* MESTRE: marca a cacapa cantada para a bola 8 */
+        int ck = -1;
+        if (state == S_AIM) { if (eightCall()) ck = callPk; }
+        else if ((state == S_STRIKE || state == S_ROLL) && b[8].in) ck = callShotPk;
+        if (ck >= 0) {
+            float pl = 0.5f + 0.5f * sinf(menuT * 0.15f);
+            ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 7.0f + 2.5f * pl, 2.2f, 28, CA(255, 225, 60, 0xa0));
+            ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 11.5f + 2.5f * pl, 1.4f, 24, CA(255, 225, 60, 0x50));
+            discN(PX[ck], PY[ck], 7.5f, COL(255, 225, 60), 14);
+            text(PX[ck] - 3.4f, PY[ck] - 5.0f, 0.34f, COL(12, 12, 12), "8");
+        }
+    }
     drawHUD();
     if (state == S_REPLAY) drawReplayTag();
     if (state == S_CUES) {
@@ -8202,6 +8245,16 @@ int main(int argc, char *argv[])
             break;
 
         case S_AIM:
+            if (!eightCall()) { callPk = -1; callManual = 0; callAnn = 0; }       /* MESTRE: so na tacada da bola 8 */
+            else if (!isBot()) {
+                if (!callManual) callPk = eightBestPocket();
+                if (!callAnn) { callAnn = 1; setmsg("BOLA 8: ESCOLHA A CACAPA (L3/R3)"); }
+                if (pressed & (PAD_R3 | PAD_L3)) {
+                    callPk = (callPk + ((pressed & PAD_R3) ? 1 : 5)) % 6; callManual = 1;
+                    { char cb[64]; sprintf(cb, "CACAPA DA 8: %s", PK_NAME[callPk]); setmsg(cb); }
+                    SFX(SFX_OK, 70);
+                }
+            }
             if (!isBot()) {
                 if (chalkAnim > 0) {                                  /* passando giz: espera a animacao */
                     chalkAnim--;
