@@ -919,8 +919,9 @@ static u32 fontAtlas[FT_AW * FT_AH] __attribute__((aligned(64)));
 static GSTEXTURE fontTex;
 static int useFont = 0;
 
-/* tamanho de leitura: textos bem pequenos ficavam ilegiveis; sobem um pouco (0.26 -> 0.34, 0.30 -> 0.37). Acima de 0.5 nao muda */
-static float legS(float s) { return s < 0.5f ? 0.175f + 0.65f * s : s; }
+/* altura de leitura: textos bem pequenos ficavam ilegiveis; a letra fica mais alta (0.26 -> 0.31, 0.30 -> 0.34), mas a LARGURA
+   de cada letra continua 24.5*s, igual a fonte antiga, entao nenhum texto/caixa dos menus muda de tamanho. De 0.5 para cima nao muda */
+static float legH(float s) { return s < 0.5f ? 0.1f + 0.8f * s : s; }
 
 static void initFontTex(void)
 {
@@ -959,32 +960,36 @@ static void initFontTex(void)
     useFont = 1;
 }
 
-/* desenha o texto com o tamanho ja ajustado (se): avanco de 24.5*se por letra, y = topo das maiusculas */
-static void textRaw(float x, float y, float se, u64 c, const char *t)
+/* desenha o texto: avanco de 24.5*s por letra (como a fonte antiga), y = topo das maiusculas */
+static void textRaw(float x, float y, float s, u64 c, const char *t)
 {
-    float A, k, qx, qy, ox, oy;
-    int al, outl;
+    float A, kx, ky, qx, qy, ox, oy;
+    int al, outl, pass;
     u64 olc;
-    if (!useFont) { gsKit_fontm_print_scaled(g, fm, x + OX, y + OY, 2, se, c, (char *)t); return; }
-    A = 24.5f * se; k = A / 12.0f;
-    qx = FT_CW * k; qy = FT_CH * k; ox = 2.0f * k; oy = 4.0f * k;
+    if (!useFont) { gsKit_fontm_print_scaled(g, fm, x + OX, y + OY, 2, s, c, (char *)t); return; }
+    A = 24.5f * s; kx = A / 12.0f; ky = 24.5f * legH(s) / 12.0f;
+    qx = FT_CW * kx; qy = FT_CH * ky; ox = 2.0f * kx; oy = 4.0f * ky;
     al = (int)((c >> 24) & 0xff);
     outl = al >= 0x50 && (int)(c & 0xff) + (int)((c >> 8) & 0xff) + (int)((c >> 16) & 0xff) >= 120;   /* sem contorno em texto apagado/escuro */
     olc = GS_SETREG_RGBAQ(0, 0, 0, (al * 4) / 5, 0x00);
-    for (; *t; t++, x += A) {
-        int ch = (unsigned char)*t, gi, u, v;
-        float px, py;
-        if (ch >= 'a' && ch <= 'z') ch -= 32;
-        if (ch <= ' ' || ch > 95) continue;
-        gi = ch - 32; u = (gi % 16) * FT_CW; v = (gi / 16) * FT_CH;
-        px = x - ox + OX; py = y - oy + OY;
-        if (outl) gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)(v + 96), px + qx, py + qy, (float)(u + FT_CW), (float)(v + 96 + FT_CH), 2, olc);
-        gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + FT_CW), (float)(v + FT_CH), 2, c);
+    for (pass = outl ? 0 : 1; pass < 2; pass++) {          /* 1o todos os contornos, 2o as letras (contorno de uma letra nao come a vizinha) */
+        const char *q = t;
+        float cx = x;
+        for (; *q; q++, cx += A) {
+            int ch = (unsigned char)*q, gi, u, v;
+            float px, py;
+            if (ch >= 'a' && ch <= 'z') ch -= 32;
+            if (ch <= ' ' || ch > 95) continue;
+            gi = ch - 32; u = (gi % 16) * FT_CW; v = (gi / 16) * FT_CH;
+            px = cx - ox + OX; py = y - oy + OY;
+            if (pass == 0) gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)(v + 96), px + qx, py + qy, (float)(u + FT_CW), (float)(v + 96 + FT_CH), 2, olc);
+            else           gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + FT_CW), (float)(v + FT_CH), 2, c);
+        }
     }
 }
 
 static void text(float x, float y, float s, u64 c, const char *t)
-{ textRaw(x, y, legS(s), c, t); }
+{ textRaw(x, y, s, c, t); }
 
 /* fonte 3x5 para os numeros das bolas */
 static const char *DIG[10] = {
@@ -4964,7 +4969,7 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
 
 /* largura aproximada do texto da fonte (medida no emulador): ~24.5 px por letra em escala 1 */
 #define FADV 24.5f
-static float tw(float s, const char *t) { return strlen(t) * FADV * legS(s); }
+static float tw(float s, const char *t) { return strlen(t) * FADV * s; }
 
 /* moldura fina (4 retangulos): nao tinge o interior da caixa */
 static void frameR(float x1, float y1, float x2, float y2, float t, u64 c)
@@ -5238,9 +5243,9 @@ static void drawScoreBoard(void)
 /* texto que encolhe para caber em maxw pixels */
 static void hudText(float x, float y, float sc, u64 c, const char *t, float maxw)
 {
-    float se = legS(sc), w = tw(sc, t);
-    if (w > maxw && w > 0.0f) se *= maxw / w;
-    textRaw(x, y, se, c, t);
+    float w = tw(sc, t);
+    if (w > maxw && w > 0.0f) sc *= maxw / w;
+    text(x, y, sc, c, t);
 }
 
 static void drawHUD(void)
@@ -5261,10 +5266,10 @@ static void drawHUD(void)
     rect(74, 398, 448, 410, cur == 0 ? CA(80, 140, 225, 0x14) : CA(225, 90, 92, 0x14));
     rect(448, 401, 449, 438, CA(120, 130, 150, 0x40));                           /* divisoria: dicas | taco e poder */
     if (msgTimer > 0) {                                                          /* linha de cima: mensagem */
-        float mse = legS(0.42f), mw = tw(0.42f, msg);
+        float msc = 0.42f, mw = tw(msc, msg);
         msgTimer--;
-        if (mw > 360.0f) mse *= 360.0f / mw;
-        textRaw(259.0f - strlen(msg) * FADV * mse * 0.5f, 401, mse, COL(255,235,110), msg);
+        if (mw > 360.0f) msc *= 360.0f / mw;
+        text(259.0f - tw(msc, msg) * 0.5f, 401, msc, COL(255,235,110), msg);
     } else if (state == S_AIM && curse[cur]) {                                   /* MALDICAO sobre quem esta mirando */
         const char *ct = "AMALDICOADO: MIRA INVERTIDA!";
         text(259.0f - tw(0.34f, ct) * 0.5f, 402, 0.34f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), ct);
@@ -6082,9 +6087,9 @@ static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]
 /* texto que encolhe para caber em maxw pixels (evita sair da caixa / encostar em outro texto) */
 static void textFit(float x, float y, float sc, u64 c, const char *t, float maxw)
 {
-    float se = legS(sc), w = tw(sc, t);
-    if (w > maxw && w > 0.0f) se *= maxw / w;
-    textRaw(x, y, se, c, t);
+    float w = tw(sc, t);
+    if (w > maxw && w > 0.0f) sc *= maxw / w;
+    text(x, y, sc, c, t);
 }
 
 static void drawCueMenu(void)
@@ -7887,9 +7892,9 @@ static int menuSlot(int sel)
 
 static void textCF(float cx, float y, float sc, u64 c, const char *t, float maxw)    /* centralizado, encolhe para caber */
 {
-    float se = legS(sc), w = tw(sc, t);
-    if (w > maxw && w > 0.0f) se *= maxw / w;
-    textRaw(cx - strlen(t) * FADV * se * 0.5f, y, se, c, t);
+    float w = tw(sc, t);
+    if (w > maxw && w > 0.0f) sc *= maxw / w;
+    text(cx - tw(sc, t) * 0.5f, y, sc, c, t);
 }
 
 static void drawMenuTop(void)                                        /* barra do topo: jogador, musica e moedas */
@@ -8146,50 +8151,77 @@ static void pauseInput(u32 pr)
     }
 }
 
+/* rodape de duas linhas (para telas com muitos botoes): barra mais alta, cada linha centralizada */
+static void uiFootRow(float ky, float ty, int n, const int *ks, const char *const *ls)
+{
+    float tot = 0.0f, x;
+    int i;
+    for (i = 0; i < n; i++) tot += UIKW[ks[i]] + 6.0f + tw(0.3f, ls[i]) + (i + 1 < n ? 18.0f : 0.0f);
+    x = 320.0f - tot * 0.5f;
+    for (i = 0; i < n; i++) {
+        uiKey(x, ky, ks[i]);
+        x += UIKW[ks[i]] + 6.0f;
+        text(x, ty, 0.3f, COL(185,195,210), ls[i]);
+        x += tw(0.3f, ls[i]) + 18.0f;
+    }
+}
+
+static void uiFoot2(int n1, const int *k1, const char *const *l1, int n2, const int *k2, const char *const *l2)
+{
+    rect(0, 398, 640, 448, CA(0, 0, 12, 0x58));
+    rect(0, 398, 640, 399, CA(255, 205, 60, 0x44));
+    uiFootRow(401, 404, n1, k1, l1);
+    uiFootRow(425, 428, n2, k2, l2);
+}
+
 static void drawPause(void)
 {
     static const char *LB[NPI] = { "CONTINUAR", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "", "", "", "",
                                    "PLAYER DE MUSICAS", "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
     char buf[32];
     int i;
-    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x58, 0x00));
+    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x60, 0x00));
 
     if (pauseView == 2) {                            /* player de musicas */
+        static const int fa[4] = { 6, 0, 3, 8 };
+        static const char *const fla[4] = { "ESCOLHER", "TOCAR", "PAUSAR", "FAIXA" };
+        static const int fb2[3] = { 7, 2, 1 };
+        static const char *const flb[3] = { "VOLUME", "PROCURAR", "VOLTAR" };
         int n = musicCount(), top, rows = 8;
         char b[96];
-        hbox(60, 14, 580, 434, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x88));
-        textC(22, 0.7f, COL(255,215,70), "MUSICAS");
-        rect(180, 56, 460, 58, CA(255,215,60,0x50));
+        uiTitle("MUSICAS");
+        panel(40, 46, 600, 390);
         snprintf(b, sizeof b, "%s   VOLUME %d%%", musicStatus(), volLvl * 10);
-        textC(66, 0.34f, COL(150,220,255), b);
-        if (musicSource()[0]) { snprintf(b, sizeof b, "PASTA: %s", musicSource()); textC(82, 0.28f, COL(140,150,165), b); }
+        textCF(320, 56, 0.34f, COL(150,220,255), b, 500.0f);
+        if (musicSource()[0]) { snprintf(b, sizeof b, "PASTA: %s", musicSource()); textCF(320, 74, 0.28f, COL(140,150,165), b, 500.0f); }
+        rect(64, 92, 576, 93, CA(120, 140, 160, 0x50));
         if (n == 0) {
-            textC(150, 0.4f, COL(255,235,170), "COLOQUE SUAS MUSICAS (MP3 OU WAV)");
-            textC(176, 0.4f, COL(255,235,170), "NA PASTA MUSIC DO PEN DRIVE OU HD USB");
-            textC(202, 0.4f, COL(255,235,170), "(OU AO LADO DO JOGO, EM UMA PASTA MUSIC)");
-            textC(240, 0.34f, COL(190,200,215), "ESPERE UNS SEGUNDOS E APERTE TRIANGULO PARA PROCURAR");
+            textCF(320, 128, 0.4f, COL(255,235,170), "COLOQUE SUAS MUSICAS (MP3 OU WAV)", 520.0f);
+            textCF(320, 154, 0.4f, COL(255,235,170), "NA PASTA MUSIC DO PEN DRIVE OU HD USB", 520.0f);
+            textCF(320, 180, 0.4f, COL(255,235,170), "(OU AO LADO DO JOGO, EM UMA PASTA MUSIC)", 520.0f);
+            textCF(320, 226, 0.34f, COL(190,200,215), "ESPERE UNS SEGUNDOS E APERTE TRIANGULO PARA PROCURAR", 520.0f);
         } else {
             int i;
             top = plSel - rows / 2; if (top > n - rows) top = n - rows; if (top < 0) top = 0;
             for (i = 0; i < rows && top + i < n; i++) {
                 int k = top + i;
-                float y = 100.0f + i * 30.0f;
+                float y = 106.0f + i * 29.0f;
                 u64 tc = (k == plSel) ? COL(255,240,150) : COL(175,185,195);
-                if (k == plSel) rect(76, y - 5, 564, y + 22, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-                if (k == musicCur() && musicState() == 1) tri(82, y + 1, 82, y + 15, 93, y + 8, COL(90,255,130));
-                else if (k == musicCur()) rect(82, y + 1, 90, y + 15, COL(255,200,70));
+                if (k == plSel) selBar(52, 588, y, 22);
+                if (k == musicCur() && musicState() == 1) tri(88, y + 1, 88, y + 15, 99, y + 8, COL(90,255,130));
+                else if (k == musicCur()) rect(88, y + 1, 96, y + 15, COL(255,200,70));
                 snprintf(b, sizeof b, "%d. %s", k + 1, musicName(k));
-                text(104, y, 0.45f, tc, b);
+                textFit(112, y, 0.45f, tc, b, 460.0f);
             }
             snprintf(b, sizeof b, "%d / %d", plSel + 1, n);
-            text(564 - tw(0.3f, b), 346, 0.3f, COL(140,150,165), b);
+            text(576 - tw(0.3f, b), 352, 0.3f, COL(140,150,165), b);
         }
-        textC(372, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   X: TOCAR   QUADRADO: PAUSAR/CONTINUAR");
-        textC(390, 0.3f, COL(170,180,195), "L1/R1: ANTERIOR/PROXIMA   ESQ/DIR: VOLUME   TRIANGULO: PROCURAR DE NOVO");
-        textC(408, 0.3f, COL(170,180,195), "O / START: VOLTAR");
+        uiFoot2(4, fa, fla, 3, fb2, flb);
         return;
     }
     if (pauseView == 1) {
+        static const int fk[3] = { 0, 1, 4 };
+        static const char *const fl[3] = { "", "", "VOLTAR" };
         static const char *K[] = { "ESQ/DIR", "L1/R1", "X", "O", "L2/R2", "CIMA/BAIXO", "TRIANGULO", "QUADRADO", "SELECT", "BOLA NA MAO", "START" };
         static const char *V[] = {
             "GIRAR A MIRA", "AJUSTE FINO LENTO (PRECISAO)", "BARRA DE FORCA; X DE NOVO DISPARA", "CANCELAR A TACADA",
@@ -8202,73 +8234,81 @@ static void drawPause(void)
             "BRASILEIRA: SE VOCE ERRAR, O ADVERSARIO TIRA UMA BOLA DELE",
             "BRANCA NA CACAPA NA BRASILEIRA = DERROTA NA HORA"
         };
-        hbox(40, 20, 600, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
-        textC(30, 0.7f, COL(255,215,70), "CONTROLES");
-        rect(160, 62, 480, 64, CA(255,215,60,0x50));
+        uiTitle("CONTROLES");
+        panel(30, 46, 610, 394);
         for (i = 0; i < 11; i++) {
-            float y = 72.0f + i * 17.5f;
-            if (i & 1) rect(52, y - 3, 588, y + 14, CA(255,255,255,0x0c));
-            text(64, y, 0.38f, COL(255,230,110), K[i]);
+            float y = 54.0f + i * 17.0f;
+            if (i & 1) rect(40, y - 3, 600, y + 14, CA(255,255,255,0x0c));
+            text(56, y, 0.38f, COL(255,230,110), K[i]);
             text(200, y, 0.38f, COL(225,230,240), V[i]);
         }
-        textC(268, 0.55f, COL(255,215,70), "DICAS");
-        rect(220, 294, 420, 295, CA(255,215,60,0x50));
-        for (i = 0; i < 5; i++) text(64, 304.0f + i * 18.0f, 0.34f, COL(190,200,215), T[i]);
-        textC(398, 0.34f, COL(150,160,175), "X / O / START: VOLTAR");
+        uiSection(52, 588, 250, COL(255,190,110), "DICAS");
+        for (i = 0; i < 5; i++) textFit(56, 270.0f + i * 22.0f, 0.34f, COL(190,200,215), T[i], 530.0f);
+        uiFoot(3, fk, fl);
         return;
     }
 
-    hbox(130, 20, 510, 428, CA(255, 215, 60, 0x7c), CA(6, 10, 20, 0x84));
-    textC(30, 0.7f, COL(255,215,70), "PAUSADO");
-    rect(180, 62, 460, 64, CA(255,215,60,0x50));
     {
+        static const int fk[4] = { 6, 7, 0, 1 };
+        static const char *const fl[4] = { "ESCOLHER", "MUDAR", "OK", "CONTINUAR" };
         int pv[NPI], pn = pauseRows(pv), row;
         float sp = pn > 12 ? 22.0f : (pn > 10 ? 25.0f : 29.5f);
+        float bh = sp - 7.5f;
+        if (bh > 22.0f) bh = 22.0f;
+        uiTitle("PAUSADO");
+        panel(110, 46, 530, 396);
         if (pauseSel >= pn) pauseSel = 0;
         for (i = 0; i < pn; i++) {
-            float y = 74.0f + i * sp, bob = 4.0f * sinf(menuT * 0.2f);
-            int sel = (i == pauseSel), hasVal = 1;
-            u64 tc = sel ? COL(255,240,150) : COL(175,185,195);
+            float y = 62.0f + i * sp;
+            int sel = (i == pauseSel);
+            u64 tc = sel ? COL(255,240,150) : COL(180,190,200);
             char lb[24];
             row = pv[i];
-            if (sel) {
-                rect(138, y - 4, 502, y + 19, GS_SETREG_RGBAQ(255, 220, 60, 0x1c + (int)(0x12 * (1.0f + sinf(menuT * 0.12f))), 0x00));
-                tri(144 + bob, y + 1, 144 + bob, y + 15, 155 + bob, y + 8, COL(255,230,60));
-            }
+            if (sel) selBar(118, 522, y, bh);
             if (row == PI_WB0 || row == PI_WB1) sprintf(lb, mode == 0 ? "BOLA BRANCA" : "BRANCA J%d", row == PI_WB0 ? 1 : 2);
             else if (row == PI_GD0 || row == PI_GD1) sprintf(lb, mode == 0 ? "LINHA GUIA" : "GUIA J%d", row == PI_GD0 ? 1 : 2);
             else strcpy(lb, LB[row]);
-            text(166, y, 0.5f, tc, lb);
+            text(152, y + 1, 0.46f, tc, lb);
             switch (row) {
-            case PI_SND:  strcpy(buf, sndOn ? "< LIGADO >" : "< DESLIGADO >"); break;
-            case PI_MUS:  strcpy(buf, musOn ? "< LIGADA >" : "< DESLIGADA >"); break;
-            case PI_VOL:  sprintf(buf, "< %d%% >", volLvl * 10); break;
-            case PI_FX:   strcpy(buf, fxOn ? "< LIGADOS >" : "< DESLIGADOS >"); break;
-            case PI_TIPS: strcpy(buf, tipsOn ? "< LIGADAS >" : "< DESLIGADAS >"); break;
-            case PI_WB0:  sprintf(buf, "< %s >", WB_NAME[wbSel[0]]); break;
-            case PI_WB1:  sprintf(buf, "< %s >", WB_NAME[wbSel[1]]); break;
-            case PI_GD0:  sprintf(buf, "< %s >", GD_NAME[gdSel[0]]); break;
-            case PI_GD1:  sprintf(buf, "< %s >", GD_NAME[gdSel[1]]); break;
-            default:      hasVal = 0; buf[0] = 0; break;
+            case PI_SND:  uiToggle(510, y - 1, sndOn, "LIGADO", "DESLIGADO"); break;
+            case PI_MUS:  uiToggle(510, y - 1, musOn, "LIGADA", "DESLIGADA"); break;
+            case PI_FX:   uiToggle(510, y - 1, fxOn, "LIGADOS", "DESLIGADOS"); break;
+            case PI_TIPS: uiToggle(510, y - 1, tipsOn, "LIGADAS", "DESLIGADAS"); break;
+            case PI_VOL: {
+                int q;
+                for (q = 0; q < 10; q++) {
+                    float bx = 380.0f + q * 13.0f;
+                    rect(bx, y + 1, bx + 10, y + 17, q < volLvl ? COL(255, 205 - q * 6, 60) : COL(40,46,60));
+                }
+                sprintf(buf, "%d%%", volLvl * 10);
+                text(372 - tw(0.34f, buf), y + 3, 0.34f, COL(255,255,255), buf);
+                break; }
+            case PI_WB0: case PI_WB1: case PI_GD0: case PI_GD1: {
+                int w = (row == PI_WB0 || row == PI_GD0) ? 0 : 1, isWb = (row == PI_WB0 || row == PI_WB1);
+                sprintf(buf, "< %s >", isWb ? WB_NAME[wbSel[w]] : GD_NAME[gdSel[w]]);
+                text(510 - tw(0.4f, buf), y + 2, 0.4f, COL(255,255,255), buf);
+                drawSwatch(isWb ? 0 : 1, isWb ? wbSel[w] : gdSel[w], 510 - tw(0.4f, buf) - (isWb ? 14 : 20), y + 8);
+                break; }
+            case PI_RESUME: break;
+            default:
+                text(510 - tw(0.46f, ">"), y + 1, 0.46f, COL(255,230,60), ">");
+                break;
             }
-            if (hasVal) text(494 - tw(0.5f, buf), y, 0.5f, COL(255,255,255), buf);
-            if (hasVal && (row == PI_WB0 || row == PI_WB1)) drawSwatch(0, wbSel[row == PI_WB0 ? 0 : 1], 494 - tw(0.5f, buf) - 14, y + 7);
-            if (hasVal && (row == PI_GD0 || row == PI_GD1)) drawSwatch(1, gdSel[row == PI_GD0 ? 0 : 1], 494 - tw(0.5f, buf) - 20, y + 7);
         }
         row = pv[pauseSel];
         if (row == PI_SND)
-            textC(388, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
+            textC(404, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
-            textC(388, 0.3f, COL(150,220,255), musicReady() ? musicStatus() : musicStatus());
+            textC(404, 0.3f, COL(150,220,255), musicStatus());
         else if (row == PI_GD0 || row == PI_GD1) {
             int w = (row == PI_GD0) ? 0 : 1;
             char hb[64];
             if (mode == 0) strcpy(hb, "A COR DA LINHA MUDA NA HORA");
             else sprintf(hb, "COR DE %s: VALE QUANDO E A VEZ DELE", pnames[w]);
-            textC(388, 0.3f, COL(150,220,255), hb);
+            textC(404, 0.3f, COL(150,220,255), hb);
         }
+        uiFoot(4, fk, fl);
     }
-    textC(404, 0.3f, COL(170,180,195), "CIMA/BAIXO: ESCOLHER   ESQ/DIR: MUDAR   X: OK   START/O: CONTINUAR");
 }
 
 static void drawChalkFx(float bx, float by, float d0)
