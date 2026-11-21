@@ -6126,9 +6126,9 @@ static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 2, 5, 2, 3, 3, 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
 static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27,   11, 10, 6,   16, 18, 25, 29,   14, 15, 28,   24, 31,   30, 17 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
-#define NCATT 5                                                       /* abas do catalogo: PADRAO | PAISES | RARO | EPICO | LENDARIO */
-static const int CATT_S[NCATT + 1] = { 0, 8, 14, 21, 28, 32 };      /* 1a ficha (posicao em CAT) de cada aba */
-static const char *CATT_N[NCATT] = { "PADRAO", "PAISES", "RARO", "EPICO", "LENDARIO" };
+#define NCATT 6                                                       /* abas do catalogo: PADRAO | PAISES | RARO | EPICO | LENDARIO | ULTRA */
+static const int CATT_S[NCATT + 1] = { 0, 8, 14, 21, 28, 30, 32 };      /* 1a ficha (posicao em CAT) de cada aba */
+static const char *CATT_N[NCATT] = { "PADRAO", "PAISES", "RARO", "EPICO", "LENDARIO", "ULTRA" };
 static int catTab(int pos) { int t, r = 0; for (t = 0; t < NCATT; t++) if (CATT_S[t] <= pos) r = t; return r; }
 
 
@@ -6182,11 +6182,15 @@ static void drawCueMenu(void)
     text(320.0f - tw(0.62f, "TACOS") * 0.5f, 8, 0.62f, COL(255, 215, 70), "TACOS");
 
     for (t = 0; t < NCATT; t++) {                                     /* abas */
-        float x1 = 14.0f + t * 119.0f, x2 = x1 + 115.0f;
+        float x1 = 14.0f + t * 99.0f, x2 = x1 + 95.0f;
         int on = (t == tab);
         cham(x1, on ? 42.0f : 46.0f, x2, 70.0f, 4.0f, on ? COL(20, 21, 30) : COL(76, 78, 104));
         if (on) rect(x1 + 10, 68, x2 - 10, 70, COL(255, 215, 70));
-        text((x1 + x2) * 0.5f - tw(0.36f, CATT_N[t]) * 0.5f, on ? 50.0f : 52.0f, 0.36f, on ? COL(255, 230, 110) : COL(225, 228, 240), CATT_N[t]);
+        {
+            float sc = 0.36f, w = tw(sc, CATT_N[t]);
+            if (w > 85.0f) { sc *= 85.0f / w; w = 85.0f; }
+            text((x1 + x2) * 0.5f - w * 0.5f, on ? 50.0f : 52.0f, sc, t == 5 ? rarCol(5) : (on ? COL(255, 230, 110) : COL(225, 228, 240)), CATT_N[t]);
+        }
     }
     rect(0, 70, 640, 71, COL(70, 72, 92));
 
