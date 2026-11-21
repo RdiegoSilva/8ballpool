@@ -5,6 +5,12 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.2
 
+## Texto legivel + upgrade visual (novo)
+- **Fonte nova** em todo o jogo: letras nitidas (antisserrilhadas) com **contorno escuro**, no lugar da fonte padrao do gsKit, que ficava borrada. Os textos pequenos tambem ficaram um pouco maiores (ex.: escala 0.26 vira ~0.34; de 0.5 para cima nao muda). Se faltar VRAM, o jogo volta sozinho para a fonte antiga
+- Fica em `initFontTex()`, `textRaw()` e `legS()` no `main.c` (o atlas das letras e o `FNT4`). Minusculas saem em maiusculas
+- **Bolas**: malha da esfera mais fina (`NLON` 16 / `NLAT` 8), aro escuro na borda para dar volume, luz rebatida embaixo e brilho em 3 camadas
+- **Sombra das bolas** com penumbra mais suave e **feltro** com degrade de luz mais suave (14 faixas em vez de 7)
+
 ## Chapolin: corneta so 1 rodada + rever replay (novo)
 - **CORNETA** paralisa a bola do adversario apenas por **1 rodada**: ela fica parada ate o fim da proxima jogada dele e depois volta ao normal (nao dura mais ate o fim da partida)
 - Na tela **Configurar partida, etapa 1 (Partida)** aparece a linha **VER REPLAY ANTERIOR** — **so quando existe replay** da partida que acabou de terminar. **X** assiste (a ultima bola, em camera lenta, com a bola normal, sem aros de corneta/algemas) e **X ou START** volta as opcoes. A linha some assim que a proxima partida comeca a primeira tacada
