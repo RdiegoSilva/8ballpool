@@ -1006,6 +1006,38 @@ static void textRaw(float x, float y, float s, u64 c, const char *t)
 static void text(float x, float y, float s, u64 c, const char *t)
 { textRaw(x, y, s, c, t); }
 
+/* ---------- MEDIDOR DE DESEMPENHO (DEBUG_FPS): mostra FPS e quanto tempo o musicUpdate() e o resto do quadro gastam ----------
+   Serve para descobrir se a lentidao vem da musica/USB ou do desenho. Ponha DEBUG_FPS 0 para esconder. */
+#ifndef DEBUG_FPS
+#define DEBUG_FPS 1
+#endif
+#if DEBUG_FPS
+#define DBG_CPU_HZ 294912000.0f                       /* clock do EE: o contador COP0 Count anda a esse ritmo */
+static unsigned int dbgNow(void) { unsigned int v; __asm__ volatile ("mfc0 %0, $9" : "=r"(v)); return v; }
+static unsigned int dbgLast, dbgMusAcc, dbgMusMax, dbgFrames;
+static char dbgTxt[64] = "FPS --";
+static void dbgMusic(unsigned int dt)                 /* tempo gasto no musicUpdate() neste quadro */
+{
+    dbgMusAcc += dt; if (dt > dbgMusMax) dbgMusMax = dt;
+}
+static void dbgFrameEnd(void)                         /* 1x por quadro: a cada 60 quadros atualiza o texto */
+{
+    if (++dbgFrames >= 60) {
+        unsigned int now = dbgNow(), el = now - dbgLast;
+        float sec = el / DBG_CPU_HZ;
+        int fps = sec > 0.0f ? (int)(60.0f / sec + 0.5f) : 0;
+        int mavg = (int)(dbgMusAcc / DBG_CPU_HZ * 1000.0f / 60.0f * 10.0f);
+        int mmax = (int)(dbgMusMax / DBG_CPU_HZ * 1000.0f * 10.0f);
+        sprintf(dbgTxt, "FPS %d  MUSICA %d.%d MS  PICO %d.%d MS", fps, mavg / 10, mavg % 10, mmax / 10, mmax % 10);
+        dbgLast = now; dbgFrames = 0; dbgMusAcc = 0; dbgMusMax = 0;
+    }
+}
+static void dbgDraw(void)
+{
+    text(8, 432, 0.3f, GS_SETREG_RGBAQ(255, 235, 60, 0x80, 0x00), dbgTxt);
+}
+#endif
+
 /* fonte 3x5 para os numeros das bolas */
 static const char *DIG[10] = {
     "111101101101111", "010110010010111", "111001111100111", "111001111001111",
@@ -9124,7 +9156,11 @@ int main(int argc, char *argv[])
     menuInit();
 
     for (;;) {
+#if DEBUG_FPS
+        { unsigned int t0 = dbgNow(); musicUpdate(); dbgMusic(dbgNow() - t0); }
+#else
         musicUpdate();
+#endif
         p0 = readpad(0);
         p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) ? readpad(1) : 0;
         if (state == S_MENU || state == S_OVER || state == S_VS || state == S_REPLAY || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
@@ -9473,6 +9509,9 @@ int main(int argc, char *argv[])
         gsKit_clear(g, GS_SETREG_RGBAQ(0x10, 0x10, 0x18, 0x80, 0x00));
         gsKit_prim_sprite(g, 0, 0, (float)g->Width, (float)g->Height, 1, COL(16, 16, 24));
         draw();
+#if DEBUG_FPS
+        dbgDraw(); dbgFrameEnd();
+#endif
         gsKit_queue_exec(g);
         gsKit_sync_flip(g);
     }

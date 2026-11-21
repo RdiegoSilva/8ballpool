@@ -5,6 +5,12 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Medidor de desempenho (novo)
+Canto inferior esquerdo da tela aparece **FPS**, o tempo medio que a **MUSICA** gasta por quadro e o **PICO** (pior quadro) da ultima volta de 60 quadros. Serve para achar a causa do taco lento na primeira partida:
+- FPS abaixo de 60 e MUSICA com varios ms (ou PICO alto): a lentidao vem da musica/USB (`musicUpdate()` no `music.c`)
+- FPS abaixo de 60 e MUSICA perto de 0: a lentidao vem do desenho (mesa pesada como a Pool Azul)
+- Fica em `dbgNow()`, `dbgFrameEnd()` e `dbgDraw()` no `main.c`. Para esconder, defina `DEBUG_FPS 0`
+
 ## Tela de VS antes da partida (novo, 3.1.3)
 Antes de **toda partida** aparece a tela de **VERSUS** no estilo do 8 Ball Pool: o mesmo cenario dos menus (por do sol, cidade e mesa), os **dois personagens em retratos quadrados com moldura escura e uma estrela** (o numero e a raridade), **VS dourado** no meio, o **nome** embaixo de cada retrato e, embaixo do nome, o **premio em moedas** de quem ganhar. O nome da **mesa** fica no topo e uma miniatura dela na caixinha do centro.
 - Aparece em **JOGAR** (contra o BOT e 2 jogadores), em **TORNEIO** (toda partida, depois do chaveamento), na **revanche** e em **Reiniciar partida**. O **MODO TREINO** nao tem adversario, entao vai direto para a mesa
