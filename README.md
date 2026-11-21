@@ -17,7 +17,7 @@ Antes de **toda partida** aparece a tela de **VERSUS** no estilo do 8 Ball Pool:
 - **Menus PAUSADO, PLAYER DE MUSICAS e CONTROLES** no visual novo dos outros menus: faixa de titulo, painel, barra de selecao, chaves liga/desliga, barra de volume e rodape com os botoes do controle (o player tem rodape de 2 linhas). Nada estoura mais a caixa: nome de musica comprido e texto de dica se ajustam sozinhos
 - A letra nova tem a **mesma largura** da fonte antiga e fica so um pouco mais alta nos textos pequenos, entao nenhum menu muda de tamanho (`legH()`)
 - **Chaves de teste** no `main.c`, logo antes da funcao `circ()`: `USE_NEW_FONT` (0 = fonte antiga) e `FAST_DISC` (0 = discos como antes). Servem para isolar a causa de algum problema no PS2 sem desfazer o resto
-- **Números das bolas bem maiores**: o círculo branco cresceu (raio de 0,46 para 0,66 da bola) e os dígitos ficaram ~40% maiores (1 dígito: 0,63 da bola de largura; 2 dígitos também maiores), preto sobre branco. Fica em `renderSkin()`, `digitInk()` e `drawNumber()` no `main.c`
+- **Números das bolas** (ajustado na 3.1.3, estavam grandes demais): círculo branco com raio 0,50 da bola e dígitos proporcionais (1 dígito: ~0,48 da bola de largura), preto sobre branco. Fica em `renderSkin()`, `digitInk()` e `drawNumber()` no `main.c`
 - **Bolas** com a borda mais escura (da volume, sem desenhar nada a mais) e brilho em 3 camadas; o **feltro** tem um degrade de luz mais suave (14 faixas)
 - **Menos desenho por quadro** (o jogo so segura 60 FPS se o PS2 desenhar cada quadro em menos de 16,6 ms): `discN` agora usa so os segmentos que o olho ve (erro menor que 0,4 px) e discos de 1-2 px viram um quadradinho. A mesa **Pool Azul** (a padrao) usava ~8500 primitivas por quadro e agora usa ~5400 (-36%); no pior caso (Neon) caiu de ~6600 para ~6050. Nada muda no visual: so deixou de gastar triangulos que nao aparecem (ex.: os ~200 botoes do estofado da Pool Azul tinham 14 triangulos cada, com 1-2 px)
 
@@ -112,13 +112,15 @@ Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAG
 ## HUD (layout novo)
 O topo da tela agora é uma faixa baixa de vidro com três blocos: **retrato + nome, grupo e bolas** do jogador 1, **placar** no centro e o bloco do jogador 2 espelhado. Quem joga tem borda dourada, brilho e filete na cor do jogador (azul/vermelho); o outro fica apagado. O relógio de jogada vira um filete no pé do bloco, e a barra de sangue do taco Vampiro fica logo abaixo.
 
-## Animações de vitória e derrota
-Quando a partida termina:
-- **Quem venceu**: o personagem pula de alegria com os braços pro alto, com raios de luz girando, fogos de artifício, chuva de confete e um troféu brilhando no centro
-- **Quem perdeu**: o personagem fica cabisbaixo, chorando, debaixo de uma nuvem de chuva
-- **Coveiro (especial)**: se o Coveiro vence, ele joga areia com a pá no adversário, que vai sendo enterrado até sumir debaixo de um montinho de terra com uma cruz e o aviso "DESCANSE EM PAZ"
-- Contra o BOT: se você ganha aparece **VITORIA!**; se o bot ganha aparece **DERROTA**. No versus aparece "NOME VENCEU!"
-- X = revanche (mantém o placar), START = voltar ao menu
+## Tela de fim de partida (refeita na 3.1.3, igual a do VS)
+Quando a partida termina aparece o mesmo visual da tela de VS (cenario do por do sol, retratos quadrados com moldura e estrela, nome embaixo):
+- **Quem venceu**: retrato com brilho dourado, rostinho feliz pulando, o titulo **VENCEDOR** em dourado em cima (no torneio, quem ganha a final ve **CAMPEAO**), raios de luz, fogos de artificio e confete
+- **Quem perdeu**: retrato mais escuro, com o rostinho chorando e o nome apagado
+- **Moedas ganhas** (`+N` com a moeda) aparecem embaixo do nome; no meio ficam o **VS** e o trofeu na caixinha escura
+- **Coveiro (especial)**: se o Coveiro vence, o perdedor ganha o aviso "DESCANSE EM PAZ" (a animacao da pa e do monte de terra foi retirada)
+- Contra o BOT: se voce ganha aparece **VOCE VENCEU O BOT!**; se o bot ganha, **O BOT VENCEU... TENTE DE NOVO!**. No versus aparece "PARABENS, NOME!" e o placar. Cada texto fica na sua linha (o "+N MOEDAS" nao fica mais em cima do placar)
+- X = revanche (mantem o placar, passa pela tela de VS), START = voltar ao menu
+- Fica em `drawOverScreen()` e `vsPortrait()` no `main.c`
 
 ## Torneio (novo na 2.0)
 No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Quartas de final, Semifinal e Final.
@@ -244,23 +246,37 @@ Categoria própria no catálogo: tacos com as cores da bandeira (faixas que gira
 | Mira Longa | 50    | 30     | 100  | 65       |
 | Precisão   | 45    | 40     | 70   | 100      |
 | Sniper     | 40    | 10     | 100  | 100      |
-| Dragão     | 80    | 40     | 40   | 35       |
+| Dragão     | 90    | 50     | 60   | 60       |
 | Gelo       | 45    | 60     | 65   | 70       |
 | Ouro       | 60    | 40     | 55   | 55       |
 | Neon       | 55    | 55     | 55   | 55       |
-| Samurai    | 75    | 30     | 50   | 45       |
-| Oceano     | 50    | 70     | 45   | 55       |
+| Samurai    | 85    | 45     | 65   | 65       |
+| Oceano     | 65    | 80     | 60   | 60       |
 | Pistoleiro | 70    | 35     | 60   | 55       |
 | Brasileiro | 60    | 50     | 60   | 60       |
-| Vampiro    | 65    | 60     | 55   | 50       |
-| Noel       | 55    | 60     | 55   | 65       |
-| Grinch     | 58    | 62     | 55   | 60       |
-| Hack       | 50    | 50     | 80   | 80       |
-| Tridente   | 56    | 64     | 55   | 60       |
+| Vampiro    | 90    | 80     | 80   | 80       |
+| Noel       | 80    | 85     | 80   | 85       |
+| Grinch     | 90    | 95     | 85   | 90       |
+| Hack       | 60    | 60     | 90   | 90       |
+| Tridente   | 70    | 85     | 70   | 75       |
 | Ovni       | 52    | 55     | 60   | 58       |
 | Robô       | 62    | 35     | 65   | 65       |
-| Varinha    | 48    | 70     | 55   | 55       |
-| Gato       | 52    | 58     | 55   | 62       |
+| Varinha    | 75    | 95     | 80   | 80       |
+| Gato       | 70    | 80     | 70   | 75       |
+
+### Atributos por raridade (ajustados na 3.1.3)
+Os tacos de personagem ficam mais fortes conforme a raridade do dono (soma dos 4 atributos, maximo 400). Cada taco continua com a sua especialidade (ex.: Dragao e Samurai batem mais forte, Oceano e Varinha fazem mais efeito).
+
+| Raridade        | Soma  | Tacos (Força / Efeito / Mira / Controle) |
+|-----------------|-------|------------------------------------------|
+| RARO            | ~225  | Gelo, Pistoleiro, Ovni, Robô (sem mudança) |
+| SUPER RARO      | ~260  | Dragão 90/50/60/60, Samurai 85/45/65/65, Oceano 65/80/60/60 |
+| ÉPICO           | ~300  | Hack 60/60/90/90, Gato 70/80/70/75, Tridente 70/85/70/75 |
+| MÍSTICO         | ~330  | Vampiro 90/80/80/80, Noel 80/85/80/85, Varinha 75/95/80/80, Mestre do Tempo 80/80/85/85 |
+| LENDÁRIO        | ~360  | Grinch 90/95/85/90, Cassetete (Policial) 95/80/90/95 |
+| ULTRA LENDÁRIO  | ~385  | Coveiro 100/90/100/100, Marreta Biônica 100/85/95/100 |
+
+Os tacos PADRÃO e de PAÍSES não mudaram. Os valores ficam na tabela `CUES` do `main.c`.
 
 - **Sniper**: laser vermelho que mostra a tacada inteira (até 3 rebotes e o caminho completo da bola alvo), mas bate fraco e quase não faz efeito
 - **Pistoleiro** (cowboy): taco de couro e latão com brilho de bala correndo pelo taco e estrela de xerife piscando; bate forte e tem boa mira

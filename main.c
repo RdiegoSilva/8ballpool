@@ -261,23 +261,23 @@ static CueDef CUES[NCUES] = {
     /* SNIPER: laser vermelho que mostra a tacada inteira (ate 3 rebotes e o caminho completo da bola alvo);
        em troca tem pouca forca e quase nenhum efeito */
     { "SNIPER",     40,  10, 100, 100, {235, 60, 55}, { 96,104, 92}, { 38, 44, 36}, {255, 70, 60}, { 18, 22, 18} },
-    { "DRAGAO",     80,  40,  40,  35, {255,140, 40}, { 96, 36, 24}, {150, 20, 12}, {255,190, 50}, { 24, 10, 10}, 1 },
+    { "DRAGAO",     90, 50, 60, 60, {255,140, 40}, { 96, 36, 24}, {150, 20, 12}, {255,190, 50}, { 24, 10, 10}, 1 },
     { "GELO",       45,  60,  65,  70, {190,235,255}, {206,232,248}, { 70,130,200}, {235,248,255}, { 30, 60,100}, 3 },
     { "OURO",       60,  40,  55,  55, {255,220,110}, {230,196,120}, {170,128, 40}, {255,235,150}, { 60, 40, 12}, 1 },
     { "NEON",       55,  55,  55,  55, {255, 60,200}, { 40, 40, 56}, { 18, 18, 28}, {  0,255,200}, {255, 60,200}, 2 },
-    { "SAMURAI",    75,  30,  50,  45, {235,235,235}, { 60, 36, 30}, { 20, 16, 18}, {200, 30, 40}, {200, 30, 40}, 0 },
-    { "OCEANO",     50,  70,  45,  55, {120,230,255}, { 70,150,190}, { 16, 70,130}, { 90,220,230}, { 10, 40, 80}, 3 },
+    { "SAMURAI",    85, 45, 65, 65, {235,235,235}, { 60, 36, 30}, { 20, 16, 18}, {200, 30, 40}, {200, 30, 40}, 0 },
+    { "OCEANO",     65, 80, 60, 60, {120,230,255}, { 70,150,190}, { 16, 70,130}, { 90,220,230}, { 10, 40, 80}, 3 },
     /* PISTOLEIRO (cowboy): couro e latao, brilho de bala correndo pelo taco e estrela de xerife */
     { "PISTOLEIRO", 70,  35,  60,  55, {205,165, 72}, {122, 74, 36}, { 52, 30, 16}, {255,215, 80}, {150, 98, 48}, 4 },
     /* BRASILEIRO: verde, amarelo e azul da bandeira; faixas e brilho alternando as cores */
     { "BRASILEIRO", 60,  50,  60,  60, {  0,156, 59}, {255,223,  0}, {  0,122, 52}, {  0, 60,170}, {  0, 60,170}, 5 },
     /* tacos de personagem novos */
-    { "VAMPIRO",    65,  60,  55,  50, {220, 40, 60}, { 64, 14, 28}, { 20,  8, 18}, {210, 20, 44}, {110, 10, 26}, 6 },
-    { "NOEL",       55,  60,  55,  65, {245,245,250}, {200, 32, 42}, { 16,104, 50}, {255,214, 80}, {245,245,250}, 7 },
-    { "HACK",       50,  50,  80,  80, {  0,255,200}, { 24, 30, 40}, { 12, 16, 24}, {  0,255,140}, {  0,200,255}, 8 },
-    { "MARRETA BIONICA", 60, 40, 55, 55, {255,214, 40}, {214, 36, 40}, {255,214, 40}, {255,214, 40}, {158, 22, 28}, 10 },
+    { "VAMPIRO",    90, 80, 80, 80, {220, 40, 60}, { 64, 14, 28}, { 20,  8, 18}, {210, 20, 44}, {110, 10, 26}, 6 },
+    { "NOEL",       80, 85, 80, 85, {245,245,250}, {200, 32, 42}, { 16,104, 50}, {255,214, 80}, {245,245,250}, 7 },
+    { "HACK",       60, 60, 90, 90, {  0,255,200}, { 24, 30, 40}, { 12, 16, 24}, {  0,255,140}, {  0,200,255}, 8 },
+    { "MARRETA BIONICA", 100, 85, 95, 100, {255,214, 40}, {214, 36, 40}, {255,214, 40}, {255,214, 40}, {158, 22, 28}, 10 },
     /* MESTRE DO TEMPO: relogio azul e dourado; a habilidade volta no tempo se a tacada perder a partida */
-    { "MESTRE DO TEMPO", 55, 50, 65, 65, {120,200,255}, { 28, 40, 84}, { 14, 18, 44}, {255,214, 90}, {120,200,255}, 1 },
+    { "MESTRE DO TEMPO", 80, 80, 85, 85, {120,200,255}, { 28, 40, 84}, { 14, 18, 44}, {255,214, 90}, {120,200,255}, 1 },
     /* tacos de paises (fx 9: faixas com as cores da bandeira) */
     { "MEXICANO",   58,  52,  58,  57, {206, 17, 38}, {  0,104, 71}, {206, 17, 38}, {245,245,245}, {  0,104, 71}, 9 },
     { "ARGENTINO",  56,  56,  58,  58, {246,180, 14}, {117,170,219}, {245,245,245}, {246,180, 14}, {245,245,245}, 9 },
@@ -285,18 +285,18 @@ static CueDef CUES[NCUES] = {
     { "ITALIANO",   55,  60,  55,  55, {206, 43, 55}, {  0,146, 70}, {206, 43, 55}, {250,250,250}, {  0,146, 70}, 9 },
     { "JAPONES",    48,  45,  67,  72, {188,  0, 45}, {245,245,245}, {188,  0, 45}, {188,  0, 45}, { 40, 40, 44}, 9 },
     /* GRINCH: pelo verde, ponta brilhante e um coracao vermelho que cresce 3 tamanhos; habilidade sorteada entre 5 poderes */
-    { "GRINCH",     58,  62,  55,  60, {150,235, 90}, { 70,150, 50}, {190, 30, 40}, {255,230, 70}, {245,245,245}, 11 },
+    { "GRINCH",     90, 95, 85, 90, {150,235, 90}, { 70,150, 50}, {190, 30, 40}, {255,230, 70}, {245,245,245}, 11 },
     /* TRIDENTE (Poseidon): azul profundo com ondas turquesa correndo pelo taco e detalhe dourado */
-    { "TRIDENTE",   56,  64,  55,  60, {110,230,255}, { 20, 92,170}, { 10, 48,110}, {255,214, 90}, { 60,200,210}, 12 },
+    { "TRIDENTE",   70, 85, 70, 75, {110,230,255}, { 20, 92,170}, { 10, 48,110}, {255,214, 90}, { 60,200,210}, 12 },
     /* tacos dos personagens que ainda nao tinham habilidade: ALIEN, ROBO, MAGO e GATO */
     { "OVNI",       52,  55,  60,  58, {120,255,150}, { 52, 96, 70}, { 24, 44, 36}, {170,255,120}, {120,255,150}, 13 },
     { "ROBO",       62,  35,  65,  65, {255,200, 60}, {150,158,170}, { 70, 76, 90}, {255,200, 60}, { 40, 44, 54}, 14 },
-    { "VARINHA",    48,  70,  55,  55, {255,240,150}, { 80, 40,130}, { 40, 20, 76}, {255,214, 90}, {160, 90,230}, 15 },
-    { "GATO",       52,  58,  55,  62, {255,150,190}, {255,184,210}, {120, 70,100}, {255,240,250}, {255,120,170}, 16 },
+    { "VARINHA",    75, 95, 80, 80, {255,240,150}, { 80, 40,130}, { 40, 20, 76}, {255,214, 90}, {160, 90,230}, 15 },
+    { "GATO",       70, 80, 70, 75, {255,150,190}, {255,184,210}, {120, 70,100}, {255,240,250}, {255,120,170}, 16 },
     /* COVEIRO (lendario): o taco e uma pa (lamina de aco, cabo de madeira e punho em T) com ectoplasma verde */
-    { "COVEIRO",    58,  55,  58,  60, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
+    { "COVEIRO",    100, 90, 100, 100, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
     /* CASSETETE (Policial, lendario): azul-marinho com detalhe dourado e a sirene vermelha/azul piscando na ponta */
-    { "CASSETETE",  60,  50,  60,  62, { 70,140,255}, { 26, 40, 92}, { 16, 22, 52}, {255,205, 50}, {220, 40, 52}, 18 },
+    { "CASSETETE",  95, 80, 90, 95, { 70,140,255}, { 26, 40, 92}, { 16, 22, 52}, {255,205, 50}, {220, 40, 52}, 18 },
 };
 
 /* habilidade de cada taco (0 = nenhuma). Taco de personagem: GELO-Pinguim, PISTOLEIRO-Cowboy, VAMPIRO-Vampiro,
@@ -1025,12 +1025,12 @@ static void drawDigit(int d, float x0, float y0, float p)
 
 static void drawNumber(int n, float cx, float cy, float r)
 {
-    disc(cx, cy, r * 0.66f, COL(250,250,245));
+    disc(cx, cy, r * 0.50f, COL(250,250,245));
     if (n < 10) {
-        float p = r * 0.21f;
+        float p = r * 0.16f;
         drawDigit(n, cx - 1.5f*p, cy - 2.5f*p, p);
     } else {
-        float p = r * 0.14f;
+        float p = r * 0.105f;
         drawDigit(n / 10, cx - 3.5f*p, cy - 2.5f*p, p);
         drawDigit(n % 10, cx + 0.5f*p,  cy - 2.5f*p, p);
     }
@@ -1166,9 +1166,9 @@ static void renderSkin(int id, int ox, int oy)
                     float gu[4] = { x, -z, -x, z };
                     float gv = -y;
                     for (k = 0; k < 4; k++)
-                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < (skinNum[id] ? 0.4356f : 0.016f)) {
+                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < (skinNum[id] ? 0.25f : 0.016f)) {
                             cr = cg = cb = 248;
-                            if (skinNum[id] && digitInk(id, gu[k] / 0.66f, gv / 0.66f)) cr = cg = cb = 20;
+                            if (skinNum[id] && digitInk(id, gu[k] / 0.50f, gv / 0.50f)) cr = cg = cb = 20;
                             break;
                         }
                 }
@@ -6588,160 +6588,154 @@ static void menuIcon(int k, float cx, float cy, float s, int hot)
     }
 }
 
+static void vsCoin(float cx, float cy, float r)
+{
+    discN(cx, cy + 1.5f, r, COL(116, 74, 8), 14);
+    discN(cx, cy, r, COL(236, 184, 48), 14);
+    discN(cx, cy, r * 0.72f, COL(255, 214, 90), 12);
+    rect(cx - r * 0.12f, cy - r * 0.45f, cx + r * 0.12f, cy + r * 0.45f, COL(236, 184, 48));
+    discN(cx - r * 0.38f, cy - r * 0.38f, r * 0.17f, CA(255, 255, 255, 0x70), 6);
+}
+
+static void vsStar(float cx, float cy, float r, int n)       /* estrela com o numero (raridade do personagem) */
+{
+    int k;
+    char nb[4];
+    for (k = 0; k < 10; k++) {
+        float a0 = -CPI * 0.5f + k * CPI / 5.0f, a1 = a0 + CPI / 5.0f;
+        float r0 = (k & 1) ? r * 0.48f : r, r1 = (k & 1) ? r : r * 0.48f;
+        tri(cx, cy, cx + cosf(a0) * r0 + 1.5f, cy + sinf(a0) * r0 + 2.0f, cx + cosf(a1) * r1 + 1.5f, cy + sinf(a1) * r1 + 2.0f, COL(110, 84, 40));
+        tri(cx, cy, cx + cosf(a0) * r0, cy + sinf(a0) * r0, cx + cosf(a1) * r1, cy + sinf(a1) * r1, COL(222, 190, 120));
+    }
+    discN(cx, cy + 1.0f, r * 0.5f, COL(238, 212, 150), 10);
+    sprintf(nb, "%d", n);
+    text(cx - tw(0.4f, nb) * 0.5f, cy - 5.0f, 0.4f, COL(60, 44, 20), nb);
+}
+
+static void vsStrip(float cx, float y1, float y2, float w)   /* faixa escura que some nas pontas (atras do nome e do premio) */
+{
+    int k;
+    for (k = 0; k < 4; k++) {
+        float in = k * w * 0.06f;
+        rect(cx - w * 0.5f + in, y1, cx + w * 0.5f - in, y2, CA(8, 10, 24, 0x1c));
+    }
+}
+
+static void vsPortrait(int pl, float cx, float ty, float S, int mood, int t, int dim, float bob)   /* retrato quadrado com moldura escura e estrela */
+{
+    float x1 = cx - S * 0.5f, x2 = cx + S * 0.5f, y1 = ty, y2 = ty + S;
+    int k, id = ((charSel[pl] % NCHARS) + NCHARS) % NCHARS;
+    cham(x1 - 7, y1 - 7, x2 + 8, y2 + 9, 8.0f, CA(0, 0, 0, 0x40));
+    cham(x1 - 6, y1 - 6, x2 + 6, y2 + 6, 8.0f, COL(86, 90, 112));
+    cham(x1 - 4, y1 - 4, x2 + 4, y2 + 4, 7.0f, COL(34, 36, 52));
+    rect(x1 - 4, y1 - 6, x2 + 4, y1 - 5, CA(255, 255, 255, 0x40));
+    for (k = 0; k < 8; k++) {                                            /* fundo em degrade: azul (jogador 1) / vermelho (jogador 2) */
+        float ya = y1 + S * k / 8.0f, yb = y1 + S * (k + 1) / 8.0f;
+        rect(x1, ya, x2, yb, pl ? COL(150 - k * 9, 56 - k * 3, 62 - k * 3) : COL(46 - k * 3, 96 - k * 5, 170 - k * 9));
+    }
+    discN(cx, y1 + 56.0f, 52.0f, CA(255, 255, 255, 0x12), 20);
+    drawChar(id, cx, y1 + 66.0f + bob, 1.3f, mood, t, 0);
+    if (dim) rect(x1, y1, x2, y2, CA(0, 0, 24, 0x58));                   /* quem perdeu fica mais escuro */
+    frameR(x1, y1, x2, y2, 1.0f, CA(0, 0, 0, 0x60));
+    vsStar(x1 + 2.0f, y1 + 2.0f, 17.0f, CHAR_RAR[id] + 1);              /* estrela no canto */
+}
+
 static void drawOverScreen(void)
 {
-    int w = winner, l = 1 - winner, k;
+    int w = winner, l = 1 - winner, k, pl;
     int youLost = (mode == 0 && w == 1);                 /* contra o bot e o bot venceu */
-    float tt = (float)overT, ent = tt < 36.0f ? tt / 36.0f : 1.0f;
-    float sc = 1.2f, base = 222.0f;
-    float wx = w == 0 ? 150.0f : 490.0f, lx = w == 0 ? 490.0f : 150.0f;
-    float up = (1.0f - ent) * 170.0f, jump = fabsf(sinf(tt * 0.115f)) * 20.0f * ent;
-    float ts;
-    char buf[64];
-    int gv = (charSel[w] == 16);                         /* coveiro venceu: animacao especial */
-    float bp = gv ? fminf(fmaxf((tt - 70.0f) / 330.0f, 0.0f), 1.0f) : 0.0f;
+    float tt = (float)overT, ent = tt < 30.0f ? tt / 30.0f : 1.0f, ty = 100.0f, S = 124.0f;
+    float cxs[2] = { 160.0f, 480.0f }, wx = cxs[w], jump = fabsf(sinf(tt * 0.11f)) * 7.0f * ent;
     int *ws = mode == 0 ? winsBot : winsVs;
     const char *hint = tourney ? "X: CONTINUAR" : "X: REVANCHE   START: MENU";
+    const char *tit = (tourney && tRound == 2 && w == 0) ? "CAMPEAO" : "VENCEDOR";
+    int gv = (charSel[w] == 16);                         /* coveiro venceu */
+    char buf[64];
 
-    /* fundo */
-    for (k = 0; k < 14; k++)
-        rect(0, k * 32.0f, 640, k * 32.0f + 32.0f, youLost ? COL(18 + k, 20 + k, 34 + k * 2) : COL(30 + k * 2, 14 + k, 70 + k * 3));
+    drawBackdropEx(0);                                   /* mesmo cenario do VS e dos menus */
     for (k = 0; k < 12; k += 2) {                        /* raios girando atras de quem venceu */
-        float a0 = tt * 0.012f + k * CPI / 6.0f, a1 = a0 + CPI / 6.0f, cyr = base + 30.0f;
-        tri(wx, cyr, wx + cosf(a0) * 380.0f, cyr + sinf(a0) * 380.0f, wx + cosf(a1) * 380.0f, cyr + sinf(a1) * 380.0f,
-            youLost ? CA(255, 120, 100, 0x12) : CA(255, 225, 100, 0x1c));
+        float a0 = tt * 0.012f + k * CPI / 6.0f, a1 = a0 + CPI / 6.0f, cyr = ty + 60.0f;
+        tri(wx, cyr, wx + cosf(a0) * 330.0f, cyr + sinf(a0) * 330.0f, wx + cosf(a1) * 330.0f, cyr + sinf(a1) * 330.0f,
+            youLost ? CA(255, 120, 100, 0x12) : CA(255, 225, 100, 0x1a));
     }
-
-    if (!youLost) {                                      /* fogos de artificio */
+    if (!youLost) {                                      /* fogos de artificio e confete */
         for (k = 0; k < 3; k++) {
             float cyc = fmodf(tt + k * 37.0f, 110.0f);
             int bi = (int)((tt + k * 37.0f) / 110.0f), q;
             float fx = 80.0f + fmodf(bi * 173.0f + k * 211.0f, 480.0f), fy = 60.0f + fmodf(bi * 89.0f + k * 53.0f, 110.0f);
             int al = 0x70 - (int)(cyc * 0.62f);
             for (q = 0; q < 14; q++) {
-                float a = q * 6.2831853f / 14.0f, r = cyc * 1.7f, g = cyc * cyc * 0.004f;
-                float px = fx + cosf(a) * r, py = fy + sinf(a) * r + g;
+                float a = q * 6.2831853f / 14.0f, r = cyc * 1.7f, g2 = cyc * cyc * 0.004f;
+                float px = fx + cosf(a) * r, py = fy + sinf(a) * r + g2;
                 int r8, g8, b8;
                 hue3(k * 0.3f + bi * 0.17f, &r8, &g8, &b8);
-                beam(fx + cosf(a) * (r - 9.0f), fy + sinf(a) * (r - 9.0f) + g * 0.8f, px, py, 1.6f, CA(r8, g8, b8, al));
+                beam(fx + cosf(a) * (r - 9.0f), fy + sinf(a) * (r - 9.0f) + g2 * 0.8f, px, py, 1.6f, CA(r8, g8, b8, al));
                 discN(px, py, 2.2f, CA(255, 255, 255, al), 6);
             }
         }
-        for (k = 0; k < 64; k++) {                       /* confete */
+        for (k = 0; k < 48; k++) {
             float px = fmodf(k * 61.0f + 14.0f * sinf(tt * 0.04f + k), 660.0f) - 10.0f;
             float py = fmodf(tt * (1.3f + (k % 5) * 0.45f) + k * 47.0f, 470.0f) - 14.0f;
             float a = tt * 0.15f + k, ux = cosf(a) * 4.0f, uy = sinf(a) * 4.0f, vx = -sinf(a) * 2.0f, vy = cosf(a) * 2.0f;
-            quad(px - ux - vx, py - uy - vy, px + ux - vx, py + uy - vy, px + ux + vx, py + uy + vy, px - ux + vx, py - uy + vy,
-                 hueCol(k * 0.071f, 0x78));
+            quad(px - ux - vx, py - uy - vy, px + ux - vx, py + uy - vy, px + ux + vx, py + uy + vy, px - ux + vx, py - uy + vy, hueCol(k * 0.071f, 0x78));
         }
     }
 
-    /* titulo e legendas */
-    if (youLost) strcpy(buf, "DERROTA");
-    else if (tourney && tRound == 2) strcpy(buf, "CAMPEAO!");
-    else if (mode == 0) strcpy(buf, "VITORIA!");
-    else sprintf(buf, "%s VENCEU!", pname(w));
-    ts = (mode == 1 ? 0.7f : 0.95f) + 0.03f * sinf(tt * 0.15f);
+    /* linha do modo, no topo */
+    if (tourney) sprintf(buf, "TORNEIO - %s", tRoundName(tRound));
+    else sprintf(buf, "%s - %s", mode == 0 ? "CONTRA O BOT" : "2 JOGADORES", GMN[gmode]);
+    textC(14.0f, 0.34f, COL(200, 210, 232), buf);
+
+    /* "VENCEDOR" em dourado em cima de quem ganhou */
     {
-        float tx = 320.0f - tw(ts, buf) * 0.5f, ty = 22.0f - (1.0f - ent) * 60.0f;
-        u64 gl = youLost ? CA(90, 20, 20, 0x50) : CA(150, 80, 0, 0x50);
-        text(tx - 2, ty - 2, ts, gl, buf); text(tx + 2, ty - 2, ts, gl, buf);
-        text(tx - 2, ty + 2, ts, gl, buf); text(tx + 2, ty + 3, ts, gl, buf);
-        text(tx, ty, ts, youLost ? COL(255,110,100) : COL(255,230,70), buf);
+        float ts = 0.95f + 0.03f * sinf(tt * 0.15f), tx = wx - tw(ts, tit) * 0.5f, tyy = 52.0f - (1.0f - ent) * 50.0f;
+        u64 gl = CA(150, 80, 0, 0x50);
+        text(tx - 2, tyy - 2, ts, gl, tit); text(tx + 2, tyy - 2, ts, gl, tit);
+        text(tx - 2, tyy + 2, ts, gl, tit); text(tx + 2, tyy + 3, ts, gl, tit);
+        text(tx, tyy, ts, COL(255, 215, 50), tit);
     }
+
+    for (pl = 0; pl < 2; pl++) {
+        float cx = cxs[pl], y2 = ty + S, ww;
+        int win = (pl == w);
+        const char *nm = pname(pl);
+        if (win) cham(cx - S * 0.5f - 10, ty - 10, cx + S * 0.5f + 10, y2 + 10, 9.0f, CA(255, 215, 60, 0x30 + (int)(0x20 * sinf(tt * 0.12f))));   /* brilho dourado */
+        vsPortrait(pl, cx, ty - (win ? jump : 0.0f), S, win ? 1 : 2, overT, !win, 0.0f);
+        vsStrip(cx, y2 + 14.0f, y2 + 38.0f, 190.0f);
+        ww = tw(0.55f, nm); if (ww > 150.0f) ww = 150.0f;
+        textFit(cx - ww * 0.5f, y2 + 18.0f, 0.55f, win ? COL(255, 235, 110) : COL(170, 178, 194), nm, 150.0f);
+        if ((mode == 1 || pl == 0) && shLastEarn > 0) {  /* moedas ganhas (na LOJA) */
+            vsStrip(cx, y2 + 42.0f, y2 + 66.0f, 190.0f);
+            sprintf(buf, "+%d", shLastEarn);
+            ww = tw(0.55f, buf) + 26.0f;
+            text(cx - ww * 0.5f, y2 + 46.0f, 0.55f, COL(255, 215, 70), buf);
+            vsCoin(cx - ww * 0.5f + tw(0.55f, buf) + 14.0f, y2 + 54.0f, 8.0f);
+        }
+    }
+    if (gv) { float lx = cxs[l]; text(lx - tw(0.3f, "DESCANSE EM PAZ") * 0.5f, ty + S + 70.0f, 0.3f, COL(190, 255, 190), "DESCANSE EM PAZ"); }
+
+    /* centro: VS dourado e o trofeu na caixinha escura */
+    cham(284, ty + S * 0.5f + 8, 356, ty + S * 0.5f + 80, 6.0f, COL(28, 30, 40));
+    cham(286, ty + S * 0.5f + 10, 354, ty + S * 0.5f + 78, 5.0f, COL(14, 16, 24));
+    drawTrophy(320.0f, ty + S * 0.5f + 44.0f + 2.0f * sinf(tt * 0.08f), 0.62f, overT);
+    {
+        float vsc = 1.9f;
+        text(320.0f - tw(vsc, "VS") * 0.5f + 2, ty + 40.0f - 13.0f * vsc + 4, vsc, CA(120, 60, 0, 0x70), "VS");
+        text(320.0f - tw(vsc, "VS") * 0.5f, ty + 40.0f - 13.0f * vsc, vsc, COL(255, 215, 40), "VS");
+    }
+
+    /* resultado, placar e dica (sem sobrepor: cada um na sua linha) */
     if (tourney) { if (youLost) sprintf(buf, "%s VENCEU... VOCE ESTA ELIMINADO!", tName[tOpp]); else sprintf(buf, "VOCE VENCEU %s!", tName[tOpp]); }
     else if (mode == 0) strcpy(buf, youLost ? "O BOT VENCEU... TENTE DE NOVO!" : "VOCE VENCEU O BOT!");
     else sprintf(buf, "PARABENS, %s!", pname(w));
-    textC(62, 0.4f, youLost ? COL(255,190,180) : COL(255,245,190), buf);
-    if (overNote[0]) textC(82, 0.32f, COL(255,150,130), overNote);
-
-    /* sombras no chao */
-    ell(wx, base + 108 * sc, 36 * sc * (1.0f - jump * 0.012f), 6 * sc, CA(0, 0, 0, 0x38));
-    ell(lx, base + 108 * sc, 36 * sc, 6 * sc, CA(0, 0, 0, 0x38));
-
-    /* quem perdeu: cabisbaixo, chorando, com nuvem de chuva */
-    drawChar(charSel[l], lx, base + 8.0f + up * 0.6f + sinf(tt * 0.35f) * 1.5f + (gv ? bp * 70.0f : 0.0f), sc, 2, overT, 1);
-    {
-        float cyl = 112.0f + 3.0f * sinf(tt * 0.05f);
-        for (k = 0; k < 5; k++) {
-            float ox = (k - 2) * 20.0f, oy = (k == 1 || k == 3) ? -8.0f : 0.0f;
-            discN(lx + ox, cyl + oy, 20.0f + (k == 2 ? 4.0f : 0.0f), COL(110, 116, 136), 12);
-        }
-        rect(lx - 46, cyl, lx + 46, cyl + 12, COL(110, 116, 136));
-        for (k = 0; k < 5; k++) discN(lx + (k - 2) * 20.0f, cyl + 12, 10.0f, COL(110, 116, 136), 8);
-        for (k = 0; k < 32; k++) {
-            float rx = lx - 46.0f + fmodf(k * 23.0f, 92.0f), ry = cyl + 24.0f + fmodf(tt * 4.5f + k * 31.0f, 220.0f);
-            line(rx, ry, rx - 2.0f, ry + 9.0f, CA(150, 190, 255, 0x78));
-        }
+    textC(318.0f, 0.4f, youLost ? COL(255,190,180) : COL(255,245,190), buf);
+    if (!tourney) {
+        sprintf(buf, "%s %d X %d %s", pname(0), ws[0], ws[1], pname(1));
+        textC(342.0f, 0.5f, COL(255,255,255), buf);
     }
-
-    /* quem venceu: pula, braços pro alto */
-    if (gv) {                                            /* COVEIRO: joga areia e enterra o adversario */
-        float g = base + 108.0f * sc, dir = lx > wx ? 1.0f : -1.0f, hh = bp * 190.0f * sc, rm = hh > 0.0f ? 1.0f : 0.0f;
-        float sx = wx + dir * 34.0f * sc, sy = base - 6.0f * sc + sinf(tt * 0.5f) * 8.0f;
-        int i, n = 36;
-        drawChar(charSel[w], wx, base - jump * 0.25f + up + sinf(tt * 0.5f) * 3.0f, sc, 1, overT, 1);
-        /* monte de terra crescendo sobre o perdedor */
-        for (i = 0; i < 60 && rm > 0.0f; i++) {
-            float f = (float)i / 60.0f, y1 = g - hh * f, y0 = g - hh * (f + 1.0f / 60.0f);
-            float hw = (34.0f + 40.0f * (1.0f - f * f)) * sc * (0.35f + 0.65f * bp + 0.0f);
-            u64 cc = (i & 3) == 0 ? COL(120, 84, 48) : COL(150, 108, 62);
-            rect(lx - hw, y0, lx + hw, y1 + 1.0f, cc);
-            rect(lx - hw, y0, lx - hw + 4.0f, y1 + 1.0f, COL(104, 72, 40));
-        }
-        if (rm > 0.0f) { discN(lx, g - hh, (34.0f * sc) * (0.35f + 0.65f * bp), COL(150, 108, 62), 14); }
-        for (i = 0; i < 12; i++) rect(lx - 70 * sc + i * 12.0f * sc, g - 2.0f - (i % 3) * 2.0f, lx - 62 * sc + i * 12.0f * sc, g + 2.0f, COL(130, 92, 54));
-        /* areia voando em arcos */
-        if (tt > 40.0f && bp < 1.0f) {
-            for (i = 0; i < n; i++) {
-                float p = fmodf(tt * 0.035f + (float)i / n, 1.0f);
-                float ex = lx + sinf(i * 2.3f) * 26.0f, ey = g - 40.0f - fmodf(i * 17.0f, 80.0f);
-                float px = sx + (ex - sx) * p, py = sy + (ey - sy) * p - sinf(p * 3.14159f) * 95.0f;
-                discN(px, py, 2.0f + (i % 3), (i & 1) ? COL(224, 188, 108) : COL(196, 158, 88), 6);
-            }
-            for (i = 0; i < 8; i++) {                    /* poeira no impacto */
-                float p = fmodf(tt * 0.05f + i * 0.125f, 1.0f);
-                discN(lx + sinf(i * 1.7f) * 40.0f, g - 20.0f - p * 40.0f, 3.0f + p * 7.0f, CA(200, 170, 110, (int)(0x50 * (1.0f - p))), 8);
-            }
-        }
-        /* cruz no tumulo quando termina */
-        if (bp >= 1.0f) {
-            float cy2 = g - hh - 4.0f, bob = sinf(tt * 0.1f) * 1.5f;
-            rect(lx - 3.0f * sc, cy2 - 46.0f * sc, lx + 3.0f * sc, cy2 + 4.0f, COL(110, 76, 40));
-            rect(lx - 16.0f * sc, cy2 - 34.0f * sc, lx + 16.0f * sc, cy2 - 28.0f * sc, COL(110, 76, 40));
-            for (i = 0; i < 3; i++) {                    /* fiapos verdes do alem */
-                float ph = fmodf(tt * 0.02f + i * 0.33f, 1.0f);
-                discN(lx + sinf(tt * 0.06f + i * 2.0f) * 14.0f, cy2 - 50.0f * sc - ph * 50.0f + bob, 4.0f * (1.0f - ph) + 1.0f, CA(150, 255, 170, (int)(0x70 * (1.0f - ph))), 8);
-            }
-            textC(150, 0.5f, COL(190, 255, 190), "DESCANSE EM PAZ");
-        }
-    } else
-    drawChar(charSel[w], wx, base - jump + up, sc, 1, overT, 1);
-
-    /* trofeu no centro com brilhos */
-    drawTrophy(320.0f, 206.0f + 4.0f * sinf(tt * 0.08f) + up * 0.5f, 1.0f, overT);
-    for (k = 0; k < 6; k++) {
-        float a = tt * 0.05f + k * 1.047f;
-        star4(320.0f + cosf(a) * 54.0f, 206.0f + sinf(a) * 46.0f, 3.0f + 2.0f * sinf(tt * 0.2f + k),
-              youLost ? CA(200, 210, 230, 0x50) : COL(255, 245, 170));
-    }
-
-    /* nomes, placar e dica */
-    sprintf(buf, "%s", pname(w));
-    text(wx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(255,235,110), buf);
-    sprintf(buf, "%s", pname(l));
-    text(lx - tw(0.4f, buf) * 0.5f, 358, 0.4f, COL(150,158,175), buf);
-    if (tourney) sprintf(buf, "TORNEIO - %s", tRoundName(tRound));
-    else sprintf(buf, "%s %d X %d %s", pname(0), ws[0], ws[1], pname(1));
-    textC(380, 0.5f, COL(255,255,255), buf);
-    if (shLastEarn > 0) {                                /* LOJA: moedas ganhas */
-        char eb[32];
-        sprintf(eb, "+%d MOEDAS", shLastEarn);
-        textC(388, 0.38f, COL(255,225,100), eb);
-    }
-    textC(410, 0.36f, ((overT / 25) & 1) ? COL(255,255,255) : COL(200,205,215), hint);
-
-    if (tt < 36.0f) rect(0, 0, 640, 448, CA(255, 255, 255, (int)(0x50 * (1.0f - ent))));   /* flash de entrada */
+    if (overNote[0]) textC(366.0f, 0.32f, COL(255,150,130), overNote);
+    textC(396.0f, 0.36f, ((overT / 25) & 1) ? COL(255,255,255) : COL(200,205,215), hint);
+    if (tt < 30.0f) rect(0, 0, 640, 448, CA(255, 255, 255, (int)(0x50 * (1.0f - ent))));   /* flash de entrada */
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
@@ -8452,43 +8446,10 @@ static void drawBats(void)
 }
 
 /* ---------- TELA DE VERSUS (no estilo do 8 Ball Pool: retratos em moldura, VS dourado, nome e premio embaixo) ---------- */
-static void vsCoin(float cx, float cy, float r)
-{
-    discN(cx, cy + 1.5f, r, COL(116, 74, 8), 14);
-    discN(cx, cy, r, COL(236, 184, 48), 14);
-    discN(cx, cy, r * 0.72f, COL(255, 214, 90), 12);
-    rect(cx - r * 0.12f, cy - r * 0.45f, cx + r * 0.12f, cy + r * 0.45f, COL(236, 184, 48));
-    discN(cx - r * 0.38f, cy - r * 0.38f, r * 0.17f, CA(255, 255, 255, 0x70), 6);
-}
-
-static void vsStar(float cx, float cy, float r, int n)       /* estrela com o numero (raridade do personagem) */
-{
-    int k;
-    char nb[4];
-    for (k = 0; k < 10; k++) {
-        float a0 = -CPI * 0.5f + k * CPI / 5.0f, a1 = a0 + CPI / 5.0f;
-        float r0 = (k & 1) ? r * 0.48f : r, r1 = (k & 1) ? r : r * 0.48f;
-        tri(cx, cy, cx + cosf(a0) * r0 + 1.5f, cy + sinf(a0) * r0 + 2.0f, cx + cosf(a1) * r1 + 1.5f, cy + sinf(a1) * r1 + 2.0f, COL(110, 84, 40));
-        tri(cx, cy, cx + cosf(a0) * r0, cy + sinf(a0) * r0, cx + cosf(a1) * r1, cy + sinf(a1) * r1, COL(222, 190, 120));
-    }
-    discN(cx, cy + 1.0f, r * 0.5f, COL(238, 212, 150), 10);
-    sprintf(nb, "%d", n);
-    text(cx - tw(0.4f, nb) * 0.5f, cy - 5.0f, 0.4f, COL(60, 44, 20), nb);
-}
-
-static void vsStrip(float cx, float y1, float y2, float w)   /* faixa escura que some nas pontas (atras do nome e do premio) */
-{
-    int k;
-    for (k = 0; k < 4; k++) {
-        float in = k * w * 0.06f;
-        rect(cx - w * 0.5f + in, y1, cx + w * 0.5f - in, y2, CA(8, 10, 24, 0x1c));
-    }
-}
-
 static void drawVsScreen(void)
 {
     float tt = (float)vsT, p, e, ex, cxs[2], ty = 98.0f, S = 124.0f, tv = tt - 16.0f, ve, vsc, wv;
-    int k, pl, prize = prizeWin();
+    int pl, prize = prizeWin();
     char buf[64];
     const TableDef *T = &TABLES[(tourney && tTable >= 0) ? tTable : tableSel];
     static const int ks[1] = { 0 };
@@ -8511,24 +8472,10 @@ static void drawVsScreen(void)
     }
 
     for (pl = 0; pl < 2; pl++) {
-        float cx = cxs[pl], x1 = cx - S * 0.5f, x2 = cx + S * 0.5f, y1 = ty, y2 = ty + S;
-        int id = ((charSel[pl] % NCHARS) + NCHARS) % NCHARS;
+        float cx = cxs[pl], y2 = ty + S;
         const char *nm = pname(pl);
         float w;
-        /* moldura escura arredondada com um brilho, como no 8 Ball Pool */
-        cham(x1 - 7, y1 - 7, x2 + 8, y2 + 9, 8.0f, CA(0, 0, 0, 0x40));
-        cham(x1 - 6, y1 - 6, x2 + 6, y2 + 6, 8.0f, COL(86, 90, 112));
-        cham(x1 - 4, y1 - 4, x2 + 4, y2 + 4, 7.0f, COL(34, 36, 52));
-        rect(x1 - 4, y1 - 6, x2 + 4, y1 - 5, CA(255, 255, 255, 0x40));
-        /* retrato: fundo em degrade (azul / vermelho) + rosto do personagem */
-        for (k = 0; k < 8; k++) {
-            float ya = y1 + S * k / 8.0f, yb = y1 + S * (k + 1) / 8.0f;
-            rect(x1, ya, x2, yb, pl ? COL(150 - k * 9, 56 - k * 3, 62 - k * 3) : COL(46 - k * 3, 96 - k * 5, 170 - k * 9));
-        }
-        discN(cx, y1 + 56.0f, 52.0f, CA(255, 255, 255, 0x12), 20);
-        drawChar(id, cx, y1 + 66.0f, 1.3f, 0, vsT, 0);
-        frameR(x1, y1, x2, y2, 1.0f, CA(0, 0, 0, 0x60));
-        vsStar(x1 + 2.0f, y1 + 2.0f, 17.0f, CHAR_RAR[id] + 1);          /* estrela no canto */
+        vsPortrait(pl, cx, ty, S, 0, vsT, 0, 0.0f);
         /* nome */
         vsStrip(cx, y2 + 14.0f, y2 + 38.0f, 190.0f);
         w = tw(0.55f, nm); if (w > 150.0f) w = 150.0f;
