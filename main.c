@@ -72,7 +72,7 @@ static int timeSel, turnT, turnCur = -1, turnReset = 1;   /* tempo por jogada (v
 static const int TIME_SEC[5] = { 0, 15, 20, 25, 30 };
 #define NTIMES 5
 static char overNote[48];                         /* motivo do fim de jogo */
-static int winsBot[2], winsVs[2], menuNote;   /* placar de vitorias (vs bot / versus play) */
+static int winsBot[2], winsVs[2], menuNote, training;   /* training: MODO TREINO (sozinho na mesa, sem adversario nem regras) */   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
 static char msg[64];
 static int msgTimer;
@@ -311,7 +311,6 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
 /* dificuldade do BOT: facil / medio / dificil */
 #define NLEVELS 5
 static int botLevel = 1, menuT;
-static int rplMode = 0;                                                /* REPLAY: 0 = so no fim da partida, 1 = toda jogada, 2 = desligado */
 static int sndOn = 1, musOn = 1, volLvl = 8, fxOn = 1, tipsOn = 1;   /* opcoes do menu de pausa */
 static int sfxMute;                                                    /* > 0 durante simulacoes (HACK): sem som */
 #define SFX(id, v) do { if (sndOn && !sfxMute) sfxPlay((id), (v)); } while (0)   /* efeito sonoro (opcao SOM) */
@@ -1378,6 +1377,9 @@ static void drawFall(int i)
 #define REP_SLOW 0.45f                                /* velocidade perto da cacapa (1.0 = normal) */
 typedef struct { float x[16], y[16], z[16], fX[16], fY[16], M[16][9]; unsigned char in[16], fT[16], fP[16]; } RepFrame;
 static RepFrame repBuf[REPN];
+#define REPK (REP_PRE + REP_POST + 2)
+static RepFrame repKeep[REPK];                        /* recorte da ULTIMA BOLA que caiu (fica guardado para o REPLAY do menu de pausa) */
+static int repKeepN, repKeepPot;                      /* repKeepN: quadros guardados (0 = nada para rever); repKeepPot: quadro do recorte em que a bola caiu */
 static int repFrame, repPotF = -1, repPotBall, repA, repB, repT, repHold, repSfx, repRet, repSaveMsgT;
 static float repPos;
 static Ball repSaveB[16];
@@ -1418,7 +1420,7 @@ static void repRecord(void)                           /* chamada 1x por quadro e
 
 static void repApply(int fi)
 {
-    RepFrame *f = &repBuf[fi % REPN];
+    RepFrame *f = &repKeep[fi];
     int i;
     for (i = 0; i < 16; i++) {
         b[i].x = f->x[i]; b[i].y = f->y[i]; b[i].z = f->z[i]; b[i].in = f->in[i]; b[i].vx = b[i].vy = 0.0f; b[i].vz = 0.0f;
@@ -1428,22 +1430,17 @@ static void repApply(int fi)
 }
 
 static void repLaunch(int ret);
-static void repMaybeStart(void)                       /* chamar logo depois de resolve(): fim de partida ou (opcao) toda jogada */
+static void repMaybeStart(void)                       /* chamar logo depois de resolve(): guarda a ultima bola que caiu; no fim da partida ja mostra o replay */
 {
-    int lo, over = (state == S_OVER);
-    if (repFrame < 2 || rplMode == 2) return;            /* sem quadros gravados ou replay desligado */
-    if (!over && (rplMode != 1 || (state != S_AIM && state != S_PLACE))) return;
+    int i, a, bb, lo, over = (state == S_OVER);
+    if (repFrame < 2 || repPotF < 0) return;             /* sem quadros gravados ou nenhuma bola caiu nesta tacada (o replay anterior continua guardado) */
     lo = repFrame - REPN; if (lo < 0) lo = 0;
-    if (over) {                                          /* fim de partida: instantes ate a ultima bola cair */
-        if (repPotF < 0) return;
-        repB = repPotF + REP_POST; if (repB > repFrame - 1) repB = repFrame - 1;
-        repA = repPotF - REP_PRE;  if (repA < lo) repA = lo;
-    } else {                                             /* toda jogada: a tacada inteira */
-        repA = lo; repB = repFrame - 1;
-    }
-    if (repB - repA < 20) return;
-    if (over) { repHave = 1; repCtxGet(&repCtx); }       /* guarda para rever na tela de configurar a partida */
-    repLaunch(state);
+    a = repPotF - REP_PRE;  if (a < lo) a = lo;
+    bb = repPotF + REP_POST; if (bb > repFrame - 1) bb = repFrame - 1;
+    if (bb - a < 20 || bb - a + 1 > REPK) return;
+    for (i = 0; i <= bb - a; i++) repKeep[i] = repBuf[(a + i) % REPN];
+    repKeepN = bb - a + 1; repKeepPot = repPotF - a;
+    if (over) { repHave = 1; repCtxGet(&repCtx); repLaunch(state); }   /* fim de partida: mostra na hora e guarda para rever na tela de configurar */
 }
 
 static void repLaunch(int ret)                        /* guarda o estado atual e comeca o replay (ret = estado para onde voltar) */
@@ -1452,6 +1449,7 @@ static void repLaunch(int ret)                        /* guarda o estado atual e
     memcpy(repSavePk, pocketed, sizeof pocketed); memcpy(repSaveFX, fallX, sizeof fallX); memcpy(repSaveFY, fallY, sizeof fallY);
     memcpy(repSaveM, ballM, sizeof ballM);
     repRet = ret; repSaveMsgT = msgTimer;
+    repA = 0; repB = repKeepN - 1;
     repPos = (float)repA; repT = 0; repHold = 0; repSfx = 0;
     msgTimer = 0;
     state = S_REPLAY;
@@ -1469,20 +1467,20 @@ static void repEnd(void)                              /* volta para o estado de 
 
 static void repWatchPrev(void)                        /* configurar partida: rever o replay da partida anterior */
 {
-    if (!repHave) return;
+    if (!repHave || repKeepN < 2) return;
     repCtxGet(&repCtxTmp); repCtxSet(&repCtx); repFromSetup = 1;
     repLaunch(S_SETUP);
 }
 
 static void repUpdate(int pressed)                    /* 1 passo do replay (estado S_REPLAY): repete ate apertar X */
 {
-    int fi, near, hasPot = (repPotF >= repA && repPotF <= repB);
+    int fi, near, hasPot = (repKeepPot >= repA && repKeepPot <= repB);
     repT++;
     if (repT > 12 && (pressed & (PAD_CROSS | PAD_START))) { repEnd(); return; }      /* X pula o replay */
     fi = (int)repPos; if (fi > repB) fi = repB;
     repApply(fi);
-    if (hasPot && !repSfx && fi >= repPotF) { repSfx = 1; SFX(SFX_POCKET, 90); }
-    near = hasPot && fi >= repPotF - 25 && fi <= repPotF + 25;
+    if (hasPot && !repSfx && fi >= repKeepPot) { repSfx = 1; SFX(SFX_POCKET, 90); }
+    near = hasPot && fi >= repKeepPot - 25 && fi <= repKeepPot + 25;
     if (fi >= repB) { if (++repHold > 30) { repPos = (float)repA; repHold = 0; repSfx = 0; } }   /* chegou no fim: recomeca */
     else repPos += near ? REP_SLOW : 1.0f;
 }
@@ -1638,6 +1636,7 @@ static void newGame(int m)
     raceCnt[0] = raceCnt[1] = 0;
     copSel = 0; copOpen = 0; copTgt = 0; lockBall = 0; lockOwner = 0; sirenT[0] = sirenT[1] = 0; ghostBall = 0; chSel = 0; chOpen = 0; cornBall = 0; cornOwner = 0; chiqOn = 0; chiqOwner = -1;
     turnReset = 1; turnCur = -1;
+    repKeepN = 0;                                        /* partida nova: nenhum replay guardado */
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
     autoAim();                                           /* ja comeca mirando numa bola sua (no meio), nao no angulo 0 */
@@ -2605,6 +2604,29 @@ static void ghostSettle(int g)
     }
 }
 
+/* MODO TREINO: sozinho na mesa, sem adversario, falta ou fim de partida. Bola encacapada sai da mesa; branca na cacapa volta como bola na mao;
+   mesa limpa = novas bolas. A vez nunca passa para outro jogador */
+static void resolveTrain(void)
+{
+    int i, left = 0, sc = pocketed[0];
+    endTurn(0, 1);                                       /* ownPocket = 1: a vez continua sua */
+    cur = 0; msgTimer = 0;
+    for (i = 1; i < 16; i++) if (b[i].in) left++;
+    if (left == 0) {                                     /* mesa limpa: arruma as bolas de novo (o replay guardado continua) */
+        int kn = repKeepN, kp = repKeepPot;
+        newGame(mode);
+        repKeepN = kn; repKeepPot = kp;
+        setmsg("MESA LIMPA! NOVA RODADA");
+        return;
+    }
+    if (sc) {                                            /* branca na cacapa: bola na mao */
+        b[0].in = 1; fallT[0] = 0; b[0].x = (gmode == GM_BR) ? TCX : HEADX; b[0].y = TCY;
+        b[0].vx = b[0].vy = 0; b[0].z = b[0].vz = 0; pocketed[0] = 0;
+        state = S_PLACE;
+        setmsg("BRANCA NA CACAPA - BOLA NA MAO");
+    }
+}
+
 static void resolve(void)
 {
     int i, foul, ownPocket = 0;
@@ -2630,6 +2652,7 @@ static void resolve(void)
         else if (cur != cornOwner) { cornBall = 0; setmsg("CORNETA ACABOU: BOLA LIBERADA"); }
     }
     ghostSettle(ghostBall); ghostBall = 0;            /* COVEIRO: a ressuscitada volta ao normal (so na proxima rodada ela tem fisica) */
+    if (training) { resolveTrain(); return; }
     if (gmode == GM_BR) { resolveBR(); return; }
 
     if (pocketed[8]) {
@@ -5246,6 +5269,15 @@ static void drawScoreBoard(void)
         text(320 - tw(0.34f, rn) * 0.5f, 27, 0.34f, COL(255,235,110), rn);
         return;
     }
+    if (training) {                                      /* treino: mostra quantas bolas faltam na mesa */
+        int i, n = 0;
+        for (i = 1; i < 16; i++) if (b[i].in) n++;
+        sprintf(buf, "%d", n);
+        text(320 - tw(0.26f, "TREINO") * 0.5f, 11, 0.26f, COL(255,215,70), "TREINO");
+        text(320 - tw(0.46f, buf) * 0.5f, 22, 0.46f, COL(255,235,110), buf);
+        text(320 - tw(0.22f, "BOLAS") * 0.5f, 38, 0.22f, COL(175,185,195), "BOLAS");
+        return;
+    }
     s = (w[0] > 9 || w[1] > 9) ? 0.36f : 0.46f;
     sprintf(buf, "%d", w[0] > 99 ? 99 : w[0]);
     text(320 - 8 - tw(s, buf), 10, s, COL(120,175,255), buf);
@@ -5270,7 +5302,7 @@ static void drawHUD(void)
 {
     float x;
     int pl;
-    for (pl = 0; pl < 2; pl++) drawPlayerPanel(pl);
+    for (pl = 0; pl < (training ? 1 : 2); pl++) drawPlayerPanel(pl);
     drawScoreBoard();
 
     drawPowerBar();
@@ -5293,7 +5325,7 @@ static void drawHUD(void)
         text(259.0f - tw(0.34f, ct) * 0.5f, 402, 0.34f, ((menuT / 10) & 1) ? COL(215,150,255) : COL(150,70,230), ct);
     } else {
         char vt[40];
-        sprintf(vt, "VEZ DE %s", pname(cur));
+        if (training) strcpy(vt, "TREINO LIVRE"); else sprintf(vt, "VEZ DE %s", pname(cur));
         text(259.0f - tw(0.34f, vt) * 0.5f, 402, 0.34f, COL(150,158,175), vt);
     }
 
@@ -6498,20 +6530,17 @@ static void drawTrophy(float cx, float cy, float s, int t)
 }
 
 
-/* icones do menu principal: 0 historia, 1 jogar, 2 torneio, 3 musica, 4 opcoes */
+/* icones do menu principal: 0 treino, 1 jogar, 2 torneio, 3 musica, 4 opcoes */
 static void menuIcon(int k, float cx, float cy, float s, int hot)
 {
     u64 gd = hot ? COL(255,215,70) : COL(160,168,182);
     int q;
     switch (k) {
-    case 0:
-        rect(cx - 15*s, cy - 11*s, cx - 1*s, cy + 11*s, hot ? COL(235,225,190) : COL(150,152,160));
-        rect(cx + 1*s, cy - 11*s, cx + 15*s, cy + 11*s, hot ? COL(235,225,190) : COL(150,152,160));
-        rect(cx - 1*s, cy - 12*s, cx + 1*s, cy + 12*s, COL(150,60,40));
-        for (q = 0; q < 3; q++) {
-            rect(cx - 12*s, cy - 6*s + q * 6*s, cx - 4*s, cy - 5*s + q * 6*s, COL(120,110,90));
-            rect(cx + 4*s, cy - 6*s + q * 6*s, cx + 12*s, cy - 5*s + q * 6*s, COL(120,110,90));
-        }
+    case 0:                                              /* treino: alvo */
+        discN(cx, cy, 14*s, hot ? COL(240,240,245) : COL(150,152,160), 22);
+        discN(cx, cy, 10.5f*s, hot ? COL(225,50,50) : COL(110,112,120), 20);
+        discN(cx, cy, 7*s, hot ? COL(240,240,245) : COL(150,152,160), 18);
+        discN(cx, cy, 3.5f*s, hot ? COL(225,50,50) : COL(110,112,120), 14);
         break;
     case 1: {
         float sc = 0.36f * s;
@@ -6705,6 +6734,7 @@ static void drawOverScreen(void)
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
 enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, SR_ABIL, SR_TAUTO, SR_RPL, NSR };
+#define SOLO (tourney || training)          /* so um jogador escolhe personagem (torneio e treino) */
 #define NSTEPS 4                          /* configurar partida em etapas: 0 partida, 1 personagens, 2 mesa e bolas, 3 bola branca e guia */
 static int setStep;
 static int oppSel, setSel;                 /* adversario: 0 = BOT, 1 = outro jogador */
@@ -6717,15 +6747,15 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
     int n = 0;
     switch (setStep) {
     case 0:
-        if (!tourney) v[n++] = SR_OPP;
-        if (oppSel == 0) v[n++] = SR_LVL;
+        if (!tourney && !training) v[n++] = SR_OPP;
+        if (oppSel == 0 && !training) v[n++] = SR_LVL;
         if (oppSel == 1 || tourney) { v[n++] = SR_TIME; v[n++] = SR_ABIL; }   /* tempo e habilidades: versus e torneio */
         v[n++] = SR_MODE;
         if (repHave) v[n++] = SR_RPL;                            /* so aparece quando ha replay da partida anterior */
         v[n++] = SR_NEXT;
         break;
     case 1:
-        v[n++] = SR_CH0; if (!tourney) v[n++] = SR_CH1; v[n++] = SR_NEXT;
+        v[n++] = SR_CH0; if (!SOLO) v[n++] = SR_CH1; v[n++] = SR_NEXT;
         break;
     case 2:
         if (!tourney) { v[n++] = SR_TABLE; v[n++] = SR_TAUTO; }      /* torneio: a mesa muda a cada partida */
@@ -6869,12 +6899,12 @@ static int csStage, csReady[2], csPos, csInit;        /* csStage: 0 jogador 1 es
 static const u8 CSC[2][3] = { {255,215,60}, {90,220,255} };   /* cor de cada jogador: dourado e ciano */
 
 static int csSlot(int pl) { csOrdInit(); return charRand[pl] ? CS_RND : csInv[charSel[pl]]; }
-static int csChooser(void) { return csStage < 2 ? csStage : (tourney ? 0 : 1); }
+static int csChooser(void) { return csStage < 2 ? csStage : (SOLO ? 0 : 1); }
 static int csTaken(int pl, int slot)                  /* o outro jogador ja travou este personagem? */
 {
     int o = 1 - pl;
     csOrdInit();
-    return !tourney && slot < NCHARS && csReady[o] && !charRand[o] && charSel[o] == csOrd[slot];
+    return !SOLO && slot < NCHARS && csReady[o] && !charRand[o] && charSel[o] == csOrd[slot];
 }
 static void csEnsure(void)
 {
@@ -6895,7 +6925,7 @@ static void csApply(int pl)                           /* aplica a casa do cursor
     if (csPos == CS_RND) charRand[pl] = 1;
     else if (!csTaken(pl, csPos)) { csOrdInit(); charRand[pl] = 0; charSel[pl] = csOrd[csPos]; }
     if (pl == 0 && !charRand[0] && (charSel[0] == 16 || charSel[0] == 17)) tableAuto = 1;      /* COVEIRO: usa a mesa Cemiterio */
-    if (pl == 0 && !tourney && !charRand[0] && !charRand[1] && charSel[0] == charSel[1]) {     /* o 2o jogador ainda nao escolheu: sai da frente */
+    if (pl == 0 && !SOLO && !charRand[0] && !charRand[1] && charSel[0] == charSel[1]) {     /* o 2o jogador ainda nao escolheu: sai da frente */
         int c = charSel[1];
         do { c = (c + 1) % NCHARS; } while (c == charSel[0]);
         charSel[1] = c;
@@ -6910,7 +6940,7 @@ static void csInput(u32 pr)
     if (pr & (PAD_R1 | PAD_START)) { setStep = 2; setSel = 0; return; }
     if (pr & PAD_CIRCLE) {                                      /* O: destrava o ultimo jogador (no comeco, volta uma etapa) */
         if (csStage == 0) { setStep = 0; setSel = 0; return; }
-        csStage = (csStage == 2) ? (tourney ? 0 : 1) : 0;
+        csStage = (csStage == 2) ? (SOLO ? 0 : 1) : 0;
         csReady[csStage] = 0; csPos = csSlot(csStage);
         return;
     }
@@ -6920,7 +6950,7 @@ static void csInput(u32 pr)
         if (csTaken(pl, csPos)) return;
         csApply(pl);
         csReady[pl] = 1;
-        if (pl == 0 && !tourney) { csStage = 1; csPos = csSlot(1); } else csStage = 2;
+        if (pl == 0 && !SOLO) { csStage = 1; csPos = csSlot(1); } else csStage = 2;
     }
 }
 
@@ -7048,7 +7078,7 @@ static void csTile(int slot, float x, float y)
     float pu = 0.5f + 0.5f * sinf(menuT * 0.2f);
     u64 bc;
     int rr = 96, rg = 104, rb = 122;                              /* cor da carta: a da raridade (ou cinza se vazia) */
-    for (i = 0; i < (tourney ? 1 : 2); i++) if (csReady[i] && slot == csSlot(i)) own = i;
+    for (i = 0; i < (SOLO ? 1 : 2); i++) if (csReady[i] && slot == csSlot(i)) own = i;
     col = isCur ? ch : own;
     if (isCur) { y -= 3.0f; }                                     /* a carta escolhida sobe um pouco */
     csOrdInit();
@@ -7149,7 +7179,7 @@ static void drawCharSelect(void)
                      CHAR_CUE[id] >= 0 ? CUES[CHAR_CUE[id]].name : "PADRAO", CHAR_TAB[id] >= 0 ? TABLES[CHAR_TAB[id]].name : "LIVRE");
         textFit(320.0f - 300.0f, 248.0f, 0.32f, (sl < CS_RND && !csTaken(ch, sl)) ? rarCol(CHAR_RAR[id]) : COL(255,150,130), buf, 600.0f);
     }
-    if (tourney) csPed(0, 320.0f);
+    if (SOLO) csPed(0, 320.0f);
     else {
         csPed(0, 170.0f); csPed(1, 470.0f);
         textC(318.0f, 0.9f, COL(255, 215 + (int)(30 * sinf(menuT * 0.07f)), 70), "VS");        /* VS entre os pedestais */
@@ -7168,7 +7198,7 @@ static void drawSetupScreen(void)
     const char *hint;
     char buf[40];
 
-    uiTitle(tourney ? "CONFIGURAR TORNEIO" : "CONFIGURAR PARTIDA");
+    uiTitle(tourney ? "CONFIGURAR TORNEIO" : (training ? "MODO TREINO" : "CONFIGURAR PARTIDA"));
     for (i = 0; i < NSTEPS; i++) {                        /* barra de etapas */
         float x1 = 52.0f + i * 136.0f, x2 = x1 + 128.0f;
         int cur = (i == setStep), done = (i < setStep);
@@ -7333,9 +7363,9 @@ static void drawSetupScreen(void)
     } else {                                              /* etapas 0 e 1: os dois personagens */
         float sc = setStep == 1 ? 1.35f : 0.85f, cy = setStep == 1 ? 327.0f : 354.0f, px0 = setStep == 1 ? 170.0f : 150.0f;
         for (i = 0; i < 2; i++) {
-            float px = tourney ? 320.0f : (i == 0 ? px0 : 640.0f - px0);
+            float px = SOLO ? 320.0f : (i == 0 ? px0 : 640.0f - px0);
             int hot;
-            if (tourney && i == 1) continue;                     /* torneio: os rivais sao sorteados */
+            if (SOLO && i == 1) continue;                        /* torneio: os rivais sao sorteados; treino: sem adversario */
             hot = (setStep == 1 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
             float bob = hot ? -4.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
             const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
@@ -7352,7 +7382,8 @@ static void drawSetupScreen(void)
                 text(px - tw(0.26f, kt) * 0.5f, 387, 0.26f, COL(150,220,255), kt);
             }
         }
-        if (setStep == 0 && !tourney) textC(340, 0.9f, COL(255,215,70), "VS");
+        if (setStep == 0 && !SOLO) textC(340, 0.9f, COL(255,215,70), "VS");
+        else if (setStep == 0 && training) textC(312, 0.4f, COL(255,215,70), "TREINO LIVRE: SEM ADVERSARIO");
         else if (setStep == 0) textC(312, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
     }
     {
@@ -7407,7 +7438,7 @@ static void drawNameScreen(void)
 }
 
 /* ---------- OPCOES (som, musica, volume, efeitos, dicas, creditos) ---------- */
-enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_RPL, OP_CRED, NOP };
+enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_CRED, NOP };
 static int optSel;
 
 static void optInput(u32 pr)
@@ -7422,7 +7453,6 @@ static void optInput(u32 pr)
     case OP_VOL:  if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case OP_FX:   if (tog) fxOn = !fxOn; break;
     case OP_TIPS: if (tog) tipsOn = !tipsOn; break;
-    case OP_RPL:  if (tog) rplMode = (rplMode + (d < 0 ? 2 : 1)) % 3; break;
     case OP_CRED: if (pr & PAD_CROSS) state = S_CREDITS; break;
     }
 }
@@ -7442,11 +7472,11 @@ static void selBar(float x1, float x2, float y, float h)
 
 static void drawOptionsScreen(void)
 {
-    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "REPLAY", "CREDITOS" };
+    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CREDITOS" };
     static const char *DS[NOP] = { "EFEITOS SONOROS DA MESA, DOS MENUS E DA VITORIA", "LIGA E DESLIGA AS MUSICAS DO PEN DRIVE",
                                    "VOLUME DAS MUSICAS (OS EFEITOS NAO MUDAM)", "ANIMACOES DAS MESAS E BRILHO DA MIRA",
-                                   "BARRA DE TECLAS E DICAS NA MIRA", "REPLAY: SO NO FIM, EM TODA JOGADA OU DESLIGADO", "CRIADOR E VERSAO DO JOGO" };
-    static const float OY0[NOP] = { 74, 102, 130, 182, 207, 232, 278 };
+                                   "BARRA DE TECLAS E DICAS NA MIRA", "CRIADOR E VERSAO DO JOGO" };
+    static const float OY0[NOP] = { 74, 102, 130, 182, 207, 278 };
     static const int fk[4] = { 6, 7, 0, 1 };
     static const char *const fl[4] = { "ESCOLHER", "MUDAR", "OK", "VOLTAR" };
     char buf[32];
@@ -7467,10 +7497,6 @@ static void drawOptionsScreen(void)
         case OP_MUS:  uiToggle(544, y, musOn, "LIGADA", "DESLIGADA"); break;
         case OP_FX:   uiToggle(544, y, fxOn, "LIGADOS", "DESLIGADOS"); break;
         case OP_TIPS: uiToggle(544, y, tipsOn, "LIGADAS", "DESLIGADAS"); break;
-        case OP_RPL: {
-            static const char *const RN[3] = { "< SO NO FIM >", "< TODA JOGADA >", "< DESLIGADO >" };
-            text(544 - tw(0.34f, RN[rplMode]), y + 3, 0.34f, COL(255,255,255), RN[rplMode]);
-            break; }
         case OP_VOL: {
             int q;
             for (q = 0; q < 10; q++) {
@@ -7951,14 +7977,14 @@ static void drawMenuTop(void)                                        /* barra do
 static void drawMenuCard(int it, float x, float y, float w, float h, int sel)
 {
     static const unsigned char CARD_C[6][6] = {        /* cor do topo (r,g,b) e da base (r,g,b) de cada item */
-        {74, 104, 200, 40, 62, 142},                   /* 0 modo historia: azul */
+        {74, 104, 200, 40, 62, 142},                   /* 0 modo treino: azul */
         {92, 206, 60, 40, 140, 34},                    /* 1 jogar: verde */
         {150, 84, 226, 84, 44, 160},                   /* 2 torneio: roxo */
         {40, 196, 196, 18, 120, 134},                  /* 3 player: azul-petroleo */
         {255, 176, 40, 222, 108, 12},                  /* 4 loja: laranja */
         {112, 126, 150, 62, 72, 94} };                 /* 5 opcoes: cinza-azulado */
     static const char *L1[6] = { "MODO", "JOGAR", "JOGAR", "PLAYER", "LOJA", "OPCOES" };
-    static const char *L2[6] = { "HISTORIA", "PARTIDA", "TORNEIO", "DE MUSICAS", "DE ITENS", "E CREDITOS" };
+    static const char *L2[6] = { "TREINO", "PARTIDA", "TORNEIO", "DE MUSICAS", "DE ITENS", "E CREDITOS" };
     const unsigned char *c = CARD_C[it];
     float pul = 0.5f + 0.5f * sinf(menuT * 0.12f), cx = x + w * 0.5f, y1;
     int k, nb = 6;
@@ -7973,22 +7999,17 @@ static void drawMenuCard(int it, float x, float y, float w, float h, int sel)
     }
     rect(x + 3, y + 3, x + w - 3, y + 3 + h * 0.22f, CA(255, 255, 255, 0x16));                   /* brilho no topo */
     frameR(x + 7, y + 7, x + w - 7, y + h - 7, 1.0f, CA(255, 255, 255, 0x30));                   /* moldura interna */
-    menuIcon(it, cx, y + h * 0.32f, sel ? 1.5f : 1.3f, it != 0);
+    menuIcon(it, cx, y + h * 0.32f, sel ? 1.5f : 1.3f, 1);
     y1 = y + h * 0.58f;
     textCF(cx + 1.5f, y1 + 2.0f, 0.46f, CA(0, 0, 0, 0x70), L1[it], w - 14.0f);
     textCF(cx, y1, 0.46f, COL(255, 255, 255), L1[it], w - 14.0f);
     textCF(cx, y1 + 22.0f, 0.3f, COL(235, 245, 255), L2[it], w - 12.0f);
-    if (it == 0) {                                                                               /* bloqueado */
-        rect(x + 3, y + 3, x + w - 3, y + h - 3, CA(0, 0, 10, 0x30));
-        rect(x + 3, y + h - 18, x + w - 3, y + h - 4, CA(0, 0, 0, 0x78));
-        textCF(cx, y + h - 16, 0.26f, COL(255, 215, 70), "EM BREVE", w - 8.0f);
-    }
 }
 
 static void drawMenuScreen(void)
 {
-    static const char *ITEM[6] = { "MODO HISTORIA", "JOGAR", "TORNEIO", "PLAYER DE MUSICAS", "LOJA", "OPCOES" };
-    static const char *DESC[6] = { "A HISTORIA DO JOGO CHEGA EM BREVE",
+    static const char *ITEM[6] = { "MODO TREINO", "JOGAR", "TORNEIO", "PLAYER DE MUSICAS", "LOJA", "OPCOES" };
+    static const char *DESC[6] = { "JOGUE SOZINHO NA MESA, SEM ADVERSARIO, TEMPO OU FALTAS",
                                    "BOLA 8, BRASILEIRA, MINI, SUBITA, CORRIDA E DUELO",
                                    "MATA-MATA COM 8 JOGADORES - SO TACO CLASSICO",
                                    "OUCA AS MUSICAS DO SEU PEN DRIVE",
@@ -8075,7 +8096,6 @@ static void drawMenuScreen(void)
 
         panel(36, 292, 604, 352);
         textCF(320.0f, 298.0f, 0.46f, COL(255, 215 + (int)(30 * s1), 70), ITEM[menuSel], 540.0f);
-        if (menuNote > 0) { menuNote--; textCF(320.0f, 322.0f, 0.34f, COL(255, 230, 60), "MODO HISTORIA EM BREVE!", 540.0f); }
         else textCF(320.0f, 322.0f, 0.3f, COL(150, 220, 255), DESC[menuSel], 540.0f);
         mb[0] = 0;
         for (q = 0; q < 3; q++) {
@@ -8099,7 +8119,7 @@ static void drawMenuScreen(void)
 
 /* ---------- pausa (START) ---------- */
 static int paused, pauseSel, pauseView;          /* pauseView: 0 = lista, 1 = controles e dicas */
-enum { PI_RESUME, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_WB0, PI_GD0, PI_WB1, PI_GD1, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+enum { PI_RESUME, PI_REPLAY, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_WB0, PI_GD0, PI_WB1, PI_GD1, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
 
 /* linhas visiveis do menu de pausa: as cores do jogador 2 so aparecem no versus */
 static int pauseRows(int *v)
@@ -8162,6 +8182,7 @@ static void pauseInput(u32 pr)
     case PI_FX:      if (tog) fxOn = !fxOn; break;
     case PI_TIPS:    if (tog) tipsOn = !tipsOn; break;
     case PI_RESUME:  if (pr & PAD_CROSS) paused = 0; break;
+    case PI_REPLAY:  if ((pr & PAD_CROSS) && repKeepN > 1) { paused = 0; repLaunch(state); } break;   /* rever a ultima bola que caiu */
     case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
     case PI_CTRL:    if (pr & PAD_CROSS) pauseView = 1; break;
     case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; newGame(mode); } break;
@@ -8194,7 +8215,7 @@ static void uiFoot2(int n1, const int *k1, const char *const *l1, int n2, const 
 
 static void drawPause(void)
 {
-    static const char *LB[NPI] = { "CONTINUAR", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "", "", "", "",
+    static const char *LB[NPI] = { "CONTINUAR", "REPLAY", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "", "", "", "",
                                    "PLAYER DE MUSICAS", "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
     char buf[32];
     int i;
@@ -8314,7 +8335,9 @@ static void drawPause(void)
             }
         }
         row = pv[pauseSel];
-        if (row == PI_SND)
+        if (row == PI_REPLAY)
+            textC(404, 0.3f, repKeepN > 1 ? COL(150,220,255) : COL(255,190,120), repKeepN > 1 ? "X: REVER A ULTIMA BOLA QUE CAIU" : "AINDA NAO CAIU NENHUMA BOLA");
+        else if (row == PI_SND)
             textC(404, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
             textC(404, 0.3f, COL(150,220,255), musicStatus());
@@ -9079,9 +9102,9 @@ int main(int argc, char *argv[])
             if (pressed & (PAD_LEFT | PAD_UP))    menuSel = MENU_ORD[(menuSlot(menuSel) + 5) % 6];
             if (pressed & (PAD_RIGHT | PAD_DOWN)) menuSel = MENU_ORD[(menuSlot(menuSel) + 1) % 6];
             if (pressed & (PAD_CROSS | PAD_START)) {
-                if (menuSel == 0) menuNote = 120;                       /* modo historia: em breve */
-                else if (menuSel == 1) { tourney = 0; state = S_SETUP; setSel = 0; setStep = 0; }
-                else if (menuSel == 2) { tourney = 1; oppSel = 0; state = S_SETUP; setSel = 0; setStep = 0; }   /* torneio */
+                if (menuSel == 0) { training = 1; tourney = 0; oppSel = 0; state = S_SETUP; setSel = 0; setStep = 0; }   /* modo treino */
+                else if (menuSel == 1) { training = 0; tourney = 0; state = S_SETUP; setSel = 0; setStep = 0; }
+                else if (menuSel == 2) { training = 0; tourney = 1; oppSel = 0; state = S_SETUP; setSel = 0; setStep = 0; }   /* torneio */
                 else if (menuSel == 3) { state = S_PLAYER; plSel = musicCur() > 0 ? musicCur() : 0; }
                 else if (menuSel == 4) shopOpen();
                 else { state = S_OPTS; optSel = 0; }

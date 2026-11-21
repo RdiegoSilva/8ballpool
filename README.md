@@ -28,7 +28,22 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Os retratos dos jogadores ganham **moldura dourada** com pinos nos cantos (quem joga brilha mais)
 - O bloco central vira uma caixa dourada: o placar de vitórias em cima e, embaixo, uma **pilha de moedas com o prêmio** que o jogador ganha se vencer a partida (o mesmo valor que ele recebe no fim)
 
-## Replay da vitória (novo)
+## Modo Treino (novo)
+No menu inicial, **MODO TREINO** (primeiro cartão, no lugar do antigo Modo História) deixa você jogar **sozinho na mesa**, sem adversário, tempo ou fim de partida.
+- Configura igual ao JOGAR, só que sem adversário/dificuldade/tempo/habilidades do rival: **etapa 1** escolhe o modo de jogo (Bola 8, Brasileira, Mini...), **etapa 2** o seu personagem, **etapa 3** mesa e bolas e **etapa 4** bola branca e guia. Os tacos e poderes do personagem funcionam normalmente
+- A vez **nunca passa**: acertou ou errou, você joga de novo. Não existe falta nem derrota
+- Bola encaçapada sai da mesa. **Branca na caçapa** = bola na mão (você põe onde quiser)
+- Quando a mesa fica limpa, as bolas são arrumadas de novo ("MESA LIMPA! NOVA RODADA")
+- O centro do topo mostra **quantas bolas faltam** na mesa. Não dá moedas nem mexe no placar
+- Fica em `training` / `resolveTrain()` no `main.c`
+
+## Replay no menu de pausa (novo)
+- Em **START (pausa)** aparece a opção **REPLAY**: apertando **X** você vê de novo **a última bola que caiu** (câmera lenta perto da caçapa). **X ou START** volta para o jogo
+- O jogo guarda sozinho o replay da última tacada em que alguma bola caiu (`repKeep` no `main.c`); se a tacada seguinte não encaçapar nada, o replay anterior continua valendo. Antes de cair a primeira bola aparece "AINDA NAO CAIU NENHUMA BOLA"
+- A opção **REPLAY das Opções** (SÓ NO FIM / TODA JOGADA / DESLIGADO) foi **removida**: não há mais escolha de modo de replay
+- O replay automático ao fim da partida e o **VER REPLAY ANTERIOR** na tela de configurar continuam como antes
+
+## Replay da vitória
 Quando uma tacada termina a partida, o jogo **mostra de novo a última bola que caiu** antes da tela de fim (a bola 8 na vitória normal, ou a bola da falta/derrota): começa uns 2,5 segundos antes, passa em **câmera lenta** perto da caçapa e segue um pouco depois. Aparece a etiqueta **REPLAY** no canto da mesa e a dica **X: PULAR O REPLAY**; **X ou START** pula (vale para os dois jogadores, também quando o BOT vence).
 - Cada quadro da tacada é gravado num anel de 600 quadros (10 s) em `repBuf` no `main.c`; os números ficam em `REP_PRE` (quadros antes), `REP_POST` (depois), `REP_SLOW` (velocidade perto da caçapa) e `REPN`
 - Funciona em todos os modos (Bola 8, Sinuca Brasileira, torneio, 2 jogadores). Se ninguém encaçapou nada na última tacada (ex.: tempo esgotado), não há replay
@@ -42,7 +57,7 @@ Todos os menus (inicial, Configurar partida, Nome, Opções, Créditos e Chaveam
 - **Opções** em grupos (**AUDIO**, **VISUAL**, **SOBRE**): chaves liga/desliga, volume em barras e uma caixa com a descrição da opção selecionada
 
 ## Menu inicial (animado)
-- MODO HISTÓRIA (em breve), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS, **LOJA** e **OPÇÕES**
+- **MODO TREINO** (no lugar do Modo História), JOGAR, **TORNEIO**, PLAYER DE MÚSICAS, **LOJA** e **OPÇÕES**
 - **OPÇÕES**: Som, Música (liga/desliga), Volume da música, Efeitos da mesa, Dicas na tela e **CRÉDITOS** (criador e versão do jogo)
 - Cima/Baixo escolhe, X confirma
 - JOGAR abre a tela **Configurar partida**, agora em **4 etapas** (barra no topo): **1 Partida** (adversário, tempo ou dificuldade, modo), **2 Personagens**, **3 Mesa e bolas** e **4 Bola branca e guia**. Cima/Baixo escolhe, Esq/Dir muda, **X ou START em "PROXIMA ETAPA"** avança, **O** volta uma etapa (na primeira, volta ao menu) e **L1/R1** trocam de etapa. A última etapa (Bola branca e guia) tem **INICIAR PARTIDA**. Cada etapa mostra uma prévia (personagens com o taco e a mesa de cada um, mesa, bola branca e linha guia). Detalhes de cada opção:
@@ -272,7 +287,7 @@ A **linha guia** continua podendo ser trocada a qualquer momento: aperte **START
 - **HUD**: caixas com sombra, brilho no topo e base mais escura
 
 ## Pausa (START)
-Continuar, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
+Continuar, **REPLAY**, **Som**, **Música** (liga/desliga), **Volume da música**, **Cor da linha guia**, **Player de músicas**, **Efeitos** (animações das mesas e brilho da mira), **Dicas na tela** (barra de teclas e dicas da mira), Controles e dicas (agora com rola/puxa e pulo), Reiniciar partida e Menu principal.
 Obs.: a opção **Som** liga/desliga os efeitos sonoros (veja abaixo); a opção **Música** e o **Volume** só afetam as músicas.
 
 ## Efeitos sonoros (novo)
