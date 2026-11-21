@@ -982,8 +982,11 @@ static void textRaw(float x, float y, float s, u64 c, const char *t)
             if (ch <= ' ' || ch > 95) continue;
             gi = ch - 32; u = (gi % 16) * FT_CW; v = (gi / 16) * FT_CH;
             px = cx - ox + OX; py = y - oy + OY;
-            if (pass == 0) gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)(v + 96), px + qx, py + qy, (float)(u + FT_CW), (float)(v + 96 + FT_CH), 2, olc);
-            else           gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + FT_CW), (float)(v + FT_CH), 2, c);
+            if (pass == 0) {
+                gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)(v + 96), px + qx, py + qy, (float)(u + FT_CW), (float)(v + 96 + FT_CH), 2, olc);
+            } else {
+                gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + FT_CW), (float)(v + FT_CH), 2, c);
+            }
         }
     }
 }
