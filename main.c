@@ -4560,8 +4560,8 @@ static void glow(float x1, float y1, float x2, float y2, int a, int r, int gg, i
 static void glowFade(float x1, float y1, float x2, float y2, int a0, int a1, int r, int gg, int bb)
 {
     int k;
-    for (k = 0; k < 8; k++) {
-        float u0 = k / 8.0f, u1 = (k + 1) / 8.0f;
+    for (k = 0; k < 4; k++) {                      /* 4 trechos bastam (era 8): metade das vigas por frame */
+        float u0 = k / 4.0f, u1 = (k + 1) / 4.0f;
         glow(x1 + (x2-x1)*u0, y1 + (y2-y1)*u0, x1 + (x2-x1)*u1, y1 + (y2-y1)*u1,
              a0 + (int)((a1 - a0) * (u0 + u1) * 0.5f), r, gg, bb);
     }
@@ -4689,9 +4689,8 @@ static void drawGuide(void)
         float ex = gx - dx*R, ey = gy - dy*R;
 
         if ((ex - sx)*dx + (ey - sy)*dy > 0.5f) glow(sx, sy, ex, ey, al, gr, gg, gb);
-        discN(gx, gy, R, CA(gr, gg, gb, 0x12), 20);
-        ringN(gx, gy, R,        1.6f, 28, CA(gr, gg, gb, al));
-        ringN(gx, gy, R - 1.6f, 1.0f, 28, CA(gr, gg, gb, al / 2));
+        discN(gx, gy, R, CA(gr, gg, gb, 0x12), 12);
+        ringN(gx, gy, R,        1.8f, 16, CA(gr, gg, gb, al));    /* 1 anel de 16 lados (eram 2 de 28) */
 
         if (hit > 0 && !tipsOn) return;                  /* dicas desligadas: so a linha ate a bola */
         if (hit > 0) {
