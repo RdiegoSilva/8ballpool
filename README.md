@@ -10,6 +10,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Fica em `initFontTex()`, `textRaw()` e `legH()` no `main.c` (o atlas das letras e o `FNT4`). Minusculas saem em maiusculas
 - **Menus PAUSADO, PLAYER DE MUSICAS e CONTROLES** no visual novo dos outros menus: faixa de titulo, painel, barra de selecao, chaves liga/desliga, barra de volume e rodape com os botoes do controle (o player tem rodape de 2 linhas). Nada estoura mais a caixa: nome de musica comprido e texto de dica se ajustam sozinhos
 - A letra nova tem a **mesma largura** da fonte antiga e fica so um pouco mais alta nos textos pequenos, entao nenhum menu muda de tamanho (`legH()`)
+- **Chaves de teste** no `main.c`, logo antes da funcao `circ()`: `USE_NEW_FONT` (0 = fonte antiga) e `FAST_DISC` (0 = discos como antes). Servem para isolar a causa de algum problema no PS2 sem desfazer o resto
 - **Bolas** com a borda mais escura (da volume, sem desenhar nada a mais) e brilho em 3 camadas; o **feltro** tem um degrade de luz mais suave (14 faixas)
 - **Menos desenho por quadro** (o jogo so segura 60 FPS se o PS2 desenhar cada quadro em menos de 16,6 ms): `discN` agora usa so os segmentos que o olho ve (erro menor que 0,4 px) e discos de 1-2 px viram um quadradinho. A mesa **Pool Azul** (a padrao) usava ~8500 primitivas por quadro e agora usa ~5400 (-36%); no pior caso (Neon) caiu de ~6600 para ~6050. Nada muda no visual: so deixou de gastar triangulos que nao aparecem (ex.: os ~200 botoes do estofado da Pool Azul tinham 14 triangulos cada, com 1-2 px)
 

@@ -333,6 +333,14 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
 static void line(float x1, float y1, float x2, float y2, u64 c)
 { gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
 
+/* chaves para testar no PS2: ponha 0 para voltar ao comportamento antigo (ajuda a achar a causa de um travamento) */
+#ifndef USE_NEW_FONT
+#define USE_NEW_FONT 1      /* 0 = usa a fonte antiga do gsKit */
+#endif
+#ifndef FAST_DISC
+#define FAST_DISC 1         /* 0 = discos com todos os segmentos de antes (sem o corte para 60 FPS) */
+#endif
+
 /* tabela de cos/sin dos circulos (calculada uma vez por numero de lados): o EE nao tem seno/cosseno em hardware,
    e o jogo desenha milhares de segmentos por quadro. t[2*i] = cos, t[2*i+1] = sin, i de 0 a n */
 #define CIRC_MAX 64
@@ -356,12 +364,14 @@ static void discN(float cx, float cy, float r, u64 c, int n)
 {
     int i, cap = (int)(3.0f * sqrtf(fabsf(r)) + 3.0f);   /* 60 FPS: segmentos so ate onde o olho ve (erro < 0.4 px); discos de 1 px usavam 14 triangulos */
     const float *t;
+#if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
         gsKit_prim_sprite(g, cx+OX-r, cy+OY-r, cx+OX+r, cy+OY+r, 1, c);
         return;
     }
     if (cap < 4) cap = 4;
     if (n > cap) n = cap;
+#endif
     t = circ(n);
     for (i = 0; i < n; i++) {
         float c0, s0, c1, s1;
@@ -927,6 +937,9 @@ static void initFontTex(void)
 {
     static unsigned char al[FT_N][FT_CH][FT_CW];
     int gi, x, y, dx, dy;
+#if !USE_NEW_FONT
+    return;
+#endif
     for (gi = 0; gi < FT_N; gi++)
         for (y = 0; y < FT_CH; y++)
             for (x = 0; x < FT_CW; x++) {
@@ -4279,6 +4292,8 @@ static void previewFx(int style, float x0, float y0, float x1, float y1, float f
         case 9:                                              /* faroeste: bola de mato e poeira */
             if (i == 0) ring(x0 + fmodf(mt * 0.5f, w), y1 - 6.0f - fabsf(sinf(mt * 0.06f)) * 6.0f, 2.6f, CA(112, 76, 38, 0x90));
             if ((i & 3) == 0) { float dx2 = x0 + fmodf(mt * (0.6f + i * 0.05f) + i * 17.0f, w); line(dx2, y0 + h * 0.3f + i * 1.4f, dx2 + 5.0f, y0 + h * 0.3f + i * 1.4f, CA(240, 215, 165, 0x28)); }
+            break;
+        case 21:                                             /* pool azul: sem efeito animado (antes caia nas faixas de arco-iris) */
             break;
         default:                                             /* arco-iris: faixas */
             if (i < 6) rect(x0, y0 + h * i / 6.0f, x1, y0 + h * (i + 1) / 6.0f, hueCol(mt * 0.003f + i / 6.0f, 0x28));
