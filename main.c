@@ -294,7 +294,7 @@ static CueDef CUES[NCUES] = {
     { "VARINHA",    75, 95, 80, 80, {255,240,150}, { 80, 40,130}, { 40, 20, 76}, {255,214, 90}, {160, 90,230}, 15 },
     { "GATO",       70, 80, 70, 75, {255,150,190}, {255,184,210}, {120, 70,100}, {255,240,250}, {255,120,170}, 16 },
     /* COVEIRO (lendario): o taco e uma pa (lamina de aco, cabo de madeira e punho em T) com ectoplasma verde */
-    { "COVEIRO",    100, 90, 100, 100, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
+    { "PA",         100, 90, 60, 100, {150,255,170}, {128, 88, 50}, { 96, 64, 36}, {176,184,192}, { 60, 70, 64}, 17 },
     /* CASSETETE (Policial, lendario): azul-marinho com detalhe dourado e a sirene vermelha/azul piscando na ponta */
     { "CASSETETE",  95, 80, 90, 95, { 70,140,255}, { 26, 40, 92}, { 16, 22, 52}, {255,205, 50}, {220, 40, 52}, 18 },
 };
