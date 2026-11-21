@@ -6124,14 +6124,12 @@ static u64 rarCol(int r)
 static const int CHAR_RAR[NCHARS] = { 0, 0, 1, 1, 0, 0, 3, 3, 1, 2, 5, 2, 3, 3, 4, 2, 5, 4 };
 
 /* catalogo: ordem das fichas, por categoria (padrao, paises e depois os tacos de personagem por raridade) */
-#define NCAT_SEC 8
-static const int CATH[NCAT_SEC] = { 0, 8, 14, 18, 21, 25, 28, 30 };     /* 1a ficha de cada categoria */
-static const char *CATHN[NCAT_SEC] = { "PADRAO", "PAISES", "RARO", "SUPER RARO", "EPICO", "MISTICO", "LENDARIO", "ULTRA LENDARIO" };
-static u64 catHCol(int h) { return h == 0 ? COL(150,220,255) : (h == 1 ? COL(120,235,150) : rarCol(h - 2)); }
 static const int CAT[NCUES] = { 0, 1, 2, 3, 4, 5, 8, 9,   13, 19, 20, 21, 22, 23,   7, 12, 26, 27,   11, 10, 6,   16, 18, 25, 29,   14, 15, 28,   24, 31,   30, 17 };
 static int catPos(int c) { int i; for (i = 0; i < NCUES; i++) if (CAT[i] == c) return i; return 0; }
-static int catSec(int pos) { int h, r = 0; for (h = 0; h < NCAT_SEC; h++) if (CATH[h] <= pos) r = h; return r; }
-static int catStep(int d) { return CAT[(catPos(cueMenuSel) + d + NCUES) % NCUES]; }
+#define NCATT 5                                                       /* abas do catalogo: PADRAO | PAISES | RARO | EPICO | LENDARIO */
+static const int CATT_S[NCATT + 1] = { 0, 8, 14, 21, 28, 32 };      /* 1a ficha (posicao em CAT) de cada aba */
+static const char *CATT_N[NCATT] = { "PADRAO", "PAISES", "RARO", "EPICO", "LENDARIO" };
+static int catTab(int pos) { int t, r = 0; for (t = 0; t < NCATT; t++) if (CATT_S[t] <= pos) r = t; return r; }
 
 
 /* texto que encolhe para caber em maxw pixels (evita sair da caixa / encostar em outro texto) */
@@ -6142,10 +6140,13 @@ static void textFit(float x, float y, float sc, u64 c, const char *t, float maxw
     text(x, y, sc, c, t);
 }
 
+static void uiFoot(int n, const int *ks, const char *const *ls);
+
+/* CATALOGO DE TACOS (estilo 8 Ball Pool): abas em cima, um cartao por taco (nome, raridade, taco comprido, barras de atributos e botao USANDO/EQUIPAR)
+   e, embaixo, a habilidade do taco selecionado. Cima/Baixo escolhe, Esq/Dir ou L1/R1 troca de aba, X equipa, O/SELECT volta */
 static void drawCueMenu(void)
 {
-    static const char *SN[4] = { "FORCA", "EFEITO", "MIRA", "CONTROLE" };
-    static const u8 SC[4][3] = { {235,95,55}, {90,155,255}, {95,215,115}, {240,210,70} };
+    static const char *SN[4] = { "FORCA", "MIRA", "GIRO", "TEMPO" };
     static const char *AD[NAB][2] = {
         { "", "" },
         { "A BRANCA SAI COMO UMA BALA: +50% DE VELOCIDADE", "E SEM EFEITO. O TACO DISPARA COM UM CLARAO." },
@@ -6167,113 +6168,109 @@ static void drawCueMenu(void)
         { "NAO PERDE A VEZ: SE NAO ENCACAPAR, VOCE JOGA DE NOVO.", "PERDOA FALTA E SUICIDIO. SE ENCACAPAR, NAO GASTA." },
         { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" }, { "", "" } };
     const CueDef *cd = &CUES[cueMenuSel];
-    int val[4], k, ch = cueChar(cueMenuSel), ab = CUE_AB[cueMenuSel], tb = ch >= 0 ? CHAR_TAB[ch] : -1;
-    char buf[64];
-    float y;
+    int ab = CUE_AB[cueMenuSel], ch = cueChar(cueMenuSel), tb = ch >= 0 ? CHAR_TAB[ch] : -1;
+    int pos = catPos(cueMenuSel), tab = catTab(pos), n = CATT_S[tab + 1] - CATT_S[tab], idx = pos - CATT_S[tab];
+    int V = 4, top, i, t, k, q;
+    char buf[72];
+    float x0, maxw;
+    (void)cd;
 
-    val[0] = cd->force; val[1] = cd->effect; val[2] = cd->aim; val[3] = cd->ctl;
+    rect(0, 0, 640, 448, COL(30, 31, 42));
+    rect(0, 0, 640, 38, COL(40, 41, 56));
+    rect(0, 38, 640, 39, COL(70, 72, 92));
+    text(18, 14, 0.3f, COL(150, 160, 178), pname(cur));
+    text(320.0f - tw(0.62f, "TACOS") * 0.5f, 8, 0.62f, COL(255, 215, 70), "TACOS");
 
-    rect(0, 0, 640, 448, GS_SETREG_RGBAQ(0, 0, 0, 0x68, 0x00));
-    hbox(10, 8, 630, 436, CA(255, 215, 60, 0x7c), CA(8, 12, 24, 0x7c));
-    sprintf(buf, "CATALOGO DE TACOS - %s", pname(cur));
-    text(24, 14, 0.5f, COL(255,215,70), buf);
-    rect(22, 40, 616, 41, CA(255, 215, 60, 0x40));
+    for (t = 0; t < NCATT; t++) {                                     /* abas */
+        float x1 = 14.0f + t * 119.0f, x2 = x1 + 115.0f;
+        int on = (t == tab);
+        cham(x1, on ? 42.0f : 46.0f, x2, 70.0f, 4.0f, on ? COL(20, 21, 30) : COL(76, 78, 104));
+        if (on) rect(x1 + 10, 68, x2 - 10, 70, COL(255, 215, 70));
+        text((x1 + x2) * 0.5f - tw(0.36f, CATT_N[t]) * 0.5f, on ? 50.0f : 52.0f, 0.36f, on ? COL(255, 230, 110) : COL(225, 228, 240), CATT_N[t]);
+    }
+    rect(0, 70, 640, 71, COL(70, 72, 92));
 
-    /* lista (3 categorias, com rolagem) */
-    {
-        int tot = NCUES + NCAT_SEC, sel0 = catPos(cueMenuSel) + catSec(catPos(cueMenuSel)) + 1, hs = 0;
-        int vis = 20, top = sel0 - vis / 2, e, kk = 0;
-        if (top > tot - vis) top = tot - vis;
-        if (top < 0) top = 0;
-        y = 46.0f;
-        for (e = 0; e < tot; e++) {
-            int isH = (hs < NCAT_SEC && kk == CATH[hs]), hi = hs;
-            if (isH) hs++;
-            if (e < top || e >= top + vis) { if (!isH) kk++; continue; }
-            if (isH) {
-                text(24, y + 2, 0.3f, catHCol(hi), CATHN[hi]);
-                rect(24, y + 13, 206, y + 14, CA(150, 160, 180, 0x40));
-            } else {
-                int c = CAT[kk], sel = (c == cueMenuSel), cc = cueChar(c);
-                if (sel) rect(20, y - 2, 210, y + 16, CA(255, 215, 60, 0x30 + (int)(0x10 * sinf(menuT * 0.15f))));
-                if (c == cueSel[cur]) discN(30, y + 7, 3.4f, COL(110,230,130), 8);
-                text(40, y, 0.34f, sel ? COL(255,240,150) : COL(175,185,195), CUES[c].name);
-                if (cc >= 0) drawChar(cc, 196, y + 8, 0.2f, 0, menuT, 0);
-                kk++;
-            }
-            y += 18.0f;
+    top = idx - 1; if (top > n - V) top = n - V; if (top < 0) top = 0;
+    for (i = 0; i < V && top + i < n; i++) {                          /* um cartao por taco */
+        int c = CAT[CATT_S[tab] + top + i], sel = (c == cueMenuSel), eq = (c == cueSel[cur]), cc = cueChar(c);
+        const CueDef *d = &CUES[c];
+        int v4[4];
+        const char *rn;
+        u64 rc;
+        float y = 76.0f + i * 65.0f;
+        v4[0] = d->force; v4[1] = d->aim; v4[2] = d->effect; v4[3] = d->ctl;
+        if (sel) cham(12, y - 2, 608, y + 60, 5.0f, CA(255, 215, 60, 0xd0 + (int)(0x2f * sinf(menuT * 0.15f))));
+        cham(14, y, 606, y + 58, 4.0f, sel ? COL(88, 90, 124) : COL(66, 68, 92));
+        rect(16, y, 604, y + 1, CA(255, 255, 255, 0x1c));
+        textFit(24, y + 5, 0.46f, COL(255, 255, 255), d->name, 190.0f);
+        if (cc >= 0) { rn = RAR_NAME[CHAR_RAR[cc]]; rc = rarCol(CHAR_RAR[cc]); }
+        else if (c == 13 || (c >= 19 && c <= 23)) { rn = "PAIS"; rc = COL(120, 235, 150); }
+        else { rn = "PADRAO"; rc = COL(255, 215, 70); }
+        text(332.0f - tw(0.3f, rn), y + 8, 0.3f, rc, rn);
+        drawCue(34.0f, y + 38.0f, 0.0f, 0x80, 3.14159265f, c);
+        for (k = 0; k < 4; k++) {                                      /* barras: 10 gomos */
+            float yy = y + 6.0f + k * 12.0f;
+            text(346, yy, 0.26f, COL(235, 236, 246), SN[k]);
+            for (q = 0; q < 10; q++)
+                rect(396.0f + q * 8.0f, yy + 1, 396.0f + q * 8.0f + 7.0f, yy + 8, q < (v4[k] + 5) / 10 ? COL(225, 228, 245) : COL(52, 54, 72));
         }
-        if (top > 0) text(196, 40, 0.26f, COL(255,215,70), "^");
-        if (top < tot - vis) text(196, 410, 0.26f, COL(255,215,70), "v");
+        cham(494, y + 11, 596, y + 47, 5.0f, eq ? COL(100, 102, 146) : COL(58, 168, 80));
+        rect(498, y + 12, 592, y + 14, CA(255, 255, 255, 0x22));
+        {
+            const char *bl = eq ? "USANDO" : "EQUIPAR";
+            text(545.0f - tw(0.42f, bl) * 0.5f, y + 22, 0.42f, COL(255, 255, 255), bl);
+        }
+    }
+    if (n > V) {                                                      /* barra de rolagem */
+        float th = 256.0f * V / n, ty = 76.0f + (256.0f - th) * top / (n - V);
+        rect(612, 76, 618, 332, COL(46, 48, 64));
+        rect(612, ty, 618, ty + th, COL(120, 122, 170));
     }
 
-    /* foto do taco (palco com o feltro da mesa do personagem) */
-    {
-        const u8 *fe = tb >= 0 ? TABLES[tb].felt : TABLES[0].felt, *wo = tb >= 0 ? TABLES[tb].wood : TABLES[0].wood;
-        rect(226, 48, 616, 114, shade(wo, 0.9f, 0));
-        rect(228, 50, 614, 112, shade(fe, 1.0f, 0));
-        drawCue(252.0f, 82.0f, 0.0f, 0x80, 3.14159265f, cueMenuSel);
+    /* habilidade do taco selecionado */
+    hbox(14, 338, 606, 396, ab ? CA(255, 215, 60, 0x70) : CA(90, 96, 112, 0x60), CA(14, 18, 32, 0xa0));
+    x0 = 24.0f;
+    if (ch >= 0) { drawChar(ch, 44.0f, 372.0f, 0.4f, 0, menuT, 0); x0 = 74.0f; }
+    maxw = 596.0f - x0;
+    if (tb >= 0) {
+        sprintf(buf, "MESA: %s", TABLES[tb].name);
+        text(596.0f - tw(0.26f, buf), 343, 0.26f, COL(150, 220, 255), buf);
     }
-
-    text(228, 118, 0.6f, COL(255,255,255), cd->name);
-    if (ch >= 0 && CHAR_RAR[ch] == 5) sprintf(buf, "TACO ULTRA LENDARIO DO %s", CHAR_NAME[ch]); else if (ch >= 0 && CHAR_RAR[ch] == 4) sprintf(buf, "TACO LENDARIO DO %s", CHAR_NAME[ch]); else if (ch >= 0) sprintf(buf, "TACO DO %s", CHAR_NAME[ch]); else strcpy(buf, cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23) ? "TACO DE PAIS" : "TACO PADRAO");
-    text(228, 142, 0.32f, ch >= 0 ? COL(255,190,110) : (strcmp(buf, "TACO DE PAIS") == 0 ? COL(120,235,150) : COL(150,220,255)), buf);
-
-    for (k = 0; k < 4; k++) {
-        float yy = 164.0f + k * 22.0f;
-        text(228, yy, 0.34f, COL(210,210,220), SN[k]);
-        rect(330, yy + 2, 470, yy + 14, COL(40,42,52));
-        rect(330, yy + 2, 330 + 1.4f * val[k], yy + 14, COL(SC[k][0], SC[k][1], SC[k][2]));
-    }
-
-    if (ch >= 0) {                                              /* caricatura do personagem */
-        float bob = 3.0f * fabsf(sinf(menuT * 0.1f));
-        drawChar(ch, 566.0f, 196.0f - bob, 0.72f, 1, menuT, 1);
-        text(566.0f - tw(0.3f, CHAR_NAME[ch]) * 0.5f, 262.0f, 0.3f, COL(255,235,150), CHAR_NAME[ch]);
-        text(566.0f - tw(0.28f, RAR_NAME[CHAR_RAR[ch]]) * 0.5f, 275.0f, 0.28f, rarCol(CHAR_RAR[ch]), RAR_NAME[CHAR_RAR[ch]]);
-    }
-
-    /* habilidade */
-    hbox(226, 290, 616, 362, ab ? CA(255, 215, 60, 0x70) : CA(90, 96, 112, 0x60), CA(14, 18, 32, 0x70));
     if (ab) {
         sprintf(buf, "HABILIDADE: %s", AB_NAME[ab]);
-        textFit(236, 295, 0.42f, COL(255,215,70), buf, 345.0f);
-        if (ab == AB_COVEIRO) {                                  /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ENTERRO: CURVA UM POUCO A BOLA ALVO PARA A CACAPA A FRENTE", 375.0f);
-            textFit(236, 322, 0.25f, COL(215,220,232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", 375.0f);
-            textFit(236, 333, 0.25f, COL(215,220,232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", 375.0f);
-        } else if (ab == AB_MARRETA) {                           /* 3 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "CORNETA: PARALISA UMA BOLA DO ADVERSARIO POR 1 RODADA", 375.0f);
-            textFit(236, 322, 0.25f, COL(215,220,232), "CHIQUITOLINA: BOLAS DO ADVERSARIO MENORES, LENTAS E -25% DE FORCA", 375.0f);
-            textFit(236, 333, 0.25f, COL(215,220,232), "MARRETA BIONICA: BOLAS MAIS RAPIDAS E DEMORAM PARA PARAR", 375.0f);
-        } else if (ab == AB_POLICIAL) {                          /* 2 poderes, voce escolhe */
-            textFit(236, 311, 0.25f, COL(215,220,232), "ALGEMAS: PRENDE UMA BOLA DO ADVERSARIO POR 1 JOGADA. NADA A MOVE", 375.0f);
-            textFit(236, 322, 0.25f, COL(215,220,232), "SIRENE: O ADVERSARIO JOGA SEM LINHA GUIA NA PROXIMA JOGADA", 375.0f);
-            textFit(236, 333, 0.25f, COL(215,220,232), "QUADRADO TROCA A BOLA QUE VAI SER PRESA", 375.0f);
+        textFit(x0, 341, 0.38f, COL(255, 215, 70), buf, maxw - 150.0f);
+        if (ab == AB_COVEIRO) {
+            textFit(x0, 355, 0.25f, COL(215, 220, 232), "ENTERRO: CURVA UM POUCO A BOLA ALVO PARA A CACAPA A FRENTE", maxw);
+            textFit(x0, 365, 0.25f, COL(215, 220, 232), "COVA: CACAPA EXTRA NO MEIO DA MESA; A BOLA QUE CAI CONTA", maxw);
+            textFit(x0, 375, 0.25f, COL(215, 220, 232), "RESSUSCITAR: VOLTA A ULTIMA BOLA DO ADVERSARIO (FANTASMA)", maxw);
+        } else if (ab == AB_MARRETA) {
+            textFit(x0, 355, 0.25f, COL(215, 220, 232), "CORNETA: PARALISA UMA BOLA DO ADVERSARIO POR 1 RODADA", maxw);
+            textFit(x0, 365, 0.25f, COL(215, 220, 232), "CHIQUITOLINA: BOLAS DO ADVERSARIO MENORES, LENTAS E -25% DE FORCA", maxw);
+            textFit(x0, 375, 0.25f, COL(215, 220, 232), "MARRETA BIONICA: BOLAS MAIS RAPIDAS E DEMORAM PARA PARAR", maxw);
+        } else if (ab == AB_POLICIAL) {
+            textFit(x0, 355, 0.25f, COL(215, 220, 232), "ALGEMAS: PRENDE UMA BOLA DO ADVERSARIO POR 1 JOGADA. NADA A MOVE", maxw);
+            textFit(x0, 365, 0.25f, COL(215, 220, 232), "SIRENE: O ADVERSARIO JOGA SEM LINHA GUIA NA PROXIMA JOGADA", maxw);
+            textFit(x0, 375, 0.25f, COL(215, 220, 232), "QUADRADO TROCA A BOLA QUE VAI SER PRESA", maxw);
         } else {
-            textFit(236, 316, 0.28f, COL(215,220,232), AD[ab][0], 345.0f);
-            textFit(236, 329, 0.28f, COL(215,220,232), AD[ab][1], 345.0f);
+            textFit(x0, 357, 0.27f, COL(215, 220, 232), AD[ab][0], maxw);
+            textFit(x0, 369, 0.27f, COL(215, 220, 232), AD[ab][1], maxw);
         }
-        sprintf(buf, (ab == AB_COVEIRO || ab == AB_POLICIAL || ab == AB_MARRETA) ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
-        textFit(236, 344, 0.26f, COL(0,255,200), buf, 345.0f);
+        if (!abilOn) textFit(x0, 385, 0.25f, COL(255, 120, 110), "HABILIDADES DESLIGADAS NESTA PARTIDA", maxw);
+        else {
+            sprintf(buf, (ab == AB_COVEIRO || ab == AB_POLICIAL || ab == AB_MARRETA) ? "O NA MIRA ARMA E TROCA O PODER - RECARGA %d TACADAS" : "APERTE O NA MIRA - RECARREGA EM %d TACADAS", AB_COOL);
+            textFit(x0, 385, 0.25f, COL(0, 255, 200), buf, maxw);
+        }
     } else {
-        text(236, 303, 0.4f, COL(130,138,155), "SEM HABILIDADE ESPECIAL");
-        text(236, 328, 0.28f, COL(120,128,145), "TACO DE ATRIBUTOS (FORCA, EFEITO, MIRA, CONTROLE)");
+        text(x0, 341, 0.38f, COL(130, 138, 155), "SEM HABILIDADE ESPECIAL");
+        if (cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23)) text(x0, 358, 0.28f, COL(120, 235, 150), "TACO COM AS CORES DA BANDEIRA - SO ATRIBUTOS");
+        else text(x0, 358, 0.28f, COL(120, 128, 145), "TACO DE ATRIBUTOS (FORCA, MIRA, GIRO, TEMPO)");
+        if (tb < 0 && ch >= 0) text(x0, 372, 0.26f, COL(120, 128, 145), "MESA: LIVRE");
     }
-
-    /* mesa do personagem */
-    if (tb >= 0) {
-        rect(228, 372, 252, 386, shade(TABLES[tb].wood, 0.95f, 0));
-        rect(230, 374, 250, 384, shade(TABLES[tb].felt, 1.0f, 0));
-        sprintf(buf, "MESA DO PERSONAGEM: %s", TABLES[tb].name);
-        textFit(260, 373, 0.32f, COL(190,200,215), buf, 195.0f);
-    } else text(228, 373, 0.32f, COL(120,128,145), "MESA: LIVRE (ESCOLHA NA CONFIGURACAO)");
-    if (cueMenuSel == 13 || (cueMenuSel >= 19 && cueMenuSel <= 23)) text(228, 392, 0.3f, COL(120,235,150), "TACO COM AS CORES DA BANDEIRA - SO ATRIBUTOS");
-
-    if (ab && !abilOn) text(228, 392, 0.3f, COL(255,120,110), "HABILIDADES DESLIGADAS NESTA PARTIDA");
-    if (cueSel[cur] == cueMenuSel) text(616.0f - tw(0.4f, "EM USO"), 372, 0.4f, COL(110,230,130), "EM USO");
-    else text(616.0f - tw(0.4f, "X: EQUIPAR"), 372, 0.4f, COL(255,230,60), "X: EQUIPAR");
-    text(24, 418, 0.3f, COL(170,170,180), "CIMA/BAIXO: ESCOLHER   X: EQUIPAR   O/SELECT: VOLTAR");
+    {
+        static const int fk[4] = { 6, 7, 0, 1 };
+        static const char *const fl[4] = { "ESCOLHER", "ABA", "EQUIPAR", "VOLTAR" };
+        uiFoot(4, fk, fl);
+    }
 }
 
 /* ---------- menu inicial animado ---------- */
@@ -9234,8 +9231,13 @@ int main(int argc, char *argv[])
             break;
 
         case S_CUES:
-            if (pressed & (PAD_LEFT | PAD_UP))    cueMenuSel = catStep(-1);
-            if (pressed & (PAD_RIGHT | PAD_DOWN)) cueMenuSel = catStep(1);
+            {
+                int p = catPos(cueMenuSel), t = catTab(p);
+                if (pressed & PAD_UP)   cueMenuSel = CAT[p > CATT_S[t] ? p - 1 : CATT_S[t + 1] - 1];
+                if (pressed & PAD_DOWN) cueMenuSel = CAT[p < CATT_S[t + 1] - 1 ? p + 1 : CATT_S[t]];
+                if (pressed & (PAD_LEFT | PAD_L1))  cueMenuSel = CAT[CATT_S[(t + NCATT - 1) % NCATT]];
+                if (pressed & (PAD_RIGHT | PAD_R1)) cueMenuSel = CAT[CATT_S[(t + 1) % NCATT]];
+            }
             if (pressed & PAD_CROSS) {
                 char tb[48];
                 cueSel[cur] = cueMenuSel;

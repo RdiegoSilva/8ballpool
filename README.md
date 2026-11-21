@@ -215,7 +215,7 @@ Cada personagem tem o seu taco especial e a sua mesa (base para o modo história
 - No **versus** você escolhe na configuração se a partida é **com ou sem habilidades** (HABILIDADES: LIGADAS/DESLIGADAS). Desligadas, os tacos valem só pelos atributos
 
 ## Catálogo de tacos (SELECT na mira)
-Tela reorganizada: lista à esquerda (com rolagem) separada em **PADRÃO**, **PAÍSES** e **PERSONAGENS**; à direita, a foto do taco sobre o feltro da mesa do personagem, os atributos, a **caricatura do dono do taco**, a **habilidade** (com descrição e recarga) e a **mesa do personagem**. Cima/Baixo escolhe, X equipa, O ou SELECT volta.
+Tela no estilo do 8 Ball Pool: **abas** no topo (**PADRÃO**, **PAÍSES**, **RARO**, **ÉPICO**, **LENDÁRIO**), com um **cartão por taco**: nome, raridade, o taco comprido desenhado, barras de **FORÇA, MIRA, GIRO e TEMPO** (10 gomos) e o botão **USANDO** (taco equipado) ou **EQUIPAR**. Embaixo aparece a **habilidade** do taco selecionado (descrição, recarga, caricatura do dono e mesa do personagem). **Cima/Baixo** escolhe o taco, **Esq/Dir** ou **L1/R1** troca de aba, **X** equipa, **O** ou **SELECT** volta. Em `drawCueMenu()` no `main.c` (abas em `CATT_S` / `CATT_N`).
 
 ## Tacos de países
 Categoria própria no catálogo: tacos com as cores da bandeira (faixas que giram e brilhos), só de atributos, sem habilidade.
