@@ -72,7 +72,7 @@ static int timeSel, turnT, turnCur = -1, turnReset = 1;   /* tempo por jogada (v
 static const int TIME_SEC[5] = { 0, 15, 20, 25, 30 };
 #define NTIMES 5
 static char overNote[48];                         /* motivo do fim de jogo */
-static int winsBot[2], winsVs[2], menuNote, training;   /* training: MODO TREINO (sozinho na mesa, sem adversario nem regras) */   /* placar de vitorias (vs bot / versus play) */
+static int winsBot[2], winsVs[2], training;   /* training: MODO TREINO (sozinho na mesa, sem adversario nem regras) */   /* placar de vitorias (vs bot / versus play) */
 static float botAng, botPow;
 static char msg[64];
 static int msgTimer;
@@ -8096,7 +8096,7 @@ static void drawMenuScreen(void)
 
         panel(36, 292, 604, 352);
         textCF(320.0f, 298.0f, 0.46f, COL(255, 215 + (int)(30 * s1), 70), ITEM[menuSel], 540.0f);
-        else textCF(320.0f, 322.0f, 0.3f, COL(150, 220, 255), DESC[menuSel], 540.0f);
+        textCF(320.0f, 322.0f, 0.3f, COL(150, 220, 255), DESC[menuSel], 540.0f);
         mb[0] = 0;
         for (q = 0; q < 3; q++) {
             char one[40];
