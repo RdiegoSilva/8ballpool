@@ -1025,12 +1025,12 @@ static void drawDigit(int d, float x0, float y0, float p)
 
 static void drawNumber(int n, float cx, float cy, float r)
 {
-    disc(cx, cy, r * 0.56f, COL(250,250,245));
+    disc(cx, cy, r * 0.66f, COL(250,250,245));
     if (n < 10) {
-        float p = r * 0.145f;
+        float p = r * 0.21f;
         drawDigit(n, cx - 1.5f*p, cy - 2.5f*p, p);
     } else {
-        float p = r * 0.1f;
+        float p = r * 0.14f;
         drawDigit(n / 10, cx - 3.5f*p, cy - 2.5f*p, p);
         drawDigit(n % 10, cx + 0.5f*p,  cy - 2.5f*p, p);
     }
@@ -1113,12 +1113,12 @@ static int digitInk(int n, float gu, float gv)
 {
     float cs; int ix, iy;
     if (n < 10) {
-        cs = 0.30f;
+        cs = 0.32f;
         ix = (int)floorf((gu + 1.5f*cs) / cs); iy = (int)floorf((gv + 2.5f*cs) / cs);
         if (ix < 0 || ix > 2 || iy < 0 || iy > 4) return 0;
         return DIG[n][iy*3 + ix] == '1';
     }
-    cs = 0.20f;
+    cs = 0.21f;
     ix = (int)floorf((gu + 3.5f*cs) / cs); iy = (int)floorf((gv + 2.5f*cs) / cs);
     if (iy < 0 || iy > 4 || ix < 0 || ix > 6) return 0;
     if (ix < 3) return DIG[n / 10][iy*3 + ix] == '1';
@@ -1166,9 +1166,9 @@ static void renderSkin(int id, int ox, int oy)
                     float gu[4] = { x, -z, -x, z };
                     float gv = -y;
                     for (k = 0; k < 4; k++)
-                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < (skinNum[id] ? 0.2116f : 0.016f)) {
+                        if (d[k] > 0 && gu[k]*gu[k] + gv*gv < (skinNum[id] ? 0.4356f : 0.016f)) {
                             cr = cg = cb = 248;
-                            if (skinNum[id] && digitInk(id, gu[k] / 0.46f, gv / 0.46f)) cr = cg = cb = 20;
+                            if (skinNum[id] && digitInk(id, gu[k] / 0.66f, gv / 0.66f)) cr = cg = cb = 20;
                             break;
                         }
                 }
@@ -1177,8 +1177,8 @@ static void renderSkin(int id, int ox, int oy)
                     int k2;
                     for (k2 = 0; k2 < 4; k2++) {
                         float dd = (d2[k2] + d2[(k2 + 1) & 3]) * 0.70711f, uu = (gu2[k2] + gu2[(k2 + 1) & 3]) * 0.70711f;
-                        if (dd > 0.0f && uu * uu + gv2 * gv2 < 0.07f) {
-                            int sk = skullInk(uu / 0.26f, gv2 / 0.26f);
+                        if (dd > 0.0f && uu * uu + gv2 * gv2 < 0.045f) {
+                            int sk = skullInk(uu / 0.21f, gv2 / 0.21f);
                             if (sk == 1) cr = cg = cb = 245; else if (sk == 2) cr = cg = cb = 12;
                             break;
                         }
