@@ -55,6 +55,9 @@ No menu inicial, **MODO TREINO** (primeiro cartão, no lugar do antigo Modo Hist
 - O centro do topo mostra **quantas bolas faltam** na mesa. Não dá moedas nem mexe no placar
 - Fica em `training` / `resolveTrain()` no `main.c`
 
+## Replay da tacada inteira (novo)
+O replay agora mostra a **tacada inteira**, do toque do taco na branca até todas as bolas pararem, e não só o pedaço em volta da última bola que caiu. Perto da caçapa onde a última bola cai continua em câmera lenta. Vale para o replay do menu de pausa, o do fim da partida e o **VER REPLAY ANTERIOR**. A chave `REP_WHOLE` no `main.c` (1 = tacada inteira, 0 = só o trecho em volta da bola, como antes) controla isso. Se a tacada durar mais de 10 s (600 quadros, `REPN`), mostra os últimos 10 s.
+
 ## Replay no menu de pausa (novo)
 - Em **START (pausa)** aparece a opção **REPLAY**: apertando **X** você vê de novo **a última bola que caiu** (câmera lenta perto da caçapa). **X ou START** volta para o jogo
 - O jogo guarda sozinho o replay da última tacada em que alguma bola caiu (`repKeep` no `main.c`); se a tacada seguinte não encaçapar nada, o replay anterior continua valendo. Antes de cair a primeira bola aparece "AINDA NAO CAIU NENHUMA BOLA"

@@ -1423,13 +1423,18 @@ static void drawFall(int i)
    Cada quadro da tacada e gravado (anel dos ultimos REPN quadros). Se a tacada termina a partida, o jogo
    mostra de novo os instantes ate a ultima bola cair (camera lenta perto da cacapa). X ou START pula. */
 #define REPN 600                                      /* quadros guardados (10 s) */
-#define REP_PRE 150                                   /* quadros mostrados antes da bola cair (2,5 s) */
-#define REP_POST 70                                   /* quadros mostrados depois */
+#define REP_WHOLE 1                                   /* 1 = o replay mostra a tacada INTEIRA (do toque do taco ate as bolas pararem); 0 = so o trecho em volta da ultima bola que caiu */
+#define REP_PRE 150                                   /* (REP_WHOLE 0) quadros mostrados antes da bola cair (2,5 s) */
+#define REP_POST 70                                   /* (REP_WHOLE 0) quadros mostrados depois */
 #define REP_SLOW 0.45f                                /* velocidade perto da cacapa (1.0 = normal) */
 typedef struct { float x[16], y[16], z[16], fX[16], fY[16], M[16][9]; unsigned char in[16], fT[16], fP[16]; } RepFrame;
 static RepFrame repBuf[REPN];
+#if REP_WHOLE
+#define REPK REPN
+#else
 #define REPK (REP_PRE + REP_POST + 2)
-static RepFrame repKeep[REPK];                        /* recorte da ULTIMA BOLA que caiu (fica guardado para o REPLAY do menu de pausa) */
+#endif
+static RepFrame repKeep[REPK];                        /* tacada guardada (a ultima em que alguma bola caiu), usada no REPLAY do menu de pausa */
 static int repKeepN, repKeepPot;                      /* repKeepN: quadros guardados (0 = nada para rever); repKeepPot: quadro do recorte em que a bola caiu */
 static int repFrame, repPotF = -1, repPotBall, repA, repB, repT, repHold, repSfx, repRet, repSaveMsgT;
 static float repPos;
@@ -1486,8 +1491,13 @@ static void repMaybeStart(void)                       /* chamar logo depois de r
     int i, a, bb, lo, over = (state == S_OVER);
     if (repFrame < 2 || repPotF < 0) return;             /* sem quadros gravados ou nenhuma bola caiu nesta tacada (o replay anterior continua guardado) */
     lo = repFrame - REPN; if (lo < 0) lo = 0;
+#if REP_WHOLE
+    a = lo;                                              /* da primeira bola em movimento ate todas pararem */
+    bb = repFrame - 1;
+#else
     a = repPotF - REP_PRE;  if (a < lo) a = lo;
     bb = repPotF + REP_POST; if (bb > repFrame - 1) bb = repFrame - 1;
+#endif
     if (bb - a < 20 || bb - a + 1 > REPK) return;
     for (i = 0; i <= bb - a; i++) repKeep[i] = repBuf[(a + i) % REPN];
     repKeepN = bb - a + 1; repKeepPot = repPotF - a;
