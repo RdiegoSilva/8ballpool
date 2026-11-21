@@ -3,7 +3,13 @@
 Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 - Criador: Diego Reis
-- Versão: 3.1.2
+- Versão: 3.1.3
+
+## Tela de VS antes da partida (novo, 3.1.3)
+Antes de **toda partida** aparece a tela de **VERSUS** no estilo do 8 Ball Pool: o mesmo cenario dos menus (por do sol, cidade e mesa), os **dois personagens em retratos quadrados com moldura escura e uma estrela** (o numero e a raridade), **VS dourado** no meio, o **nome** embaixo de cada retrato e, embaixo do nome, o **premio em moedas** de quem ganhar. O nome da **mesa** fica no topo e uma miniatura dela na caixinha do centro.
+- Aparece em **JOGAR** (contra o BOT e 2 jogadores), em **TORNEIO** (toda partida, depois do chaveamento), na **revanche** e em **Reiniciar partida**. O **MODO TREINO** nao tem adversario, entao vai direto para a mesa
+- **X ou START** comeca na hora (depois de uma pausinha); se ninguem apertar, comeca sozinha em 5 segundos (barra no pe da tela)
+- Fica em `vsBegin()` (chamada nos pontos de inicio de partida) e `drawVsScreen()` no `main.c`; o tempo da tela e `VS_LEN`
 
 ## Texto legivel + 60 FPS (novo)
 - **Fonte nova** em todo o jogo: letras nitidas (antisserrilhadas) com **contorno escuro**, no lugar da fonte padrao do gsKit, que ficava borrada. Nos textos pequenos a letra ficou um pouco mais alta (de 0.5 para cima nao muda). Se faltar VRAM, o jogo volta sozinho para a fonte antiga

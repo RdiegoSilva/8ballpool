@@ -45,7 +45,7 @@
 #define OLD_FRIC_K 0.6f
 #define OLD_FRIC_C 24.0f
 
-enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP, S_REPLAY };
+enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP, S_REPLAY, S_VS };
 enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
 static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA", "BOLA 8 MINI", "MORTE SUBITA", "CORRIDA DE 3", "BOLA 8 DUELO" };
 
@@ -305,7 +305,7 @@ static const int CUE_AB[NCUES] = { [6] = AB_FOGO, [7] = AB_CONGELAR, [10] = AB_C
                                    [12] = AB_TIRO, [14] = AB_SUGAR, [15] = AB_CHAMINE, [16] = AB_HACK, [17] = AB_MARRETA, [18] = AB_TEMPO, [24] = AB_GRINCH, [25] = AB_MAREALTA,
                                    [26] = AB_RASTREIO, [27] = AB_IMA, [28] = AB_MALDICAO, [29] = AB_VIDAS, [30] = AB_COVEIRO, [31] = AB_POLICIAL };   /* OVNI-Alien, ROBO-Robo, VARINHA-Mago, GATO-Gato */
 
-#define GAME_VERSION "3.1.2"
+#define GAME_VERSION "3.1.3"
 #define GAME_AUTHOR  "DIEGO REIS"
 
 /* dificuldade do BOT: facil / medio / dificil */
@@ -1640,6 +1640,17 @@ static void newGame(int m)
     sprintf(buf, gmode == GM_BR ? "%s COMECA" : "%s - QUEBRA", pname(0));
     setmsg(buf);
     autoAim();                                           /* ja comeca mirando numa bola sua (no meio), nao no angulo 0 */
+}
+
+/* ---------- TELA DE VERSUS: aparece antes de toda partida (jogar, torneio, revanche, reiniciar) ---------- */
+#define VS_LEN 300                                    /* quadros ate a partida comecar sozinha (5 s); X ou START comeca na hora */
+static int vsT;
+
+static void vsBegin(int m)                            /* prepara a partida e mostra a tela de VS (o treino nao tem adversario: vai direto) */
+{
+    newGame(m);
+    if (training) return;
+    vsT = 0; state = S_VS;
 }
 
 /* BAGUNCA: sacode as bolas do adversario (cada uma ganha um empurrao em direcao aleatoria) */
@@ -6864,7 +6875,7 @@ static void tourneyPlay(void)                    /* comeca a partida da rodada a
     if (!tAbil) cueSel[0] = 0;
     cueSel[1] = 0;
     rs += 7919 + menuT;
-    newGame(0);
+    vsBegin(0);
 }
 
 static void tourneyAfter(void)                   /* chamado ao sair da tela de fim de partida */
@@ -6976,7 +6987,7 @@ static void startMatch(void)
     abilOn = (oppSel == 0) ? 1 : !abilSel;
     if (tableAuto && CHAR_TAB[charSel[0]] >= 0) tableSel = CHAR_TAB[charSel[0]];
     if (tourney) { tourneyBegin(); return; }
-    newGame(oppSel);
+    vsBegin(oppSel);
 }
 
 static void nameOpen(int who)              /* abre o teclado na tela para o nome de um jogador */
@@ -8186,7 +8197,7 @@ static void pauseInput(u32 pr)
     case PI_REPLAY:  if ((pr & PAD_CROSS) && repKeepN > 1) { paused = 0; repLaunch(state); } break;   /* rever a ultima bola que caiu */
     case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
     case PI_CTRL:    if (pr & PAD_CROSS) pauseView = 1; break;
-    case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; newGame(mode); } break;
+    case PI_RESTART: if (pr & PAD_CROSS) { paused = 0; rs += 7919 + menuT; vsBegin(mode); } break;
     case PI_MENU:    if (pr & PAD_CROSS) { paused = 0; tourney = 0; menuInit(); state = S_MENU; } break;
     }
 }
@@ -8440,6 +8451,116 @@ static void drawBats(void)
     }
 }
 
+/* ---------- TELA DE VERSUS (no estilo do 8 Ball Pool: retratos em moldura, VS dourado, nome e premio embaixo) ---------- */
+static void vsCoin(float cx, float cy, float r)
+{
+    discN(cx, cy + 1.5f, r, COL(116, 74, 8), 14);
+    discN(cx, cy, r, COL(236, 184, 48), 14);
+    discN(cx, cy, r * 0.72f, COL(255, 214, 90), 12);
+    rect(cx - r * 0.12f, cy - r * 0.45f, cx + r * 0.12f, cy + r * 0.45f, COL(236, 184, 48));
+    discN(cx - r * 0.38f, cy - r * 0.38f, r * 0.17f, CA(255, 255, 255, 0x70), 6);
+}
+
+static void vsStar(float cx, float cy, float r, int n)       /* estrela com o numero (raridade do personagem) */
+{
+    int k;
+    char nb[4];
+    for (k = 0; k < 10; k++) {
+        float a0 = -CPI * 0.5f + k * CPI / 5.0f, a1 = a0 + CPI / 5.0f;
+        float r0 = (k & 1) ? r * 0.48f : r, r1 = (k & 1) ? r : r * 0.48f;
+        tri(cx, cy, cx + cosf(a0) * r0 + 1.5f, cy + sinf(a0) * r0 + 2.0f, cx + cosf(a1) * r1 + 1.5f, cy + sinf(a1) * r1 + 2.0f, COL(110, 84, 40));
+        tri(cx, cy, cx + cosf(a0) * r0, cy + sinf(a0) * r0, cx + cosf(a1) * r1, cy + sinf(a1) * r1, COL(222, 190, 120));
+    }
+    discN(cx, cy + 1.0f, r * 0.5f, COL(238, 212, 150), 10);
+    sprintf(nb, "%d", n);
+    text(cx - tw(0.4f, nb) * 0.5f, cy - 5.0f, 0.4f, COL(60, 44, 20), nb);
+}
+
+static void vsStrip(float cx, float y1, float y2, float w)   /* faixa escura que some nas pontas (atras do nome e do premio) */
+{
+    int k;
+    for (k = 0; k < 4; k++) {
+        float in = k * w * 0.06f;
+        rect(cx - w * 0.5f + in, y1, cx + w * 0.5f - in, y2, CA(8, 10, 24, 0x1c));
+    }
+}
+
+static void drawVsScreen(void)
+{
+    float tt = (float)vsT, p, e, ex, cxs[2], ty = 98.0f, S = 124.0f, tv = tt - 16.0f, ve, vsc, wv;
+    int k, pl, prize = prizeWin();
+    char buf[64];
+    const TableDef *T = &TABLES[(tourney && tTable >= 0) ? tTable : tableSel];
+    static const int ks[1] = { 0 };
+    static const char *const ls[1] = { "COMECAR" };
+
+    drawBackdropEx(0);                                                   /* o mesmo cenario dos menus: por do sol, cidade e mesa */
+    p = tt / 24.0f; if (p > 1.0f) p = 1.0f; e = 1.0f - (1.0f - p) * (1.0f - p) * (1.0f - p);
+    ex = (1.0f - e) * 260.0f;
+    cxs[0] = 160.0f - ex; cxs[1] = 480.0f + ex;
+
+    /* titulo: mesa (e fase do torneio / modo) */
+    {
+        const char *tn = T->name;
+        float al = e;
+        if (tourney) sprintf(buf, "TORNEIO - %s", tRoundName(tRound)); else strcpy(buf, GMN[gmode]);
+        textC(12.0f, 0.34f, CA(255, 235, 150, (int)(0x80 * al)), buf);
+        textC(28.0f, 0.8f + 0.02f * sinf(tt * 0.1f), COL(255, 215, 70), tn);
+        sprintf(buf, mode == 0 ? "CONTRA O BOT - %s" : "2 JOGADORES", LVL_NAME[botLevel]);
+        textC(62.0f, 0.3f, COL(200, 210, 232), buf);
+    }
+
+    for (pl = 0; pl < 2; pl++) {
+        float cx = cxs[pl], x1 = cx - S * 0.5f, x2 = cx + S * 0.5f, y1 = ty, y2 = ty + S;
+        int id = ((charSel[pl] % NCHARS) + NCHARS) % NCHARS;
+        const char *nm = pname(pl);
+        float w;
+        /* moldura escura arredondada com um brilho, como no 8 Ball Pool */
+        cham(x1 - 7, y1 - 7, x2 + 8, y2 + 9, 8.0f, CA(0, 0, 0, 0x40));
+        cham(x1 - 6, y1 - 6, x2 + 6, y2 + 6, 8.0f, COL(86, 90, 112));
+        cham(x1 - 4, y1 - 4, x2 + 4, y2 + 4, 7.0f, COL(34, 36, 52));
+        rect(x1 - 4, y1 - 6, x2 + 4, y1 - 5, CA(255, 255, 255, 0x40));
+        /* retrato: fundo em degrade (azul / vermelho) + rosto do personagem */
+        for (k = 0; k < 8; k++) {
+            float ya = y1 + S * k / 8.0f, yb = y1 + S * (k + 1) / 8.0f;
+            rect(x1, ya, x2, yb, pl ? COL(150 - k * 9, 56 - k * 3, 62 - k * 3) : COL(46 - k * 3, 96 - k * 5, 170 - k * 9));
+        }
+        discN(cx, y1 + 56.0f, 52.0f, CA(255, 255, 255, 0x12), 20);
+        drawChar(id, cx, y1 + 66.0f, 1.3f, 0, vsT, 0);
+        frameR(x1, y1, x2, y2, 1.0f, CA(0, 0, 0, 0x60));
+        vsStar(x1 + 2.0f, y1 + 2.0f, 17.0f, CHAR_RAR[id] + 1);          /* estrela no canto */
+        /* nome */
+        vsStrip(cx, y2 + 14.0f, y2 + 38.0f, 190.0f);
+        w = tw(0.55f, nm); if (w > 150.0f) w = 150.0f;
+        textFit(cx - w * 0.5f, y2 + 18.0f, 0.55f, COL(255, 255, 255), nm, 150.0f);
+        /* premio de quem ganhar */
+        vsStrip(cx, y2 + 42.0f, y2 + 66.0f, 190.0f);
+        sprintf(buf, "%d", prize);
+        w = tw(0.55f, buf) + 26.0f;
+        text(cx - w * 0.5f, y2 + 46.0f, 0.55f, COL(255, 215, 70), buf);
+        vsCoin(cx - w * 0.5f + tw(0.55f, buf) + 14.0f, y2 + 54.0f, 8.0f);
+    }
+
+    /* centro: VS dourado e a mesa numa caixinha escura */
+    cham(284, ty + S * 0.5f + 8, 356, ty + S * 0.5f + 80, 6.0f, COL(28, 30, 40));
+    cham(286, ty + S * 0.5f + 10, 354, ty + S * 0.5f + 78, 5.0f, COL(14, 16, 24));
+    drawTablePreview(320.0f, ty + S * 0.5f + 44.0f, 74.0f, T);
+    if (tv >= 0.0f) {
+        ve = tv / 14.0f; if (ve > 1.0f) ve = 1.0f;
+        vsc = 1.9f + (1.0f - ve) * 2.0f;
+        wv = tw(vsc, "VS");
+        if (tv < 36.0f) ringN(320, ty + 40, 16.0f + tv * 5.0f, 3.0f, 24, CA(255, 230, 120, 0x60 - (int)(tv * 1.6f)));
+        text(320.0f - wv * 0.5f + 2, ty + 40.0f - 13.0f * vsc + 4, vsc, CA(120, 60, 0, 0x70), "VS");
+        text(320.0f - wv * 0.5f, ty + 40.0f - 13.0f * vsc, vsc, COL(255, 205 + (int)(30 * sinf(tt * 0.1f)), 40), "VS");
+        if (tv < 8.0f) rect(-OX, -OY, 640.0f + OX, 448.0f + OY, CA(255, 255, 255, (int)((8.0f - tv) * 7.0f)));
+    }
+
+    textC(362.0f, 0.34f, COL(215, 225, 245), "PREMIO PARA QUEM GANHAR");
+    rect(0, 419, 640, 423, CA(0, 0, 12, 0x58));
+    rect(0, 419, 640.0f * tt / (float)VS_LEN, 423, CA(255, 205, 60, 0x90));
+    uiFoot(1, ks, ls);
+}
+
 static void drawReplayTag(void)                       /* etiqueta REPLAY e dica para pular */
 {
     int blink = (menuT / 20) & 1;
@@ -8455,6 +8576,7 @@ static void drawScene(void)
     int i;
     if (state == S_MENU || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_BRACKET || state == S_SHOP) { drawMenuScreen(); return; }
     if (state == S_PLAYER) { drawBackdrop(); pauseView = 2; drawPause(); return; }
+    if (state == S_VS) { drawVsScreen(); return; }
     if (state == S_OVER) {
         drawOverScreen();
         if (musicToast()) {
@@ -8653,6 +8775,7 @@ static void drawScene(void)
 static int stCat(int st)
 {
     if (st == S_OVER) return 2;
+    if (st == S_VS) return 4;
     if (st == S_MENU || st == S_CREDITS || st == S_OPTS || st == S_SETUP || st == S_NAME || st == S_PLAYER || st == S_BRACKET || st == S_SHOP) return 1;
     return 3;
 }
@@ -9058,7 +9181,7 @@ int main(int argc, char *argv[])
         musicUpdate();
         p0 = readpad(0);
         p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) ? readpad(1) : 0;
-        if (state == S_MENU || state == S_OVER || state == S_REPLAY || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
+        if (state == S_MENU || state == S_OVER || state == S_VS || state == S_REPLAY || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
         else if (mode == 1) in = p0 | p1;
         else in = (cur == 0) ? p0 : 0;
         if (paused) in = p0 | p1;
@@ -9084,7 +9207,7 @@ int main(int argc, char *argv[])
         prev = in;
         {                                                 /* sons de menu */
             int ui = paused || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER ||
-                     state == S_BRACKET || state == S_SHOP || state == S_CUES || state == S_CREDITS || state == S_OVER || state == S_TAKE;
+                     state == S_BRACKET || state == S_SHOP || state == S_CUES || state == S_CREDITS || state == S_OVER || state == S_TAKE || state == S_VS;
             if (ui) {
                 if (pressed & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT | PAD_L1 | PAD_R1)) SFX(SFX_MOVE, 60);
                 if (pressed & (PAD_CROSS | PAD_START)) SFX(SFX_OK, 70);
@@ -9335,9 +9458,16 @@ int main(int argc, char *argv[])
             }
             break;
 
+        case S_VS:                                        /* tela de versus: X/START comeca (depois de uma pausinha), ou sozinha em 5 s */
+            vsT++;
+            if (vsT >= VS_LEN || (vsT > 15 && (pressed & (PAD_CROSS | PAD_START)))) {
+                state = S_AIM; botTimer = 0; botPlanned = 0; msgTimer = 150;
+            }
+            break;
+
         case S_OVER:
             if (tourney) { if (pressed & (PAD_CROSS | PAD_START)) tourneyAfter(); }
-            else if (pressed & PAD_CROSS) { rs += 7919 + menuT; newGame(mode); }
+            else if (pressed & PAD_CROSS) { rs += 7919 + menuT; vsBegin(mode); }
             else if (pressed & PAD_START) { menuInit(); state = S_MENU; }
             break;
         }
