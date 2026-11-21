@@ -5,11 +5,11 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.2
 
-## Texto legivel + upgrade visual (novo)
+## Texto legivel + 60 FPS (novo)
 - **Fonte nova** em todo o jogo: letras nitidas (antisserrilhadas) com **contorno escuro**, no lugar da fonte padrao do gsKit, que ficava borrada. Os textos pequenos tambem ficaram um pouco maiores (ex.: escala 0.26 vira ~0.34; de 0.5 para cima nao muda). Se faltar VRAM, o jogo volta sozinho para a fonte antiga
 - Fica em `initFontTex()`, `textRaw()` e `legS()` no `main.c` (o atlas das letras e o `FNT4`). Minusculas saem em maiusculas
-- **Bolas**: malha da esfera mais fina (`NLON` 16 / `NLAT` 8), aro escuro na borda para dar volume, luz rebatida embaixo e brilho em 3 camadas
-- **Sombra das bolas** com penumbra mais suave e **feltro** com degrade de luz mais suave (14 faixas em vez de 7)
+- **Bolas** com a borda mais escura (da volume, sem desenhar nada a mais) e brilho em 3 camadas; o **feltro** tem um degrade de luz mais suave (14 faixas)
+- **Menos desenho por quadro** (o jogo so segura 60 FPS se o PS2 desenhar cada quadro em menos de 16,6 ms): `discN` agora usa so os segmentos que o olho ve (erro menor que 0,4 px) e discos de 1-2 px viram um quadradinho. A mesa **Pool Azul** (a padrao) usava ~8500 primitivas por quadro e agora usa ~5400 (-36%); no pior caso (Neon) caiu de ~6600 para ~6050. Nada muda no visual: so deixou de gastar triangulos que nao aparecem (ex.: os ~200 botoes do estofado da Pool Azul tinham 14 triangulos cada, com 1-2 px)
 
 ## Chapolin: corneta so 1 rodada + rever replay (novo)
 - **CORNETA** paralisa a bola do adversario apenas por **1 rodada**: ela fica parada ate o fim da proxima jogada dele e depois volta ao normal (nao dura mais ate o fim da partida)

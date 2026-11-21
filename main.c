@@ -354,8 +354,15 @@ static const float *circ(int n)
 
 static void discN(float cx, float cy, float r, u64 c, int n)
 {
-    int i;
-    const float *t = circ(n);
+    int i, cap = (int)(3.0f * sqrtf(fabsf(r)) + 3.0f);   /* 60 FPS: segmentos so ate onde o olho ve (erro < 0.4 px); discos de 1 px usavam 14 triangulos */
+    const float *t;
+    if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
+        gsKit_prim_sprite(g, cx+OX-r, cy+OY-r, cx+OX+r, cy+OY+r, 1, c);
+        return;
+    }
+    if (cap < 4) cap = 4;
+    if (n > cap) n = cap;
+    t = circ(n);
     for (i = 0; i < n; i++) {
         float c0, s0, c1, s1;
         if (t) { c0 = t[2*i]; s0 = t[2*i+1]; c1 = t[2*i+2]; s1 = t[2*i+3]; }
@@ -1013,8 +1020,6 @@ static void drawShadow(int i)
 {
     float z = b[i].z > 0.0f ? b[i].z : 0.0f;      /* no pulo a sombra fica no chao, menor e mais fraca */
     if (!b[i].in) return;
-    discN(b[i].x + 4.4f + z * 0.5f, b[i].y + 5.2f + z * 0.7f, R * (1.28f - z * 0.012f),
-          GS_SETREG_RGBAQ(0, 18, 8, z > 0.0f ? 0x06 : 0x0c, 0x00), 14);                    /* penumbra */
     discN(b[i].x + 3.6f + z * 0.5f, b[i].y + 4.2f + z * 0.7f, R * (1.10f - z * 0.012f),
           GS_SETREG_RGBAQ(0, 18, 8, z > 0.0f ? 0x0c : 0x14, 0x00), 12);
     discN(b[i].x + 2.4f + z * 0.5f, b[i].y + 3.0f + z * 0.7f, R * (0.96f - z * 0.010f),
@@ -1073,8 +1078,8 @@ static void drawBallVec(int i, float x, float y, float r)
 #define ATLAS_W 512           /* 4 colunas x 4 linhas de peles */
 #define ATLAS_H 256
 #define SS 2                  /* supersampling da textura */
-#define NLON 16               /* malha da esfera (mais fina = contorno redondo e textura sem "quinas") */
-#define NLAT 8
+#define NLON 12               /* malha da esfera (16x8 ficava mais redonda mas quase dobrava os triangulos: nao segura 60 FPS) */
+#define NLAT 6
 
 static u32 atlas[ATLAS_W * ATLAS_H] __attribute__((aligned(64)));
 static GSTEXTURE ballTex;
@@ -1290,7 +1295,7 @@ static void drawBallMesh(int id, float x, float y, float r)
             float dif = vx * -0.42f + vy * 0.52f + vz * 0.74f;
             int cv;
             if (dif < 0) dif = 0;
-            cv = (int)((0.38f + 0.68f * dif) * 150.0f);
+            cv = (int)((0.38f + 0.68f * dif) * 150.0f * (0.78f + 0.22f * (vz > 0.0f ? vz : 0.0f)));   /* borda da bola mais escura = volume (sem desenhar nada a mais) */
             if (cv > 255) cv = 255;
             sxp[a][c] = x + OX + vx * r;
             syp[a][c] = y + OY - vy * r;
@@ -1318,14 +1323,10 @@ static void drawBallMesh(int id, float x, float y, float r)
                     1, colr[a][c], colr[a+1][c+1], colr[a+1][c]);
         }
 
-    /* acabamento (luz fixa na tela): aro escuro na borda (da volume), luz rebatida embaixo e brilho em 3 camadas */
-    ring(x, y, r * 0.97f, GS_SETREG_RGBAQ(0, 10, 5, 0x38, 0x00));
-    ring(x, y, r * 0.88f, GS_SETREG_RGBAQ(0, 10, 5, 0x14, 0x00));
-    discN(x + r*0.34f, y + r*0.40f, r*0.30f, GS_SETREG_RGBAQ(255, 235, 200, 0x0a, 0x00), 10);
-    discN(x - r*0.28f, y - r*0.30f, r*0.50f, GS_SETREG_RGBAQ(255, 255, 255, 0x12, 0x00), 12);
-    discN(x - r*0.33f, y - r*0.36f, r*0.30f, GS_SETREG_RGBAQ(255, 255, 255, 0x22, 0x00), 10);
-    discN(x - r*0.39f, y - r*0.42f, r*0.17f, GS_SETREG_RGBAQ(255, 255, 255, 0x80, 0x00), 8);
-    discN(x - r*0.46f, y - r*0.48f, r*0.07f, GS_SETREG_RGBAQ(255, 255, 255, 0x80, 0x00), 6);
+    /* brilho da luz (fixo na tela), em 3 camadas: halo suave, brilho e ponto de luz */
+    discN(x - r*0.30f, y - r*0.32f, r*0.46f, GS_SETREG_RGBAQ(255, 255, 255, 0x16, 0x00), 8);
+    discN(x - r*0.37f, y - r*0.39f, r*0.24f, GS_SETREG_RGBAQ(255, 255, 255, 0x40, 0x00), 6);
+    discN(x - r*0.41f, y - r*0.44f, r*0.11f, GS_SETREG_RGBAQ(255, 255, 255, 0x80, 0x00), 4);
 }
 
 static void drawBallAt(int i, float x, float y, float r)
