@@ -332,6 +332,12 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
 static void line(float x1, float y1, float x2, float y2, u64 c)
 { gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
 
+/* QUALIDADE GRAFICA: 1 = bolas e circulos mais redondos e nitidos (gasta mais do PS2); 0 = visual leve de antes.
+   Se o FPS (medidor no canto da tela) cair abaixo de 60 com 1, ponha 0. */
+#ifndef GFX_HQ
+#define GFX_HQ 1
+#endif
+
 /* chaves para testar no PS2: ponha 0 para voltar ao comportamento antigo (ajuda a achar a causa de um travamento) */
 #ifndef USE_NEW_FONT
 #define USE_NEW_FONT 1      /* 0 = usa a fonte antiga do gsKit */
@@ -361,7 +367,11 @@ static const float *circ(int n)
 
 static void discN(float cx, float cy, float r, u64 c, int n)
 {
-    int i, cap = (int)(3.0f * sqrtf(fabsf(r)) + 3.0f);   /* 60 FPS: segmentos so ate onde o olho ve (erro < 0.4 px); discos de 1 px usavam 14 triangulos */
+    #if GFX_HQ
+    int i, cap = (int)(4.2f * sqrtf(fabsf(r)) + 4.0f);   /* HQ: erro de borda menor que 0.2 px */
+#else
+    int i, cap = (int)(3.0f * sqrtf(fabsf(r)) + 3.0f);
+#endif   /* 60 FPS: segmentos so ate onde o olho ve (erro < 0.4 px); discos de 1 px usavam 14 triangulos */
     const float *t;
 #if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
@@ -1009,7 +1019,7 @@ static void text(float x, float y, float s, u64 c, const char *t)
 /* ---------- MEDIDOR DE DESEMPENHO (DEBUG_FPS): mostra FPS e quanto tempo o musicUpdate() e o resto do quadro gastam ----------
    Serve para descobrir se a lentidao vem da musica/USB ou do desenho. Ponha DEBUG_FPS 0 para esconder. */
 #ifndef DEBUG_FPS
-#define DEBUG_FPS 1
+#define DEBUG_FPS 0   /* 1 = mostra FPS e tempo da musica no canto da tela */
 #endif
 #if DEBUG_FPS
 #define DBG_CPU_HZ 294912000.0f                       /* clock do EE: o contador COP0 Count anda a esse ritmo */
@@ -1130,8 +1140,13 @@ static void drawBallVec(int i, float x, float y, float r)
 #define ATLAS_W 512           /* 4 colunas x 4 linhas de peles */
 #define ATLAS_H 256
 #define SS 2                  /* supersampling da textura */
-#define NLON 12               /* malha da esfera (16x8 ficava mais redonda mas quase dobrava os triangulos: nao segura 60 FPS) */
+#if GFX_HQ
+#define NLON 16               /* malha da esfera: 16x8 = bola mais redonda e numeros sem distorcer (GFX_HQ 0 volta para 12x6) */
+#define NLAT 8
+#else
+#define NLON 12
 #define NLAT 6
+#endif
 
 static u32 atlas[ATLAS_W * ATLAS_H] __attribute__((aligned(64)));
 static GSTEXTURE ballTex;
@@ -1335,7 +1350,11 @@ static void drawBallMesh(int id, float x, float y, float r)
     int a, c;
     const u8 *tn = (id == 0) ? WB_COL[wbSel[optWho()]] : NULL;      /* bola branca colorida: tinge pelo vertice */
 
+    #if GFX_HQ
+    discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 24);  /* borda suave */
+#else
     discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 16);  /* borda suave */
+#endif
     if (skinStyleEff == 4 && id > 0) discN(x, y, r * 1.45f, GS_SETREG_RGBAQ(110, 255, 150, 0x16, 0x00), 14);   /* LOJA: brilho no escuro */
 
     for (a = 0; a <= NLAT; a++)
