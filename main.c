@@ -2801,7 +2801,21 @@ static void autoAim(void)
         if (!pathClear(b[0].x, b[0].y, b[t].x, b[t].y, t)) continue;
         bd = d; best = t;
     }
-    if (best > 0) ang = atan2f(b[best].y - b[0].y, b[best].x - b[0].x);
+    if (best > 0) {
+        float tx = b[best].x, ty = b[best].y;
+        if (gmode == GM_BR) {                            /* sinuca brasileira: as 2 bolas coladas da cabeceira ficam uma em cima da outra; a mira vai reta no meio das duas */
+            int k, pr = -1;
+            float pd2 = 1e9f;
+            for (k = 1; k < 16; k++) {
+                float dx, dy, d2;
+                if (k == best || !b[k].in || LOCKED(k) || !ownBall(k)) continue;
+                dx = b[k].x - b[best].x; dy = b[k].y - b[best].y; d2 = dx * dx + dy * dy;
+                if (fabsf(dx) < 1.0f && d2 < (2 * R + 4) * (2 * R + 4) && d2 < pd2) { pd2 = d2; pr = k; }
+            }
+            if (pr > 0) { tx = (b[best].x + b[pr].x) * 0.5f; ty = (b[best].y + b[pr].y) * 0.5f; }
+        }
+        ang = atan2f(ty - b[0].y, tx - b[0].x);
+    }
 }
 
 /* MESTRE: o bot escolhe o taco e o poder conforme a situacao da mesa
@@ -6647,21 +6661,6 @@ static void vsCoin(float cx, float cy, float r)
     discN(cx - r * 0.38f, cy - r * 0.38f, r * 0.17f, CA(255, 255, 255, 0x70), 6);
 }
 
-static void vsStar(float cx, float cy, float r, int n)       /* estrela com o numero (raridade do personagem) */
-{
-    int k;
-    char nb[4];
-    for (k = 0; k < 10; k++) {
-        float a0 = -CPI * 0.5f + k * CPI / 5.0f, a1 = a0 + CPI / 5.0f;
-        float r0 = (k & 1) ? r * 0.48f : r, r1 = (k & 1) ? r : r * 0.48f;
-        tri(cx, cy, cx + cosf(a0) * r0 + 1.5f, cy + sinf(a0) * r0 + 2.0f, cx + cosf(a1) * r1 + 1.5f, cy + sinf(a1) * r1 + 2.0f, COL(110, 84, 40));
-        tri(cx, cy, cx + cosf(a0) * r0, cy + sinf(a0) * r0, cx + cosf(a1) * r1, cy + sinf(a1) * r1, COL(222, 190, 120));
-    }
-    discN(cx, cy + 1.0f, r * 0.5f, COL(238, 212, 150), 10);
-    sprintf(nb, "%d", n);
-    text(cx - tw(0.4f, nb) * 0.5f, cy - 5.0f, 0.4f, COL(60, 44, 20), nb);
-}
-
 static void vsStrip(float cx, float y1, float y2, float w)   /* faixa escura que some nas pontas (atras do nome e do premio) */
 {
     int k;
@@ -6671,7 +6670,7 @@ static void vsStrip(float cx, float y1, float y2, float w)   /* faixa escura que
     }
 }
 
-static void vsPortrait(int pl, float cx, float ty, float S, int mood, int t, int dim, float bob)   /* retrato quadrado com moldura escura e estrela */
+static void vsPortrait(int pl, float cx, float ty, float S, int mood, int t, int dim, float bob)   /* retrato quadrado com moldura escura */
 {
     float x1 = cx - S * 0.5f, x2 = cx + S * 0.5f, y1 = ty, y2 = ty + S;
     int k, id = ((charSel[pl] % NCHARS) + NCHARS) % NCHARS;
@@ -6687,7 +6686,6 @@ static void vsPortrait(int pl, float cx, float ty, float S, int mood, int t, int
     drawChar(id, cx, y1 + 66.0f + bob, 1.3f, mood, t, 0);
     if (dim) rect(x1, y1, x2, y2, CA(0, 0, 24, 0x58));                   /* quem perdeu fica mais escuro */
     frameR(x1, y1, x2, y2, 1.0f, CA(0, 0, 0, 0x60));
-    vsStar(x1 + 2.0f, y1 + 2.0f, 17.0f, CHAR_RAR[id] + 1);              /* estrela no canto */
 }
 
 static void drawOverScreen(void)

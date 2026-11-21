@@ -17,7 +17,7 @@ Com `DEBUG_FPS 1`, no canto inferior esquerdo da tela aparece **FPS**, o tempo m
 - Fica em `dbgNow()`, `dbgFrameEnd()` e `dbgDraw()` no `main.c`. Vem **desligado** por padrao; para mostrar, defina `DEBUG_FPS 1`
 
 ## Tela de VS antes da partida (novo, 3.1.3)
-Antes de **toda partida** aparece a tela de **VERSUS** no estilo do 8 Ball Pool: o mesmo cenario dos menus (por do sol, cidade e mesa), os **dois personagens em retratos quadrados com moldura escura e uma estrela** (o numero e a raridade), **VS dourado** no meio, o **nome** embaixo de cada retrato e, embaixo do nome, o **premio em moedas** de quem ganhar. O nome da **mesa** fica no topo e uma miniatura dela na caixinha do centro.
+Antes de **toda partida** aparece a tela de **VERSUS** no estilo do 8 Ball Pool: o mesmo cenario dos menus (por do sol, cidade e mesa), os **dois personagens em retratos quadrados com moldura escura** (sem a estrela de raridade, removida), **VS dourado** no meio, o **nome** embaixo de cada retrato e, embaixo do nome, o **premio em moedas** de quem ganhar. O nome da **mesa** fica no topo e uma miniatura dela na caixinha do centro.
 - Aparece em **JOGAR** (contra o BOT e 2 jogadores), em **TORNEIO** (toda partida, depois do chaveamento), na **revanche** e em **Reiniciar partida**. O **MODO TREINO** nao tem adversario, entao vai direto para a mesa
 - **X ou START** comeca na hora (depois de uma pausinha); se ninguem apertar, comeca sozinha em 5 segundos (barra no pe da tela)
 - Fica em `vsBegin()` (chamada nos pontos de inicio de partida) e `drawVsScreen()` no `main.c`; o tempo da tela e `VS_LEN`
@@ -124,7 +124,7 @@ Em **Configurar partida** há duas linhas novas: **SEU PERSONAGEM** e **PERSONAG
 O topo da tela agora é uma faixa baixa de vidro com três blocos: **retrato + nome, grupo e bolas** do jogador 1, **placar** no centro e o bloco do jogador 2 espelhado. Quem joga tem borda dourada, brilho e filete na cor do jogador (azul/vermelho); o outro fica apagado. O relógio de jogada vira um filete no pé do bloco, e a barra de sangue do taco Vampiro fica logo abaixo.
 
 ## Tela de fim de partida (refeita na 3.1.3, igual a do VS)
-Quando a partida termina aparece o mesmo visual da tela de VS (cenario do por do sol, retratos quadrados com moldura e estrela, nome embaixo):
+Quando a partida termina aparece o mesmo visual da tela de VS (cenario do por do sol, retratos quadrados com moldura, nome embaixo):
 - **Quem venceu**: retrato com brilho dourado, rostinho feliz pulando, o titulo **VENCEDOR** em dourado em cima (no torneio, quem ganha a final ve **CAMPEAO**), raios de luz, fogos de artificio e confete
 - **Quem perdeu**: retrato mais escuro, com o rostinho chorando e o nome apagado
 - **Moedas ganhas** (`+N` com a moeda) aparecem embaixo do nome; no meio ficam o **VS** e o trofeu na caixinha escura
@@ -147,7 +147,7 @@ No menu inicial, **TORNEIO** abre uma disputa **mata-mata com 8 jogadores**: Qua
 - Ganhou a final: tela de **CAMPEÃO** com troféu
 
 ## Mira automática no início da jogada (novo)
-Quando a sua vez começa (depois da tacada do adversário, da bola na mão ou de tirar uma bola), a mira **já aponta para a bola sua mais perto que tenha caminho livre**. Se houver bola do adversário (ou outra bola) na frente de todas, a mira fica como estava. Você continua podendo girar a mira normalmente.
+Quando a sua vez começa (depois da tacada do adversário, da bola na mão ou de tirar uma bola), a mira **já aponta para a bola sua mais perto que tenha caminho livre**. Se houver bola do adversário (ou outra bola) na frente de todas, a mira fica como estava. Você continua podendo girar a mira normalmente. Na **Sinuca Brasileira**, quando a bola mais perto faz par com outra bola sua colada em cima ou embaixo dela (as 2 bolas da cabeceira), a mira já começa **reta no meio das duas**.
 
 ## Sorteio (novo)
 - Na linha **MESA** a última opção é **ALEATORIA**: a mesa é sorteada ao iniciar a partida
