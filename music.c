@@ -235,11 +235,11 @@ static float  blp[SFX_COUNT], bph[SFX_COUNT];
    travava o jogo logo depois de abrir. */
 static int buildRun(int id, int maxN)
 {
-    static const float DUR[SFX_COUNT] = { 0.12f, 0.09f, 0.15f, 0.45f, 0.07f, 0.22f, 0.22f, 1.00f, 1.00f, 0.40f, 0.28f, 0.50f };
+    static const float DUR[SFX_COUNT] = { 0.14f, 0.10f, 0.16f, 0.55f, 0.06f, 0.30f, 0.24f, 1.20f, 1.10f, 0.45f, 0.28f, 0.55f };
     const float TP = 6.2831853f;
     int i, end, n = (int)(DUR[id] * SFX_HZ);
     short *o;
-    float lp, lp2 = 0.0f, ph;
+    float lp, ph;
     if (sfx[id].d) return 1;
     if (!bo[id]) {
         bo[id] = (short *)malloc((size_t)n * sizeof(short));
@@ -251,65 +251,83 @@ static int buildRun(int id, int maxN)
     for (i = bi[id]; i < end; i++) {
         float t = (float)i / SFX_HZ, v = 0.0f, x;
         switch (id) {
-        case SFX_HIT:                                        /* "toc" grave do taco na bola branca */
-            v = 0.75f * expf(-t * 40.0f) * sinf(TP * 190.0f * t) + 0.55f * nz() * expf(-t * 140.0f)
-              + 0.3f * expf(-t * 90.0f) * sinf(TP * 1400.0f * t);
+        case SFX_HIT:                                        /* "tac" seco do taco: estalo de couro + corpo grave que cai de tom */
+            x = nz(); lp += 0.6f * (x - lp);
+            ph += TP * (140.0f + 90.0f * expf(-t * 60.0f)) / SFX_HZ;
+            v = 0.85f * expf(-t * 30.0f) * sinf(ph) + 0.6f * expf(-t * 60.0f) * sinf(TP * 1250.0f * t)
+              + 0.7f * lp * expf(-t * 220.0f);
             break;
-        case SFX_BALL:                                       /* "clac" seco de bola contra bola */
-            v = expf(-t * 75.0f) * (0.55f * sinf(TP * 2300.0f * t) + 0.35f * sinf(TP * 3700.0f * t + 1.0f))
-              + 0.3f * nz() * expf(-t * 320.0f);
+        case SFX_BALL:                                       /* "clac" de vidro: bola contra bola, parciais agudas e secas */
+            v = expf(-t * 95.0f) * (0.5f * sinf(TP * 2850.0f * t) + 0.35f * sinf(TP * 4410.0f * t + 0.7f) + 0.2f * sinf(TP * 6100.0f * t))
+              + 0.35f * nz() * expf(-t * 400.0f);
             break;
-        case SFX_CUSHION:                                    /* "pof" surdo da tabela */
-            x = nz(); lp += 0.12f * (x - lp);
-            v = 0.8f * expf(-t * 32.0f) * sinf(TP * 95.0f * t) + 1.2f * lp * expf(-t * 45.0f);
+        case SFX_CUSHION:                                    /* "tum" de borracha: grave que desce + sopro curto */
+            x = nz(); lp += 0.10f * (x - lp);
+            ph += TP * (60.0f + 60.0f * expf(-t * 35.0f)) / SFX_HZ;
+            v = 0.95f * expf(-t * 28.0f) * sinf(ph) + 1.1f * lp * expf(-t * 55.0f);
             break;
-        case SFX_POCKET:                                     /* bola cai na cacapa e rola no couro */
-            x = nz(); lp += 0.07f * (x - lp);
-            ph += TP * (120.0f - 70.0f * t) / SFX_HZ;
-            v = 0.8f * expf(-t * 14.0f) * sinf(ph) + 2.2f * lp * expf(-t * 5.0f) * (t < 0.03f ? t / 0.03f : 1.0f)
-              + 0.4f * nz() * expf(-t * 200.0f);
-            break;
-        case SFX_MOVE:                                       /* "tic" suave de navegacao */
-            v = 0.45f * expf(-t * 65.0f) * (sinf(TP * 980.0f * t) + 0.3f * sinf(TP * 1960.0f * t));
-            break;
-        case SFX_OK: {                                       /* confirmacao: duas notas limpas subindo (la -> mi) */
-            float t2 = t - 0.07f, a2 = t2 < 0.0f ? 0.0f : (t2 < 0.004f ? t2 / 0.004f : 1.0f);
-            v = 0.42f * expf(-t * 26.0f) * (sinf(TP * 880.0f * t) + 0.25f * sinf(TP * 1760.0f * t));
-            if (t2 > 0.0f) v += 0.42f * a2 * expf(-t2 * 20.0f) * (sinf(TP * 1320.0f * t2) + 0.25f * sinf(TP * 2640.0f * t2));
+        case SFX_POCKET: {                                   /* bola cai: baque, tres quiques de "toc" e rolar na rede */
+            static const float TB[3] = { 0.025f, 0.17f, 0.29f }, AB[3] = { 0.8f, 0.5f, 0.3f };
+            int k;
+            x = nz(); lp += 0.06f * (x - lp);
+            v = 0.9f * expf(-t * 22.0f) * sinf(TP * 85.0f * t) + 1.8f * lp * expf(-t * 6.5f) * (t < 0.04f ? t / 0.04f : 1.0f);
+            for (k = 0; k < 3; k++) {
+                float tt = t - TB[k];
+                if (tt > 0.0f) v += AB[k] * expf(-tt * 55.0f) * sinf(TP * (480.0f - 90.0f * k) * tt);
+            }
             break; }
-        case SFX_BACK: {                                     /* voltar: duas notas descendo */
-            float t2 = t - 0.07f, a2 = t2 < 0.0f ? 0.0f : (t2 < 0.004f ? t2 / 0.004f : 1.0f);
-            v = 0.42f * expf(-t * 26.0f) * (sinf(TP * 660.0f * t) + 0.25f * sinf(TP * 1320.0f * t));
-            if (t2 > 0.0f) v += 0.42f * a2 * expf(-t2 * 20.0f) * (sinf(TP * 440.0f * t2) + 0.25f * sinf(TP * 880.0f * t2));
+        case SFX_MOVE:                                       /* "blip" curto e leve de navegacao */
+            v = 0.5f * expf(-t * 60.0f) * (sinf(TP * 1400.0f * t) + 0.25f * sinf(TP * 2800.0f * t));
+            break;
+        case SFX_OK: {                                       /* confirmar: "ding-ding" de sino (do alto -> sol alto) */
+            float t2 = t - 0.09f;
+            v = expf(-t * 15.0f) * (0.4f * sinf(TP * 1046.5f * t) + 0.18f * sinf(TP * 2888.0f * t) * expf(-t * 25.0f));
+            if (t2 > 0.0f) v += expf(-t2 * 13.0f) * (0.42f * sinf(TP * 1568.0f * t2) + 0.18f * sinf(TP * 4328.0f * t2) * expf(-t2 * 25.0f));
             break; }
-        case SFX_WIN: {                                      /* arpejo subindo: do-mi-sol-do */
+        case SFX_BACK: {                                     /* voltar: "bloop" que escorrega para baixo */
+            float f = 300.0f + 520.0f * expf(-t * 11.0f);
+            ph += TP * f / SFX_HZ;
+            v = 0.5f * expf(-t * 8.0f) * (sinf(ph) + 0.2f * sinf(2.0f * ph));
+            break; }
+        case SFX_WIN: {                                      /* fanfarra: do-mi-sol-do subindo e acorde final cheio */
             static const float F[4] = { 523.25f, 659.25f, 783.99f, 1046.5f };
-            int k = (int)(t / 0.17f); float tt;
+            if (t < 0.48f) {
+                int k = (int)(t / 0.12f); float tt;
+                if (k > 3) k = 3;
+                tt = t - k * 0.12f;
+                v = 0.4f * expf(-tt * 7.0f) * (sinf(TP * F[k] * t) + 0.35f * sinf(TP * F[k] * 2.0f * t) + 0.15f * sinf(TP * F[k] * 3.0f * t));
+            } else {
+                float tt = t - 0.48f, e = expf(-tt * 2.8f) * (tt < 0.01f ? tt / 0.01f : 1.0f);
+                v = 0.22f * e * (sinf(TP * F[0] * t) + sinf(TP * F[1] * t) + sinf(TP * F[2] * t) + sinf(TP * F[3] * t))
+                  + 0.1f * e * sinf(TP * F[3] * 2.0f * t);
+            }
+            break; }
+        case SFX_LOSE: {                                     /* "wah wah wah wahhh": trombone triste descendo */
+            static const float F[4] = { 233.08f, 220.0f, 207.65f, 196.0f };
+            int k = (int)(t / 0.25f); float tt, f, w;
             if (k > 3) k = 3;
-            tt = t - k * 0.17f;
-            v = 0.45f * expf(-tt * (k == 3 ? 3.0f : 9.0f)) * (sinf(TP * F[k] * t) + 0.35f * sinf(TP * F[k] * 2.0f * t));
+            tt = t - k * 0.25f;
+            f = F[k] * (1.0f + 0.012f * sinf(TP * 6.0f * t));
+            if (k == 3) f *= 1.0f - 0.12f * (tt / 0.35f);
+            ph += TP * f / SFX_HZ;
+            w = 0.45f + 0.55f * (0.5f + 0.5f * sinf(TP * 3.5f * tt - 1.0f));
+            v = 0.42f * (k == 3 ? expf(-tt * 2.4f) : expf(-tt * 3.0f)) * (sinf(ph) + w * 0.6f * sinf(2.0f * ph) + w * 0.35f * sinf(3.0f * ph));
             break; }
-        case SFX_LOSE: {                                     /* notas descendo, tristes */
-            static const float F[4] = { 392.0f, 369.99f, 349.23f, 261.63f };
-            int k = (int)(t / 0.22f); float tt;
-            if (k > 3) k = 3;
-            tt = t - k * 0.22f;
-            v = 0.45f * expf(-tt * (k == 3 ? 2.5f : 6.0f)) * (sinf(TP * F[k] * t) + 0.5f * sinf(TP * F[k] * 1.5f * t));
+        case SFX_FOUL: {                                     /* buzina de erro: dois "bzzt" graves */
+            float sq = fmodf(t * 120.0f, 1.0f) < 0.5f ? 1.0f : -1.0f, tt = t < 0.2f ? t : t - 0.2f;
+            lp += 0.25f * (sq - lp);
+            v = 0.3f * lp * (t < 0.15f || (t > 0.2f && t < 0.38f) ? 1.0f : 0.0f) * expf(-tt * 3.0f);
             break; }
-        case SFX_FOUL: {                                     /* dois "bips" ruins */
-            float tt = t < 0.18f ? t : t - 0.18f, saw = fmodf(t * 130.0f, 1.0f) * 2.0f - 1.0f;
-            v = 0.35f * saw * expf(-tt * 9.0f) * (t < 0.14f || (t > 0.18f && t < 0.38f) ? 1.0f : 0.0f);
-            break; }
-        case SFX_CHALK:                                      /* giz raspando */
-            x = nz(); lp += 0.5f * (x - lp);
-            v = 0.55f * (x - lp) * sinf(3.14159f * t / DUR[id]) * (0.6f + 0.4f * sinf(TP * 28.0f * t));
+        case SFX_CHALK:                                      /* giz: tres raspadas rapidas */
+            x = nz(); lp += 0.35f * (x - lp);
+            v = 0.7f * (x - lp) * sinf(3.14159f * t / DUR[id]) * (0.35f + 0.65f * fabsf(sinf(TP * 5.5f * t)));
             break;
-        case SFX_ABIL:                                       /* varredura subindo */
-            ph += TP * (250.0f + 1400.0f * (t / DUR[id])) / SFX_HZ;
-            v = 0.5f * sinf(ph) * sinf(3.14159f * t / DUR[id]);
-            break;
+        case SFX_ABIL: {                                     /* poder ativado: varredura subindo com brilho */
+            float f = 300.0f * expf(1.79f * t / DUR[id]), e = sinf(3.14159f * t / DUR[id]);
+            ph += TP * f / SFX_HZ;
+            v = 0.42f * e * (sinf(ph) + 0.5f * sinf(2.0f * ph)) + (t > 0.35f ? 0.18f * expf(-(t - 0.35f) * 9.0f) * sinf(TP * 2637.0f * t) : 0.0f);
+            break; }
         }
-        (void)lp2;
         {   /* entrada/saida suaves (1 ms / 6 ms): sem estalo no comeco e no fim do efeito */
             float fi = (float)i / (SFX_HZ * 0.001f), fo = (float)(n - 1 - i) / (SFX_HZ * 0.006f);
             if (fi < 1.0f) v *= fi;
