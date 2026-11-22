@@ -7253,7 +7253,7 @@ static void drawCharSelect(void)
 }
 
 /* ---------- seletor de MODO em cartoes lado a lado (etapa 1 do configurar partida): um cartao por modo, com icone e nome ---------- */
-#define MCARD_H 54.0f                                           /* altura da linha de cartoes (o cartao em si tem 50) */
+#define MCARD_H 78.0f                                           /* altura da linha do MODO: titulo (MODO + nome) + cartoes de 46 */
 static void mcBall(float x, float y, float r, const u8 *c, int kind)   /* kind: 0 lisa, 1 listrada, 2 bola 8 */
 {
     static const u8 BLK[3] = { 22, 22, 26 }, WHT[3] = { 240, 240, 240 };
@@ -7300,18 +7300,23 @@ static void drawModeCards(float y, int foc)
     static const char *const L2[NGM] = { "CLASSICA", "BRASILEIRA", "MINI", "SUBITA", "DE 3", "DUELO" };
     const float x0 = 68.0f, cw = 76.0f, gap = (504.0f - NGM * 76.0f) / (NGM - 1);
     int m;
+    char nb[40];
+    if (foc) selBar(68, 572, y, 24);                                       /* titulo da linha, igual as outras: MODO ........ < NOME > */
+    text(98, y, 0.5f, foc ? COL(255,240,150) : COL(175,185,195), "MODO");
+    sprintf(nb, "< %s >", GMN[gmode]);
+    text(556 - tw(0.5f, nb), y, 0.5f, COL(255,255,255), nb);
     for (m = 0; m < NGM; m++) {
         int on = (m == gmode), hot = on && foc;
-        float x = x0 + m * (cw + gap), t = y - 6.0f - (hot ? 2.0f * fabsf(sinf(menuT * 0.1f)) : 0.0f), b = y + 44.0f;
+        float x = x0 + m * (cw + gap), t = y + 28.0f - (hot ? 2.0f * fabsf(sinf(menuT * 0.1f)) : 0.0f), b = y + 74.0f;
         u64 bc = hot ? COL(255, 215, 60) : (on ? COL(90, 200, 120) : COL(60, 70, 88));
         u64 fc = hot ? COL(128, 84, 12) : (on ? COL(22, 76, 48) : COL(30, 26, 60));
         u64 tc = hot ? COL(255, 240, 150) : (on ? COL(170, 235, 190) : COL(140, 150, 170));
         cham(x - 1.5f, t - 1.5f, x + cw + 1.5f, b + 1.5f, 6.0f, bc);
         cham(x, t, x + cw, b, 5.0f, fc);
         rect(x + 5, t, x + cw - 5, t + 7, CA(255, 255, 255, hot ? 0x22 : 0x12));
-        mcIcon(m, x + cw * 0.5f, t + 15.0f);
-        text(x + cw * 0.5f - tw(0.25f, L1[m]) * 0.5f, t + 28.0f, 0.25f, tc, L1[m]);
-        text(x + cw * 0.5f - tw(0.25f, L2[m]) * 0.5f, t + 38.0f, 0.25f, tc, L2[m]);
+        mcIcon(m, x + cw * 0.5f, t + 12.0f);
+        text(x + cw * 0.5f - tw(0.25f, L1[m]) * 0.5f, t + 24.0f, 0.25f, tc, L1[m]);
+        text(x + cw * 0.5f - tw(0.25f, L2[m]) * 0.5f, t + 34.0f, 0.25f, tc, L2[m]);
     }
 }
 
@@ -7322,7 +7327,7 @@ static void drawSetupScreen(void)
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
-    const float rh = (setStep == 0 && n >= 6) ? 32.0f : 36.0f;     /* muitas linhas na etapa 1: um pouco mais juntas para caber os cartoes de modo */
+    const float rh = (setStep == 0 && n >= 6) ? 30.0f : 36.0f;     /* muitas linhas na etapa 1: um pouco mais juntas para caber os cartoes de modo */
     float ry[NSR + 1], y2, acc = 0.0f;
     const char *hint;
     char buf[40];
