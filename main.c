@@ -4499,7 +4499,7 @@ static void drawTable(void)
     tcRail = w2;
     tcCush = shade(T->felt, 1.06f, 8); tcCushHi = shade(T->felt, 1.55f, 36); tcCushLo = shade(T->felt, 0.62f, 0);   /* borracha mais clara que o feltro */
     tcMouth = shade(T->wood, 0.10f, 0);                                                                              /* quase preto: continua o fundo do buraco ate a ponta da tabela */
-    if (T->style == 21) tcMouth = shade(T->felt, 0.55f, 0);                          /* Pool Azul: sombra azul do feltro (sem o triangulo preto) */
+    tcMouth = shade(T->felt, 0.55f, 0);                                              /* todas as mesas: sombra do feltro (sem o triangulo preto) */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
 
     /* sombra da mesa no chao */
@@ -4549,8 +4549,8 @@ static void drawTable(void)
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
-        float ce = PRC[0] * tabPock() - POC, cm = PRC[1] * tabPock();
-        float cev = (T->style == 21) ? 13.0f : ce;                      /* so visual: na Pool Azul as pontas das tabelas dos cantos encostam no buraco (a fisica continua usando ce) */
+        float cm = PRC[1] * tabPock();
+        float cev = 13.0f;                                              /* so visual, em todas as mesas: as pontas das tabelas dos cantos encostam no buraco (a fisica continua usando ce) */
         u64 scoop = shade(T->felt, 0.42f, 0);                            /* vao das cacapas do meio: escuro, continua o buraco ate o feltro */
         rect(TCX - cm, TY0 - 11, TCX + cm, TY0, scoop);                  /* meio: o vao entre as pontas mostra o feltro (sombra do buraco) */
         rect(TCX - cm, TY1, TCX + cm, TY1 + 11, scoop);
