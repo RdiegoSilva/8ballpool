@@ -3002,14 +3002,13 @@ static const TableDef TABLES[NTABLES] = {
     { "DELEGACIA",{ 38, 66,122}, { 20, 26, 48}, {255,215, 80}, 20 },
     { "POOL AZUL",{ 36,136,204}, {142, 26, 38}, {238,232,214}, 21 },   /* feltro azul, madeira vermelha, diamantes claros, cacapas pretas */
 };
-static int tcMouthOn = 1;                                              /* 0 = sem a boca escura nas pontas das tabelas dos cantos (Pool Azul: era o triangulo preto) */
 static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores derivadas da mesa escolhida (tcMouth: boca escura das cacapas) */
 
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
     float la = xa - ra, lb = xb + rb;
-    if (tcMouthOn && ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    if (tcMouthOn && rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcMouth);
+    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcMouth);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
@@ -3019,8 +3018,8 @@ static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    if (tcMouthOn) quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    if (tcMouthOn) quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcMouth);
+    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcMouth);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
@@ -4187,7 +4186,7 @@ static void tableDecoPool(int stage)
         for (k = 0; k < 4; k++)                                                                        /* borda do feltro mais escura */
             outlineRect(TX0 + k, TY0 + k, TX1 - k, TY1 - k, CA(6, 30, 62, 0x30 - k * 8));
     } else {
-        float ce = PRC[0] - POC, cm = PRC[1];                                            /* mesmas aberturas das tabelas */
+        float ce = 13.0f, cm = PRC[1];                                                   /* mesmas aberturas visuais das tabelas (cev em drawTable) */
         u64 hi = CA(170, 230, 255, 0x5a);
         line(TX0 + ce, TY0 + 0.5f, TCX - cm, TY0 + 0.5f, hi);                                          /* brilho azul-claro no gume das tabelas */
         line(TCX + cm, TY0 + 0.5f, TX1 - ce, TY0 + 0.5f, hi);
@@ -4500,8 +4499,8 @@ static void drawTable(void)
     tcRail = w2;
     tcCush = shade(T->felt, 1.06f, 8); tcCushHi = shade(T->felt, 1.55f, 36); tcCushLo = shade(T->felt, 0.62f, 0);   /* borracha mais clara que o feltro */
     tcMouth = shade(T->wood, 0.10f, 0);                                                                              /* quase preto: continua o fundo do buraco ate a ponta da tabela */
+    if (T->style == 21) tcMouth = shade(T->felt, 0.55f, 0);                          /* Pool Azul: sombra azul do feltro (sem o triangulo preto) */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
-    tcMouthOn = (T->style != 21);                                                    /* Pool Azul: sem o triangulo preto nas caçapas dos cantos (as do meio nao mudam) */
 
     /* sombra da mesa no chao */
     rect(TX0 - 22, TY0 - 20, TX1 + 40, TY1 + 42, GS_SETREG_RGBAQ(0, 0, 0, 0x30, 0x00));
@@ -4551,15 +4550,16 @@ static void drawTable(void)
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
         float ce = PRC[0] * tabPock() - POC, cm = PRC[1] * tabPock();
+        float cev = (T->style == 21) ? 13.0f : ce;                      /* so visual: na Pool Azul as pontas das tabelas dos cantos encostam no buraco (a fisica continua usando ce) */
         u64 scoop = shade(T->felt, 0.42f, 0);                            /* vao das cacapas do meio: escuro, continua o buraco ate o feltro */
         rect(TCX - cm, TY0 - 11, TCX + cm, TY0, scoop);                  /* meio: o vao entre as pontas mostra o feltro (sombra do buraco) */
         rect(TCX - cm, TY1, TCX + cm, TY1 + 11, scoop);
-        cushH(TX0 + ce, TCX - cm, TY0 - 11, TY0, 11.0f, 3.0f);
-        cushH(TCX + cm, TX1 - ce, TY0 - 11, TY0, 3.0f, 11.0f);
-        cushH(TX0 + ce, TCX - cm, TY1 + 11, TY1, 11.0f, 3.0f);
-        cushH(TCX + cm, TX1 - ce, TY1 + 11, TY1, 3.0f, 11.0f);
-        cushV(TY0 + ce, TY1 - ce, TX0 - 11, TX0);
-        cushV(TY0 + ce, TY1 - ce, TX1 + 11, TX1);
+        cushH(TX0 + cev, TCX - cm, TY0 - 11, TY0, 11.0f, 3.0f);
+        cushH(TCX + cm, TX1 - cev, TY0 - 11, TY0, 3.0f, 11.0f);
+        cushH(TX0 + cev, TCX - cm, TY1 + 11, TY1, 11.0f, 3.0f);
+        cushH(TCX + cm, TX1 - cev, TY1 + 11, TY1, 3.0f, 11.0f);
+        cushV(TY0 + cev, TY1 - cev, TX0 - 11, TX0);
+        cushV(TY0 + cev, TY1 - cev, TX1 + 11, TX1);
     }
 
     /* diamantes de mira na madeira */
