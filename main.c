@@ -938,9 +938,70 @@ static u32 fontAtlas[FT_AW * FT_AH] __attribute__((aligned(64)));
 static GSTEXTURE fontTex;
 static int useFont = 0;
 
+/* ---- fonte GRANDE (2x): para titulos e textos de escala >= 0.8. A fonte de 16x24 esticada 2x ficava borrada/serrilhada; aqui cada letra
+   e ampliada ao carregar (interpolacao + curva de contraste = bordas lisas) e desenhada quase 1:1. Se faltar VRAM, nada muda (useBig = 0) ---- */
+#define FB_CW (FT_CW * 2)
+#define FB_CH (FT_CH * 2)
+#define FB_AW 512
+#define FB_AH 384
+#define FB_SCALE 0.8f                              /* a partir desta escala usa a fonte grande */
+static u32 fontAtlasBig[FB_AW * FB_AH] __attribute__((aligned(64)));
+static GSTEXTURE fontTexBig;
+static int useBig = 0;
+
 /* altura de leitura: textos bem pequenos ficavam ilegiveis; a letra fica mais alta (0.26 -> 0.31, 0.30 -> 0.34), mas a LARGURA
    de cada letra continua 24.5*s, igual a fonte antiga, entao nenhum texto/caixa dos menus muda de tamanho. De 0.5 para cima nao muda */
 static float legH(float s) { return s < 0.5f ? 0.1f + 0.8f * s : s; }
+
+static float fbCurve(float t)                         /* contraste: transforma o degrau serrilhado em borda lisa */
+{
+    t = (t - 0.28f) / 0.34f;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static void initFontBig(const unsigned char (*al)[FT_CH][FT_CW])
+{
+    static float sm[FB_CH][FB_CW];
+    int gi, X, Y, dx, dy;
+    for (gi = 0; gi < FT_N; gi++) {
+        int gx = (gi % 16) * FB_CW, gy = (gi / 16) * FB_CH;
+        for (Y = 0; Y < FB_CH; Y++)
+            for (X = 0; X < FB_CW; X++) {
+                float sx = (X + 0.5f) * 0.5f - 0.5f, sy = (Y + 0.5f) * 0.5f - 0.5f, v[2][2], fx, fy;
+                int x0 = (int)floorf(sx), y0 = (int)floorf(sy), i, j;
+                fx = sx - x0; fy = sy - y0;
+                for (j = 0; j < 2; j++)
+                    for (i = 0; i < 2; i++) {
+                        int xx = x0 + i, yy = y0 + j;
+                        v[j][i] = (xx < 0 || xx >= FT_CW || yy < 0 || yy >= FT_CH) ? 0.0f : al[gi][yy][xx] / 15.0f;
+                    }
+                sm[Y][X] = fbCurve((v[0][0] * (1.0f - fx) + v[0][1] * fx) * (1.0f - fy) + (v[1][0] * (1.0f - fx) + v[1][1] * fx) * fy);
+            }
+        for (Y = 0; Y < FB_CH; Y++)
+            for (X = 0; X < FB_CW; X++) {
+                float o = sm[Y][X];
+                for (dy = -2; dy <= 2; dy++)
+                    for (dx = -2; dx <= 2; dx++) {
+                        int xx = X + dx, yy = Y + dy;
+                        if (dx * dx + dy * dy > 5 || xx < 0 || xx >= FB_CW || yy < 0 || yy >= FB_CH) continue;
+                        if (sm[yy][xx] > o) o = sm[yy][xx];
+                    }
+                fontAtlasBig[(gy + Y) * FB_AW + gx + X]       = 0x00ffffffu | ((u32)(sm[Y][X] * 128.0f + 0.5f) << 24);
+                fontAtlasBig[(gy + 192 + Y) * FB_AW + gx + X] = 0x00ffffffu | ((u32)(o * 128.0f + 0.5f) << 24);   /* contorno */
+            }
+    }
+    memset(&fontTexBig, 0, sizeof(fontTexBig));
+    fontTexBig.Width = FB_AW; fontTexBig.Height = FB_AH;
+    fontTexBig.PSM = GS_PSM_CT32;
+    fontTexBig.Mem = (void *)fontAtlasBig;
+    fontTexBig.Filter = GS_FILTER_LINEAR;
+    fontTexBig.Vram = gsKit_vram_alloc(g, gsKit_texture_size(FB_AW, FB_AH, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
+    if (fontTexBig.Vram == GSKIT_ALLOC_ERROR) return;   /* sem VRAM: segue com a fonte normal em todos os tamanhos */
+    gsKit_texture_upload(g, &fontTexBig);
+    useBig = 1;
+}
 
 static void initFontTex(void)
 {
@@ -980,15 +1041,19 @@ static void initFontTex(void)
     if (fontTex.Vram == GSKIT_ALLOC_ERROR) return;      /* sem VRAM: continua com a fonte padrao */
     gsKit_texture_upload(g, &fontTex);
     useFont = 1;
+    initFontBig(al);
 }
 
 /* desenha o texto: avanco de 24.5*s por letra (como a fonte antiga), y = topo das maiusculas */
 static void textRaw(float x, float y, float s, u64 c, const char *t)
 {
     float A, kx, ky, qx, qy, ox, oy;
-    int al, outl, pass;
+    int al, outl, pass, big, cw, chh, oo;
+    GSTEXTURE *ft;
     u64 olc;
     if (!useFont) { gsKit_fontm_print_scaled(g, fm, x + OX, y + OY, 2, s, c, (char *)t); return; }
+    big = useBig && s >= FB_SCALE;                          /* titulos e textos grandes: fonte ampliada (bordas lisas) */
+    ft = big ? &fontTexBig : &fontTex; cw = big ? FB_CW : FT_CW; chh = big ? FB_CH : FT_CH; oo = big ? 192 : 96;
     A = 24.5f * s; kx = A / 12.0f; ky = 24.5f * legH(s) / 12.0f;
     qx = FT_CW * kx; qy = FT_CH * ky; ox = 2.0f * kx; oy = 4.0f * ky;
     al = (int)((c >> 24) & 0xff);
@@ -1002,12 +1067,13 @@ static void textRaw(float x, float y, float s, u64 c, const char *t)
             float px, py;
             if (ch >= 'a' && ch <= 'z') ch -= 32;
             if (ch <= ' ' || ch > 95) continue;
-            gi = ch - 32; u = (gi % 16) * FT_CW; v = (gi / 16) * FT_CH;
+            gi = ch - 32; u = (gi % 16) * cw; v = (gi / 16) * chh;
             px = cx - ox + OX; py = y - oy + OY;
+            if (big) { px = floorf(px + 0.5f); py = floorf(py + 0.5f); }    /* pixel inteiro: sem borrar no meio do pixel */
             if (pass == 0) {
-                gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)(v + 96), px + qx, py + qy, (float)(u + FT_CW), (float)(v + 96 + FT_CH), 2, olc);
+                gsKit_prim_sprite_texture(g, ft, px, py, (float)u, (float)(v + oo), px + qx, py + qy, (float)(u + cw), (float)(v + oo + chh), 2, olc);
             } else {
-                gsKit_prim_sprite_texture(g, &fontTex, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + FT_CW), (float)(v + FT_CH), 2, c);
+                gsKit_prim_sprite_texture(g, ft, px, py, (float)u, (float)v, px + qx, py + qy, (float)(u + cw), (float)(v + chh), 2, c);
             }
         }
     }
