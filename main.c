@@ -2425,22 +2425,44 @@ static void endTurn(int foul, int ownPocket)
 }
 
 /* ================= LOJA: moedas, itens e save no memory card ================= */
-#define SH_MAXI 6
+#define SH_MAXI 24                                  /* maximo de itens por aba (a posse e um mascara de bits num int: ate 31) */
 typedef struct { const char *name; int price; const char *desc; } ShopItem;
 static const char *const SH_CATN[SH_CATS] = { "GIZ", "BOLAS", "RASTRO", "CACAPA", "TITULOS", "MOLDURAS" };
-static const int SH_N[SH_CATS] = { 6, 5, 5, 4, 6, 6 };
+static const int SH_N[SH_CATS] = { 16, 5, 5, 11, 24, 15 };
 static const ShopItem SH_IT[SH_CATS][SH_MAXI] = {
     { { "AZUL", 0, "O GIZ CLASSICO" }, { "VERDE", 80, "NUVEM DE PO VERDE" }, { "ROSA", 80, "NUVEM DE PO ROSA" },
-      { "DOURADO", 200, "PO DOURADO COM BRILHOS" }, { "ROXO MAGICO", 150, "PO MAGICO COM FAISCAS" }, { "ARCO-IRIS", 300, "MUDA DE COR O TEMPO TODO" } },
+      { "DOURADO", 200, "PO DOURADO COM BRILHOS" }, { "ROXO MAGICO", 150, "PO MAGICO COM FAISCAS" }, { "ARCO-IRIS", 300, "MUDA DE COR O TEMPO TODO" },
+      { "VERMELHO", 80, "GIZ VERMELHO VIVO" }, { "LARANJA", 80, "GIZ LARANJA" }, { "CIANO", 100, "GIZ CIANO BRILHANTE" },
+      { "VERDE ACIDO", 120, "PO VERDE FLUORESCENTE" }, { "OBSIDIANA", 150, "GIZ PRETO COM PO ESCURO" }, { "PRATA", 200, "GIZ PRATEADO COM BRILHO" },
+      { "VINHO", 120, "GIZ VINHO ELEGANTE" }, { "NEVE", 150, "GIZ BRANCO COMO NEVE" },
+      { "FOGO", 350, "CHAMAS: VERMELHO, LARANJA E AMARELO" }, { "GALAXIA", 400, "AZUL, ROXO E ROSA DO ESPACO" } },
     { { "CLASSICAS", 0, "AS BOLAS DE SEMPRE" }, { "CAVEIRA", 250, "CAVEIRINHAS NAS BOLAS" }, { "PLANETAS", 250, "FAIXAS E ANEIS DE PLANETA" },
       { "FRUTAS", 200, "SEMENTES DE FRUTA NA CASCA" }, { "BRILHO NO ESCURO", 300, "BOLAS NEON QUE BRILHAM" } },
     { { "NENHUM", 0, "SEM RASTRO" }, { "FOGO", 150, "RASTRO DE FOGO ATRAS DA BOLA" }, { "GELO", 150, "RASTRO DE GELO ATRAS DA BOLA" },
       { "NEON VERDE", 150, "RASTRO NEON ATRAS DA BOLA" }, { "ARCO-IRIS", 300, "RASTRO COLORIDO ATRAS DA BOLA" } },
-    { { "PADRAO", 0, "SO A BOLA CAINDO" }, { "CONFETE", 120, "EXPLOSAO DE CONFETE" }, { "FOGO", 200, "EXPLOSAO DE FOGO" }, { "RAIO", 250, "UM RAIO CAI NA CACAPA" } },
+    { { "PADRAO", 0, "SO A BOLA CAINDO" }, { "CONFETE", 120, "EXPLOSAO DE CONFETE" }, { "FOGO", 200, "EXPLOSAO DE FOGO" }, { "RAIO", 250, "UM RAIO CAI NA CACAPA" },
+      { "ESTRELAS", 200, "CHUVA DE ESTRELAS DOURADAS" }, { "CORACOES", 200, "CORACOES SOBEM DA CACAPA" }, { "GELO", 250, "CACOS DE GELO VOANDO" },
+      { "MOEDAS", 300, "MOEDAS PULANDO PARA FORA" }, { "BOLHAS", 150, "BOLHAS SOBEM DA CACAPA" },
+      { "FOGOS", 400, "FOGOS DE ARTIFICIO COLORIDOS" }, { "MAGIA", 350, "FAISCAS MAGICAS GIRANDO" } },
     { { "NENHUM", 0, "SEM TITULO NO PLACAR" }, { "NOVATO", 30, "PARA QUEM ESTA COMECANDO" }, { "TUBARAO", 150, "O TERROR DA MESA" },
-      { "MESTRE DAS CACAPAS", 300, "NINGUEM ENCACAPA COMO VOCE" }, { "REI DA SINUCA", 500, "O TITULO DOS CAMPEOES" }, { "LENDA", 800, "SO OS MELHORES USAM" } },
+      { "MESTRE DAS CACAPAS", 300, "NINGUEM ENCACAPA COMO VOCE" }, { "REI DA SINUCA", 500, "O TITULO DOS CAMPEOES" }, { "LENDA", 800, "SO OS MELHORES USAM" },
+      /* titulos dos PERSONAGENS (frase de cada um), do mais comum ao mais raro. Sempre no FIM da lista: o save guarda o numero do item */
+      { "NOOT NOOT", 100, "PINGUIM: O GRITO DO PINGUIM" }, { "BIP BOP", 100, "ROBO: BIP BOP, TACADA CALCULADA" },
+      { "VIM EM PAZ", 100, "ALIEN: VIM EM PAZ... E PARA GANHAR" }, { "YEEHAW", 100, "COWBOY: O GRITO DO FAROESTE" },
+      { "VALHALLA", 200, "VIKING: ATE O SALAO DOS HEROIS" }, { "SILENCIO", 200, "NINJA: ELE ENCACAPA SEM FAZER BARULHO" },
+      { "NAO CONTAVAM", 200, "CHAPOLIN: NAO CONTAVAM COM MINHA ASTUCIA" }, { "ARRR MATEY", 200, "PIRATA: ARRR! TODOS NO CONVES" },
+      { "MIAU", 200, "GATO: MIAU! SETE VIDAS NA MESA" },
+      { "ACESSO TOTAL", 300, "HACKER: SISTEMA INVADIDO" }, { "FURIA DO MAR", 300, "POSEIDON: A MARE SOBE" },
+      { "NOITE ETERNA", 400, "VAMPIRO: A NOITE E MINHA" }, { "ABRACADABRA", 400, "MAGO: UM TOQUE E A BOLA CAI" },
+      { "HO HO HO", 400, "PAPAI NOEL: HO HO HO! FELIZ NATAL" }, { "HORA CERTA", 400, "MESTRE DO TEMPO: SEMPRE NA HORA H" },
+      { "ODEIO NATAL", 600, "GRINCH: VOU ROUBAR AS SUAS BOLAS" }, { "ESTA PRESO", 600, "POLICIAL: MAO NA MESA, VOCE ESTA PRESO" },
+      { "SETE PALMOS", 900, "COVEIRO: SUAS BOLAS VAO PARA A COVA" } },
     { { "NENHUMA", 0, "PAINEL SEM MOLDURA" }, { "DOURADA", 150, "MOLDURA DE OURO" }, { "NEON AZUL", 200, "MOLDURA NEON PULSANDO" },
-      { "FOGO", 300, "MOLDURA COM CHAMAS" }, { "GELO", 300, "MOLDURA COM GELO" }, { "ARCO-IRIS", 500, "MOLDURA QUE MUDA DE COR" } },
+      { "FOGO", 300, "MOLDURA COM CHAMAS" }, { "GELO", 300, "MOLDURA COM GELO" }, { "ARCO-IRIS", 500, "MOLDURA QUE MUDA DE COR" },
+      { "ROSA NEON", 200, "NEON ROSA PULSANDO" }, { "VERDE NEON", 200, "NEON VERDE PULSANDO" }, { "ROXA", 350, "FAISCAS MAGICAS CORRENDO" },
+      { "NATAL", 350, "PISCA-PISCA VERMELHO, VERDE E BRANCO" }, { "CORACOES", 300, "CORACOES PULSANDO NOS CANTOS" },
+      { "ESTRELAS", 350, "ESTRELINHAS PISCANDO" }, { "ELETRICA", 450, "RAIOS CORRENDO NA BORDA" },
+      { "SANGUE", 450, "PINGOS DE SANGUE ESCORRENDO" }, { "PRATA", 500, "METAL COM BRILHO CORRENDO" } },
 };
 
 #if USE_MEMCARD
@@ -7732,14 +7754,32 @@ static const u8 SH_CH[5][4][3] = {       /* giz: sombra, cor, brilho, po */
     { {110,80,0},  {235,180,30}, {255,225,110}, {255,235,130} },
     { {50,20,100}, {140,80,230}, {190,150,255}, {210,180,255} } };
 
+static const u8 SH_CH2[8][4][3] = {      /* giz novos (itens 6 a 13): sombra, cor, brilho, po */
+    { {110,10,20},  {225,50,60},  {255,130,130}, {255,170,170} },     /* 6 VERMELHO */
+    { {130,60,0},   {250,140,30}, {255,190,100}, {255,210,140} },     /* 7 LARANJA */
+    { {0,90,100},   {30,210,220}, {130,245,250}, {170,250,255} },     /* 8 CIANO */
+    { {60,100,0},   {160,230,30}, {210,255,110}, {225,255,150} },     /* 9 VERDE ACIDO */
+    { {4,4,8},      {40,40,52},   {110,110,135}, {150,150,175} },     /* 10 OBSIDIANA */
+    { {70,75,88},   {185,190,205},{235,240,250}, {245,248,255} },     /* 11 PRATA */
+    { {70,8,30},    {150,25,60},  {215,90,120},  {240,130,160} },     /* 12 VINHO */
+    { {150,160,175},{240,245,252},{255,255,255}, {255,255,255} } };   /* 13 NEVE */
+
 static void chalkCol(int st, int k, int *r, int *gg, int *bb)
 {
-    if (st >= 5) {                                       /* ARCO-IRIS: muda de cor sozinho */
+    if (st == 5) {                                       /* ARCO-IRIS: muda de cor sozinho */
         hue3(menuT * 0.02f + k * 0.05f, r, gg, bb);
         if (k == 0) { *r /= 3; *gg /= 3; *bb /= 3; }
         else if (k >= 2) { *r = (*r + 255) / 2; *gg = (*gg + 255) / 2; *bb = (*bb + 255) / 2; }
         return;
     }
+    if (st >= 14) {                                      /* 14 FOGO (vermelho-laranja-amarelo) e 15 GALAXIA (azul-roxo-rosa): animados */
+        float h = st == 14 ? 0.035f + 0.035f * sinf(menuT * 0.12f + k * 0.9f) : 0.62f + 0.14f * sinf(menuT * 0.05f + k * 0.7f);
+        hue3(h, r, gg, bb);
+        if (k == 0) { *r /= 3; *gg /= 3; *bb /= 3; }
+        else if (k >= 2) { *r = (*r + 255) / 2; *gg = (*gg + 255) / 2; *bb = (*bb + 255) / 2; }
+        return;
+    }
+    if (st >= 6) { *r = SH_CH2[st - 6][k][0]; *gg = SH_CH2[st - 6][k][1]; *bb = SH_CH2[st - 6][k][2]; return; }
     *r = SH_CH[st][k][0]; *gg = SH_CH[st][k][1]; *bb = SH_CH[st][k][2];
 }
 
@@ -7805,12 +7845,26 @@ static void pfxBurst(int kind, float x, float y)
     int i, n;
     Pfx *p;
     if (kind <= 0) return;
-    n = kind == 1 ? 30 : (kind == 2 ? 24 : 12);
+    {   static const int NN[11] = { 0, 30, 24, 12, 16, 14, 22, 14, 16, 30, 26 };
+        n = NN[kind < 11 ? kind : 3];
+    }
     for (i = 0; i < n; i++) {
         float a = pfF() * 6.2831853f, sp;
         p = pfNew(); if (!p) return;
         p->x = x; p->y = y; p->kind = kind; p->c = pfRnd() % 1000;
-        if (kind == 1)      { sp = 40.0f + pfF() * 110.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp - 30.0f; p->life = p->max = 50 + pfRnd() % 30; }
+        if (kind >= 4) {                                 /* efeitos novos: tipo interno = 10 + item (14 a 20) */
+            p->kind = 10 + kind;
+            switch (kind) {
+            case 4:  sp = 30.0f + pfF() * 90.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp; p->life = p->max = 36 + pfRnd() % 20; break;            /* ESTRELAS */
+            case 5:  p->vx = (pfF() - 0.5f) * 40.0f; p->vy = -30.0f - pfF() * 50.0f; p->life = p->max = 40 + pfRnd() % 25; break;                  /* CORACOES */
+            case 6:  sp = 40.0f + pfF() * 80.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp - 20.0f; p->life = p->max = 28 + pfRnd() % 20; break;   /* GELO */
+            case 7:  p->vx = (pfF() - 0.5f) * 90.0f; p->vy = -90.0f - pfF() * 80.0f; p->life = p->max = 46 + pfRnd() % 20; break;                   /* MOEDAS */
+            case 8:  p->x = x + (pfF() - 0.5f) * 16.0f; p->vx = (pfF() - 0.5f) * 30.0f; p->vy = -20.0f - pfF() * 30.0f; p->life = p->max = 46 + pfRnd() % 24; break;   /* BOLHAS */
+            case 9:  sp = 60.0f + pfF() * 100.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp; p->life = p->max = 28 + pfRnd() % 14; break;          /* FOGOS */
+            default: sp = 20.0f + pfF() * 70.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp; p->life = p->max = 36 + pfRnd() % 20; break;          /* MAGIA */
+            }
+        }
+        else if (kind == 1)      { sp = 40.0f + pfF() * 110.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp - 30.0f; p->life = p->max = 50 + pfRnd() % 30; }
         else if (kind == 2) { sp = 10.0f + pfF() * 50.0f;  p->vx = cosf(a) * sp; p->vy = -30.0f - pfF() * 70.0f; p->life = p->max = 28 + pfRnd() % 22; }
         else                { sp = 60.0f + pfF() * 120.0f; p->vx = cosf(a) * sp; p->vy = sinf(a) * sp; p->life = p->max = 14 + pfRnd() % 10; }
     }
@@ -7834,6 +7888,12 @@ static void pfxUpdate(void)
         p->x += p->vx / 60.0f; p->y += p->vy / 60.0f;
         if (p->kind == 1) { p->vy += 2.0f; p->vx *= 0.985f; }
         else if (p->kind == 2) { p->vx *= 0.97f; p->vy -= 0.3f; }
+        else if (p->kind == 14) { p->vx *= 0.97f; p->vy *= 0.97f; }                                     /* estrelas */
+        else if (p->kind == 15) p->vx += sinf(p->life * 0.3f + p->c) * 0.6f;                            /* coracoes balancam */
+        else if (p->kind == 16) { p->vy += 1.5f; p->vx *= 0.98f; }                                      /* gelo cai */
+        else if (p->kind == 17) { p->vy += 5.0f; p->vx *= 0.99f; }                                      /* moedas caem */
+        else if (p->kind == 19) { p->vy += 1.2f; p->vx *= 0.985f; }                                     /* fogos */
+        else if (p->kind == 20) { float c0 = cosf(0.09f), s0 = sinf(0.09f), ox = p->vx; p->vx = ox * c0 - p->vy * s0; p->vy = ox * s0 + p->vy * c0; }   /* magia gira */
     }
 }
 
@@ -7861,18 +7921,122 @@ static void pfxDraw(void)
                 beam(px, py, nx, ny, 1.8f, CA(255, 255, 255, (int)(0xd0 * t)));
                 px = nx; py = ny;
             }
+        } else if (p->kind >= 14) {                      /* efeitos novos da loja */
+            int al = (int)(0xa0 * (t > 0.4f ? 1.0f : t / 0.4f));
+            switch (p->kind) {
+            case 14: star4(p->x, p->y, 2.0f + 3.5f * t, CA(255, 225 + (p->c & 15), 90, al)); break;                      /* estrela dourada */
+            case 15: {                                                                                                    /* coracao */
+                float hs = 2.2f + 0.8f * t;
+                discN(p->x - hs * 0.5f, p->y - hs * 0.2f, hs * 0.55f, CA(255, 90, 150, al), 8);
+                discN(p->x + hs * 0.5f, p->y - hs * 0.2f, hs * 0.55f, CA(255, 90, 150, al), 8);
+                tri(p->x - hs, p->y, p->x + hs, p->y, p->x, p->y + hs * 1.3f, CA(255, 90, 150, al));
+                break; }
+            case 16: tri(p->x, p->y - 3.5f, p->x + 2.0f, p->y + 1.5f, p->x - 2.0f, p->y + 1.5f, CA(200, 235, 255, al)); break;   /* caco de gelo */
+            case 17: discN(p->x, p->y, 3.4f, CA(150, 100, 10, al), 8); discN(p->x, p->y, 2.6f, CA(255, 210, 50, al), 8); discN(p->x - 0.8f, p->y - 0.8f, 0.9f, CA(255, 250, 200, al), 4); break;   /* moeda */
+            case 18: ringN(p->x, p->y, 2.5f + (1.0f - t) * 2.5f, 1.0f, 10, CA(190, 230, 255, al)); discN(p->x - 1.0f, p->y - 1.0f, 0.7f, CA(255, 255, 255, al), 4); break;   /* bolha */
+            case 19: line(p->x, p->y, p->x - p->vx * 0.06f, p->y - p->vy * 0.06f, hueCol(p->c * 0.0043f + menuT * 0.01f, al)); discN(p->x, p->y, 1.4f, CA(255, 255, 220, al), 6); break;   /* fogos de artificio */
+            default: discN(p->x, p->y, 3.0f * t + 1.0f, CA(150, 80, 230, al / 2), 8); star4(p->x, p->y, 1.8f + 2.0f * t, CA(215, 160, 255, al)); break;   /* magia */
+            }
         } else {                                         /* anel de clarao */
-            ringN(p->x, p->y, 4.0f + (1.0f - t) * 26.0f, 2.0f, 20, p->c == 2 ? CA(255, 170, 40, (int)(0x90 * t)) : CA(170, 210, 255, (int)(0x90 * t)));
+            u64 rc;
+            if (p->c == 2) rc = CA(255, 170, 40, (int)(0x90 * t));                 /* fogo */
+            else if (p->c == 4 || p->c == 7) rc = CA(255, 220, 80, (int)(0x90 * t));    /* estrelas, moedas */
+            else if (p->c == 5) rc = CA(255, 120, 170, (int)(0x90 * t));           /* coracoes */
+            else if (p->c == 10) rc = CA(190, 120, 255, (int)(0x90 * t));          /* magia */
+            else if (p->c == 9) rc = hueCol(menuT * 0.02f, (int)(0x90 * t));       /* fogos */
+            else rc = CA(170, 210, 255, (int)(0x90 * t));                          /* raio, gelo, bolhas */
+            ringN(p->x, p->y, 4.0f + (1.0f - t) * 26.0f, 2.0f, 20, rc);
         }
     }
 }
 
 /* ---- moldura do painel do jogador ---- */
+static void frameP(float x1, float y1, float x2, float y2, float u, float *px, float *py)   /* ponto 'u' (0 a 1) ao longo do contorno do retangulo */
+{
+    float w = x2 - x1, h = y2 - y1, per = 2.0f * (w + h), d;
+    u -= floorf(u); d = u * per;
+    if (d < w)               { *px = x1 + d;               *py = y1; }
+    else if (d < w + h)      { *px = x2;                   *py = y1 + (d - w); }
+    else if (d < 2 * w + h)  { *px = x2 - (d - w - h);     *py = y2; }
+    else                     { *px = x1;                   *py = y2 - (d - 2 * w - h); }
+}
+
+static void shHeart(float x, float y, float s, u64 c)
+{
+    discN(x - s * 0.5f, y - s * 0.2f, s * 0.55f, c, 8);
+    discN(x + s * 0.5f, y - s * 0.2f, s * 0.55f, c, 8);
+    tri(x - s, y, x + s, y, x, y + s * 1.3f, c);
+}
+
 static void shopFrameDraw(int st, float x1, float y1, float x2, float y2)
 {
     float pul = 0.5f + 0.5f * sinf(menuT * 0.15f);
     int k;
     if (st <= 0) return;
+    if (st >= 6) {                                       /* molduras novas (itens 6 a 14) */
+        float px, py;
+        switch (st) {
+        case 6: case 7: {                                /* ROSA NEON / VERDE NEON */
+            int r = st == 6 ? 255 : 60, g = st == 6 ? 70 : 255, b = st == 6 ? 200 : 110;
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(r, g, b, 0x70 + (int)(0x50 * pul)));
+            frameR(x1 - 4, y1 - 4, x2 + 4, y2 + 4, 1.0f, CA((r + 255) / 2, (g + 255) / 2, (b + 255) / 2, 0x30 + (int)(0x30 * pul)));
+            break; }
+        case 8:                                          /* ROXA: faiscas magicas correndo */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(170, 90, 255, 0x90 + (int)(0x40 * pul)));
+            for (k = 0; k < 4; k++) {
+                frameP(x1 - 2, y1 - 2, x2 + 2, y2 + 2, menuT * 0.006f + k * 0.25f, &px, &py);
+                star4(px, py, 3.0f + 1.5f * pul, CA(225, 190, 255, 0xc0));
+            }
+            break;
+        case 9:                                          /* NATAL: pisca-pisca vermelho, verde e branco */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(190, 30, 40, 0xc0));
+            for (k = 0; k < 18; k++) {
+                int ph = (k + menuT / 18) % 3, on = ((menuT / 9 + k) & 3) != 0;
+                frameP(x1 - 2, y1 - 2, x2 + 2, y2 + 2, k / 18.0f, &px, &py);
+                discN(px, py, 2.4f, ph == 0 ? CA(255, 70, 70, on ? 0xe0 : 0x50) : (ph == 1 ? CA(80, 240, 110, on ? 0xe0 : 0x50) : CA(255, 255, 230, on ? 0xe0 : 0x50)), 8);
+            }
+            break;
+        case 10:                                         /* CORACOES: coracoes pulsando nos cantos */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(255, 110, 170, 0xb0));
+            shHeart(x1 - 2, y1 - 3, 3.0f + 1.2f * pul, CA(255, 90, 150, 0xe0)); shHeart(x2 + 2, y1 - 3, 3.0f + 1.2f * (1.0f - pul), CA(255, 90, 150, 0xe0));
+            shHeart(x1 - 2, y2 + 1, 3.0f + 1.2f * (1.0f - pul), CA(255, 90, 150, 0xe0)); shHeart(x2 + 2, y2 + 1, 3.0f + 1.2f * pul, CA(255, 90, 150, 0xe0));
+            break;
+        case 11:                                         /* ESTRELAS: estrelinhas piscando */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 1.5f, CA(255, 215, 90, 0xa0));
+            for (k = 0; k < 8; k++) {
+                float tw2 = 0.5f + 0.5f * sinf(menuT * 0.12f + k * 1.9f);
+                frameP(x1 - 2, y1 - 2, x2 + 2, y2 + 2, (k + 0.5f) / 8.0f, &px, &py);
+                star4(px, py, 1.5f + 3.0f * tw2, CA(255, 245, 170, 0x70 + (int)(0x60 * tw2)));
+            }
+            break;
+        case 12:                                         /* ELETRICA: raios no topo e na base */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 1.5f, CA(90, 160, 255, 0x90));
+            for (k = 0; k < 14; k++) {
+                float xa = x1 + (x2 - x1) * k / 14.0f, xb = x1 + (x2 - x1) * (k + 1) / 14.0f;
+                float ja = (float)(((k * 37 + menuT / 3 * 13) % 7) - 3) * 0.9f, jb = (float)((((k + 1) * 37 + menuT / 3 * 13) % 7) - 3) * 0.9f;
+                line(xa, y1 - 3 + ja, xb, y1 - 3 + jb, CA(255, 255, 170, 0xb0));
+                line(xa, y2 + 3 - jb, xb, y2 + 3 - ja, CA(255, 255, 170, 0xb0));
+            }
+            break;
+        case 13:                                         /* SANGUE: pingos escorrendo */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(150, 10, 20, 0xd0));
+            for (k = 0; k < 9; k++) {
+                float fx = x1 + (x2 - x1) * (k + 0.5f) / 9.0f, ln = 3.0f + 6.0f * (0.5f + 0.5f * sinf(menuT * 0.05f + k * 2.1f));
+                rect(fx - 1.2f, y2, fx + 1.2f, y2 + ln, CA(175, 10, 22, 0xd0));
+                discN(fx, y2 + ln, 2.0f, CA(175, 10, 22, 0xd0), 8);
+            }
+            break;
+        default:                                         /* 14 PRATA: metal com brilho correndo */
+            frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, CA(200, 205, 222, 0xc0));
+            frameR(x1, y1, x2, y2, 1.0f, CA(255, 255, 255, 0x50));
+            frameP(x1 - 2, y1 - 2, x2 + 2, y2 + 2, menuT * 0.008f, &px, &py);
+            star4(px, py, 4.5f, CA(255, 255, 255, 0xe0));
+            frameP(x1 - 2, y1 - 2, x2 + 2, y2 + 2, menuT * 0.008f + 0.5f, &px, &py);
+            star4(px, py, 3.5f, CA(255, 255, 255, 0xb0));
+            break;
+        }
+        return;
+    }
     if (st == 1) {                                       /* DOURADA */
         frameR(x1 - 2, y1 - 2, x2 + 2, y2 + 2, 2.0f, COL(255,205,60));
         frameR(x1, y1, x2, y2, 1.0f, CA(255, 240, 150, 0x90));
@@ -7908,7 +8072,8 @@ static void shopFrameDraw(int st, float x1, float y1, float x2, float y2)
 }
 
 /* ---- tela da loja ---- */
-static int shCat, shSel, shNote;
+static int shCat, shSel, shNote, shTop;               /* shTop: primeiro item visivel da lista (rolagem) */
+#define SH_VIS 6                                            /* itens visiveis de uma vez no painel */
 static char shNoteTxt[40];
 static const int SH_PREV[4] = { 1, 5, 9, 12 };
 
@@ -7933,9 +8098,18 @@ static void shopHover(void)
     else if (shCat == SC_CACAPA) pfxBurst(shSel, 480.0f, 225.0f);
 }
 
+static void shopFixTop(void)                       /* mantem o item escolhido dentro da janela de 6 itens */
+{
+    int n = SH_N[shCat];
+    if (shSel < shTop) shTop = shSel;
+    if (shSel > shTop + SH_VIS - 1) shTop = shSel - SH_VIS + 1;
+    if (shTop > n - SH_VIS) shTop = n - SH_VIS;
+    if (shTop < 0) shTop = 0;
+}
+
 static void shopOpen(void)
 {
-    state = S_SHOP; shCat = 0; shSel = shEq[0]; shNote = 0;
+    state = S_SHOP; shCat = 0; shSel = shEq[0]; shNote = 0; shTop = 0; shopFixTop();
 }
 
 static void shopClose(void)
@@ -7964,6 +8138,8 @@ static void shopInput(u32 pr)
         } else shopNote("MOEDAS INSUFICIENTES");
     }
     if (pr & (PAD_CIRCLE | PAD_START)) { shopClose(); return; }
+    if (shCat != oc) shTop = 0;
+    shopFixTop();
     if (shCat != oc || shSel != os) shopHover();
 }
 
@@ -8006,8 +8182,10 @@ static void drawShopScreen(void)
     }
 
     panel(36, 104, 340, 352);
-    for (i = 0; i < n; i++) {
-        float y = 114.0f + i * 38.0f;
+    if (shTop > 0) tri(183, 111, 193, 111, 188, 105, COL(255, 215 + (int)(30 * pul), 70));                 /* ha mais itens acima */
+    if (shTop + SH_VIS < n) tri(183, 345, 193, 345, 188, 351, COL(255, 215 + (int)(30 * pul), 70));        /* ha mais itens abaixo */
+    for (i = shTop; i < n && i < shTop + SH_VIS; i++) {
+        float y = 114.0f + (i - shTop) * 38.0f;
         int sel = (i == shSel), own = (shOwn[shCat] >> i) & 1, eq = (shEq[shCat] == i);
         const ShopItem *it = &SH_IT[shCat][i];
         if (sel) selBar(40, 336, y + 2, 24);
