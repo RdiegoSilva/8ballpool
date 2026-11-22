@@ -7252,6 +7252,69 @@ static void drawCharSelect(void)
     }
 }
 
+/* ---------- seletor de MODO em cartoes lado a lado (etapa 1 do configurar partida): um cartao por modo, com icone e nome ---------- */
+#define MCARD_H 54.0f                                           /* altura da linha de cartoes (o cartao em si tem 50) */
+static void mcBall(float x, float y, float r, const u8 *c, int kind)   /* kind: 0 lisa, 1 listrada, 2 bola 8 */
+{
+    static const u8 BLK[3] = { 22, 22, 26 }, WHT[3] = { 240, 240, 240 };
+    discN(x + 1.0f, y + 1.2f, r, CA(0, 0, 0, 0x34), 12);
+    if (kind == 2) {
+        discN(x, y, r, shade(BLK, 0.8f, 0), 14);
+        discN(x, y, r * 0.42f, shade(WHT, 1.0f, 0), 8);
+    } else if (kind == 1) {
+        discN(x, y, r, shade(WHT, 0.75f, 0), 14);
+        discN(x, y, r * 0.92f, shade(WHT, 1.0f, 0), 14);
+        rect(x - r * 0.78f, y - r * 0.4f, x + r * 0.78f, y + r * 0.4f, shade(c, 1.0f, 0));
+    } else {
+        discN(x, y, r, shade(c, 0.55f, 0), 14);
+        discN(x, y, r * 0.9f, shade(c, 1.0f, 0), 14);
+    }
+    discN(x - r * 0.32f, y - r * 0.36f, r * 0.22f, COL(255, 255, 255), 6);
+}
+
+static void mcIcon(int m, float cx, float cy)
+{
+    static const u8 RED[3] = { 220, 48, 48 }, YEL[3] = { 245, 205, 50 }, BLU[3] = { 50, 100, 220 }, ORA[3] = { 240, 130, 40 };
+    int i, j;
+    switch (m) {
+    case GM_8BALL:  mcBall(cx, cy, 10.0f, RED, 2); break;
+    case GM_BR:     mcBall(cx - 7.5f, cy, 7.0f, RED, 0); mcBall(cx + 7.5f, cy, 7.0f, YEL, 0); break;
+    case GM_MINI:   mcBall(cx - 5.5f, cy + 5.0f, 5.2f, BLU, 0); mcBall(cx + 5.5f, cy + 5.0f, 5.2f, ORA, 1); mcBall(cx, cy - 4.5f, 5.2f, RED, 2); break;
+    case GM_SUDDEN:                                                    /* raio */
+        quad(cx + 1, cy - 11, cx + 8, cy - 11, cx + 1, cy + 1, cx - 6, cy + 1, COL(255, 226, 60));
+        tri(cx - 6, cy + 1, cx + 6, cy + 1, cx - 3, cy + 12, COL(255, 226, 60));
+        quad(cx + 1, cy - 11, cx + 3, cy - 11, cx - 4, cy + 1, cx - 6, cy + 1, COL(255, 250, 170));
+        break;
+    case GM_RACE:                                                      /* bandeira quadriculada */
+        rect(cx - 10, cy - 11, cx - 8, cy + 11, COL(200, 200, 210));
+        for (i = 0; i < 4; i++) for (j = 0; j < 3; j++)
+            rect(cx - 8 + i * 4.5f, cy - 11 + j * 4.5f, cx - 8 + (i + 1) * 4.5f, cy - 11 + (j + 1) * 4.5f, ((i + j) & 1) ? COL(24, 24, 30) : COL(245, 245, 245));
+        break;
+    default:        mcBall(cx - 7.0f, cy, 6.0f, BLU, 0); mcBall(cx + 7.0f, cy, 6.0f, ORA, 1); break;   /* duelo */
+    }
+}
+
+static void drawModeCards(float y, int foc)
+{
+    static const char *const L1[NGM] = { "BOLA 8", "SINUCA", "BOLA 8", "MORTE", "CORRIDA", "BOLA 8" };
+    static const char *const L2[NGM] = { "CLASSICA", "BRASILEIRA", "MINI", "SUBITA", "DE 3", "DUELO" };
+    const float x0 = 68.0f, cw = 76.0f, gap = (504.0f - NGM * 76.0f) / (NGM - 1);
+    int m;
+    for (m = 0; m < NGM; m++) {
+        int on = (m == gmode), hot = on && foc;
+        float x = x0 + m * (cw + gap), t = y - 6.0f - (hot ? 2.0f * fabsf(sinf(menuT * 0.1f)) : 0.0f), b = y + 44.0f;
+        u64 bc = hot ? COL(255, 215, 60) : (on ? COL(90, 200, 120) : COL(60, 70, 88));
+        u64 fc = hot ? COL(128, 84, 12) : (on ? COL(22, 76, 48) : COL(30, 26, 60));
+        u64 tc = hot ? COL(255, 240, 150) : (on ? COL(170, 235, 190) : COL(140, 150, 170));
+        cham(x - 1.5f, t - 1.5f, x + cw + 1.5f, b + 1.5f, 6.0f, bc);
+        cham(x, t, x + cw, b, 5.0f, fc);
+        rect(x + 5, t, x + cw - 5, t + 7, CA(255, 255, 255, hot ? 0x22 : 0x12));
+        mcIcon(m, x + cw * 0.5f, t + 15.0f);
+        text(x + cw * 0.5f - tw(0.25f, L1[m]) * 0.5f, t + 28.0f, 0.25f, tc, L1[m]);
+        text(x + cw * 0.5f - tw(0.25f, L2[m]) * 0.5f, t + 38.0f, 0.25f, tc, L2[m]);
+    }
+}
+
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
@@ -7259,10 +7322,13 @@ static void drawSetupScreen(void)
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
-    const float rh = 36.0f;
-    float y2 = 86.0f + n * rh - 4.0f;
+    const float rh = (setStep == 0 && n >= 6) ? 32.0f : 36.0f;     /* muitas linhas na etapa 1: um pouco mais juntas para caber os cartoes de modo */
+    float ry[NSR + 1], y2, acc = 0.0f;
     const char *hint;
     char buf[40];
+
+    for (i = 0; i < n; i++) { ry[i] = 86.0f + acc; acc += (v[i] == SR_MODE) ? MCARD_H : rh; }   /* a linha do MODO e mais alta (cartoes) */
+    y2 = 86.0f + acc - 4.0f;
 
     uiTitle(tourney ? "CONFIGURAR TORNEIO" : (training ? "MODO TREINO" : "CONFIGURAR PARTIDA"));
     for (i = 0; i < NSTEPS; i++) {                        /* barra de etapas */
@@ -7291,8 +7357,10 @@ static void drawSetupScreen(void)
 
     for (i = 0; i < n; i++) {
         int row = v[i], sel = (i == setSel);
-        float y = 86.0f + i * rh, vx;
+        float y = ry[i], vx;
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
+
+        if (row == SR_MODE) { drawModeCards(y, sel); continue; }          /* seletor de modo: cartoes lado a lado */
 
         if (row == SR_NEXT || row == SR_GO) {                     /* botao verde grande (como o JOGAR do 8 Ball Pool) */
             cham(70.0f, y - 6, 570.0f, y + 25, 6.0f, sel ? COL(255,236,120) : COL(18,70,24));
@@ -7427,7 +7495,7 @@ static void drawSetupScreen(void)
         ringN(574.0f, by, 9.0f, 1.4f, 18, COL(r, gg, bb));
         text(500.0f - tw(0.3f, "LINHA GUIA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "LINHA GUIA");
     } else {                                              /* etapas 0 e 1: os dois personagens */
-        float sc = setStep == 1 ? 1.35f : 0.85f, cy = setStep == 1 ? 327.0f : 354.0f, px0 = setStep == 1 ? 170.0f : 150.0f;
+        float sc = setStep == 1 ? 1.35f : 0.85f, cy = setStep == 1 ? 327.0f : 342.0f, px0 = setStep == 1 ? 170.0f : 150.0f;
         for (i = 0; i < 2; i++) {
             float px = SOLO ? 320.0f : (i == 0 ? px0 : 640.0f - px0);
             int hot;
@@ -7437,9 +7505,9 @@ static void drawSetupScreen(void)
             const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
             int ci = charRand[i] ? (menuT / 90) % NCHARS : charSel[i];
             drawChar(ci, px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
-            text(px - tw(0.34f, charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]) * 0.5f, 402, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]);
-            text(px - tw(0.28f, nm) * 0.5f, 416, 0.28f, COL(130,140,155), nm);
-            text(px - tw(0.28f, RAR_NAME[CHAR_RAR[ci]]) * 0.5f, setStep == 1 ? 361 : 388, 0.28f, rarCol(CHAR_RAR[ci]), RAR_NAME[CHAR_RAR[ci]]);
+            text(px - tw(0.34f, charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]) * 0.5f, 390, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]);
+            text(px - tw(0.28f, nm) * 0.5f, 403, 0.28f, COL(130,140,155), nm);
+            text(px - tw(0.28f, RAR_NAME[CHAR_RAR[ci]]) * 0.5f, setStep == 1 ? 361 : 376, 0.28f, rarCol(CHAR_RAR[ci]), RAR_NAME[CHAR_RAR[ci]]);
             if (setStep == 1) {                                       /* kit do personagem: taco e mesa */
                 char kt[40];
                 sprintf(kt, "TACO: %s", CHAR_CUE[ci] >= 0 ? CUES[CHAR_CUE[ci]].name : "PADRAO");
@@ -7449,8 +7517,8 @@ static void drawSetupScreen(void)
             }
         }
         if (setStep == 0 && !SOLO) textC(340, 0.9f, COL(255,215,70), "VS");
-        else if (setStep == 0 && training) textC(312, 0.4f, COL(255,215,70), "TREINO LIVRE: SEM ADVERSARIO");
-        else if (setStep == 0) textC(312, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
+        else if (setStep == 0 && training) textC(298, 0.4f, COL(255,215,70), "TREINO LIVRE: SEM ADVERSARIO");
+        else if (setStep == 0) textC(298, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
     }
     {
         static const int fk[4] = { 6, 7, 8, 1 };
