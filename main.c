@@ -5649,630 +5649,532 @@ static void star4(float x, float y, float r, u64 c)
     quad(x - r, y, x, y - r * 0.32f, x + r, y, x, y + r * 0.32f, c);
 }
 
-/* lagrimas escorrendo dos olhos (derrota) */
-static void tears(float cx, float cy, float s, int t, float dx, float ey)
+/* ====================== PERSONAGENS (estilo adulto: proporcoes reais, cores sobrias, movimento sutil) ====================== */
+
+typedef struct { float r, g, b; int a; } PRgb;
+static PRgb PRGBA(float r, float g, float b, int a) { PRgb c; c.r = r; c.g = g; c.b = b; c.a = a; return c; }
+static PRgb PRGB(float r, float g, float b) { return PRGBA(r, g, b, 0x80); }
+static PRgb rmix(PRgb a, PRgb b, float t) { return PRGBA(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a); }
+static PRgb rdk(PRgb a, float f) { return PRGBA(a.r * f, a.g * f, a.b * f, a.a); }
+static PRgb ral(PRgb a, int al) { a.a = al; return a; }
+static u64 RCOL(PRgb c)
 {
-    int k, q;
-    for (k = -1; k <= 1; k += 2) {
-        float ex = cx + k * dx * s, y0 = cy + (ey + 4.0f) * s;
-        beam(ex + k * 1.5f * s, y0, ex + k * 2.5f * s, y0 + 15.0f * s, 3.0f * s, CA(120, 190, 255, 0x40));
-        for (q = 0; q < 2; q++) {
-            float age = fmodf(t * 0.9f + q * 8.0f + (k > 0 ? 4.0f : 0.0f), 16.0f);
-            discN(ex + k * (2.0f + age * 0.15f) * s, y0 + age * 1.6f * s, (2.4f - age * 0.06f) * s,
-                  CA(140, 205, 255, 0x78 - (int)(age * 3.0f)), 8);
+    int r = c.r < 0 ? 0 : (c.r > 255 ? 255 : (int)c.r), g = c.g < 0 ? 0 : (c.g > 255 ? 255 : (int)c.g), b = c.b < 0 ? 0 : (c.b > 255 ? 255 : (int)c.b);
+    return CA(r, g, b, c.a);
+}
+
+/* contexto do personagem sendo desenhado: origem (centro da cabeca), escala, humor, relogio */
+static float cX0, cY0, cX, cY, cS, cHX, cHY, cBr, cSh, cYMax;
+#define CUT_V 22.0f                                              /* busto (avatar): ate onde o corpo aparece abaixo da cabeca */
+static int cMood, cT, cFull, cBlink;
+#define LX(v) (cX + (v) * cS)
+#define LY(v) (cY + (v) * cS)
+#define LZ(v) ((v) * cS)
+static void setHead(int on) { cX = cX0 + (on ? cHX * cS : 0.0f); cY = cY0 + (on ? cHY * cS : 0.0f); }
+
+static void lE(float x, float y, float rx, float ry, PRgb c)
+{
+    int i, n = (rx * cS > 7.0f || ry * cS > 7.0f) ? 14 : 8;
+    const float *t = circ(n);
+    u64 col = RCOL(c);
+    for (i = 0; i < n; i++)
+        tri(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), col);
+}
+static void lD(float x, float y, float r, PRgb c) { lE(x, y, r, r, c); }
+static void lB(float x1, float y1, float x2, float y2, float w, PRgb c) { beam(LX(x1), LY(y1), LX(x2), LY(y2), LZ(w), RCOL(c)); }
+static void lR(float x1, float y1, float x2, float y2, PRgb c) { rect(LX(x1), LY(y1), LX(x2), LY(y2), RCOL(c)); }
+static void lQ(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, PRgb c)
+{ quad(LX(x1), LY(y1), LX(x2), LY(y2), LX(x3), LY(y3), LX(x4), LY(y4), RCOL(c)); }
+static void lT(float x1, float y1, float x2, float y2, float x3, float y3, PRgb c)
+{ tri(LX(x1), LY(y1), LX(x2), LY(y2), LX(x3), LY(y3), RCOL(c)); }
+/* poligono (convexo ou em estrela) a partir do centro; mir = 1 desenha tambem o espelho (x -> -x) */
+static void lP(const float *p, int n, PRgb c, int mir)
+{
+    float mx = 0.0f, my = 0.0f;
+    int i, m;
+    u64 col = RCOL(c);
+    for (i = 0; i < n; i++) { mx += p[2*i]; my += p[2*i+1]; }
+    mx /= n; my /= n;
+    for (m = 0; m <= mir; m++) {
+        float sg = m ? -1.0f : 1.0f;
+        for (i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            float yi = p[2*i+1] > cYMax ? cYMax : p[2*i+1], yj = p[2*j+1] > cYMax ? cYMax : p[2*j+1];      /* busto: barbas e mantos cortam em cYMax */
+            tri(LX(sg * mx), LY(my > cYMax ? cYMax : my), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), col);
         }
     }
 }
+#define POLY(c, mir, ...) do { const float _p[] = { __VA_ARGS__ }; lP(_p, (int)(sizeof(_p) / sizeof(_p[0]) / 2), c, mir); } while (0)
 
-/* rosto padrao: olhos, sobrancelhas e boca de acordo com o humor (0 normal, 1 vitoria, 2 derrota).
-   parts: 1 = olhos/sobrancelhas, 2 = boca. brow = 0 nao desenha sobrancelhas */
-static void faceStd(float cx, float cy, float s, int mood, int t, float dx, float ey, float my, u64 brow, int parts)
+/* ---- cabeca humana: cranio, mandibula, orelhas, sombra lateral ---- */
+static void headR(PRgb sk, float jaw)
+{
+    PRgb d = rdk(sk, 0.78f), l = rmix(sk, PRGB(255, 245, 230), 0.25f);
+    lE(-9.4f, 0.8f, 1.9f, 3.0f, d); lE(9.4f, 0.8f, 1.9f, 3.0f, d);                     /* orelhas */
+    {
+        float j = jaw;
+        float p[] = { 0.0f, -11.2f, 6.0f, -10.2f, 9.0f, -5.5f, 9.4f, 0.0f, 8.2f * 1, 5.5f, 5.2f * j, 9.8f, 0.0f, 11.4f,
+                      -5.2f * j, 9.8f, -8.2f, 5.5f, -9.4f, 0.0f, -9.0f, -5.5f, -6.0f, -10.2f };
+        lP(p, 12, sk, 0);
+    }
+    POLY(ral(d, 0x58), 0, 3.0f, -10.4f, 9.0f, -5.5f, 9.4f, 0.0f, 8.2f, 5.5f, 5.0f, 9.8f, 1.8f, 11.2f, 3.4f, 4.0f, 2.4f, -3.0f);   /* lado da sombra */
+    lE(-3.5f, -6.5f, 3.4f, 1.8f, ral(l, 0x40));                                          /* brilho da testa */
+}
+
+static void eyesR(float ey, float dx, float w, PRgb iris, PRgb lid)
 {
     int k;
-    u64 ink = COL(34, 22, 22), wh = COL(255, 255, 255);
-    if (parts & 1) {
+    float sq = cMood == 1 ? 0.78f : 1.0f, lk = cMood == 2 ? 0.9f : 0.0f;
+    for (k = -1; k <= 1; k += 2) {
+        float ex = k * dx;
+        if (cBlink) { lB(ex - w, ey + 0.4f, ex + w, ey + 0.4f, 1.0f, lid); continue; }
+        lE(ex, ey, w, w * 0.46f * sq, PRGB(238, 236, 232));
+        lD(ex + k * -0.2f, ey + lk * 0.3f, w * 0.48f * sq + 0.2f, iris);
+        lD(ex + k * -0.2f, ey + lk * 0.3f, w * 0.22f, PRGB(10, 8, 8));
+        lB(ex - w * 1.05f, ey - w * 0.42f * sq, ex + w * 1.05f, ey - w * 0.5f * sq, 1.0f, lid);       /* palpebra superior */
+        lB(ex - w * 0.8f, ey + w * 0.5f * sq, ex + w * 0.8f, ey + w * 0.5f * sq, 0.5f, ral(rdk(lid, 0.9f), 0x50));
+    }
+}
+static void browsR(float by, float dx, float th, PRgb c)
+{
+    int k;
+    for (k = -1; k <= 1; k += 2) {
+        float x1 = k * (dx - 3.3f), x2 = k * (dx + 3.3f), y1 = by, y2 = by - 0.6f;
+        if (cMood == 2) { y1 = by - 1.8f; y2 = by + 0.2f; }               /* triste: ponta interna sobe */
+        else if (cMood == 1 && k > 0) { y1 = by + 0.2f; y2 = by - 1.6f; }  /* confiante: uma sobrancelha mais alta */
+        lB(x1, y1, x2, y2, th, c);
+    }
+}
+static void noseR(PRgb sk)
+{
+    PRgb d = rdk(sk, 0.72f);
+    lB(0.4f, -1.5f, 1.0f, 3.2f, 1.0f, ral(d, 0x70));
+    lE(0.2f, 3.6f, 2.0f, 1.0f, ral(d, 0x70));
+    lD(-0.9f, 3.7f, 0.45f, ral(rdk(sk, 0.4f), 0x90)); lD(1.4f, 3.7f, 0.45f, ral(rdk(sk, 0.4f), 0x90));
+}
+static void mouthR(float my, float w, PRgb lip)
+{
+    float yl = my, yr = my, ym = my + 0.3f;
+    if (cMood == 1) { yl = my + 0.2f; yr = my - 1.0f; }
+    else if (cMood == 2) { yl = my + 0.9f; yr = my + 0.9f; ym = my - 0.2f; }
+    lB(-w, yl, 0.0f, ym, 0.9f, lip);
+    lB(0.0f, ym, w, yr, 0.9f, lip);
+    lB(-w * 0.55f, my + 1.6f, w * 0.55f, my + 1.6f, 0.8f, ral(rdk(lip, 0.8f), 0x40));           /* labio inferior */
+}
+static void stubble(PRgb sk, int a)                                                                  /* barba por fazer */
+{
+    POLY(ral(rdk(sk, 0.42f), a), 0, -8.4f, 2.0f, -7.8f, 6.0f, -4.8f, 9.8f, 0.0f, 11.3f, 4.8f, 9.8f, 7.8f, 6.0f, 8.4f, 2.0f, 4.5f, 5.0f, 0.0f, 3.8f, -4.5f, 5.0f);
+}
+
+/* ---- corpo: pescoco, tronco, bracos e pernas, com respiracao e postura (0 normal, 1 confiante: bracos cruzados, 2 cabisbaixo) ---- */
+static PRgb bArm; static int bArmOn;                                               /* bracos de outra cor (ex.: bracos nus) */
+static void bodyR(PRgb top, PRgb topD, PRgb pants, PRgb shoe, PRgb skin, float bulk, int longTop)
+{
+    int k;
+    float shy = 17.0f + cSh, bb = bulk, hy = cFull ? 58.0f : CUT_V;
+    PRgb pd = rdk(pants, 0.72f);
+    setHead(0);
+    if (cFull) {                                                                  /* pernas */
         for (k = -1; k <= 1; k += 2) {
-            float ex = cx + k * dx * s, yy = cy + ey * s;
-            if (mood == 1) {
-                beam(ex - 4.2f * s, yy + 2.0f * s, ex, yy - 2.2f * s, 2.4f * s, ink);
-                beam(ex, yy - 2.2f * s, ex + 4.2f * s, yy + 2.0f * s, 2.4f * s, ink);
-            } else {
-                float lk = (mood == 2) ? 1.6f : 0.0f;
-                discN(ex, yy, 4.6f * s, wh, 10);
-                discN(ex, yy + lk * s, 2.5f * s, ink, 8);
-                discN(ex - 0.9f * s, yy + (lk - 0.9f) * s, 0.9f * s, wh, 6);
-            }
-            if (brow) {
-                if (mood == 0)      beam(ex - 4.5f * s, yy - 7.5f * s, ex + 4.5f * s, yy - 7.5f * s, 2.0f * s, brow);
-                else if (mood == 1) arcL(ex, yy - 4.0f * s, 5.0f * s, 3.2f * s, 1.15f * CPI, 1.85f * CPI, 2.0f * s, brow);
-                else                beam(ex - k * 4.5f * s, yy - 10.0f * s, ex + k * 4.5f * s, yy - 6.0f * s, 2.0f * s, brow);
-            }
+            lB(k * 6.5f, 57.0f, k * 8.2f, 87.0f, 10.0f, pants); lB(k * 8.2f, 86.0f, k * 9.6f, 112.0f, 8.0f, pants);
+            lB(k * 10.4f, 60.0f, k * 11.2f, 86.0f, 2.5f, ral(pd, 0x60));
+            lE(k * 10.8f, 115.0f, 7.0f, 3.2f, shoe); lE(k * 10.8f, 114.2f, 5.2f, 1.4f, rmix(shoe, PRGB(255, 255, 255), 0.18f));
         }
-        if (mood == 1) {
-            discN(cx - (dx + 3.0f) * s, cy + (ey + 8.0f) * s, 3.6f * s, CA(255, 110, 130, 0x40), 8);
-            discN(cx + (dx + 3.0f) * s, cy + (ey + 8.0f) * s, 3.6f * s, CA(255, 110, 130, 0x40), 8);
-        }
-        if (mood == 2) tears(cx, cy, s, t, dx, ey);
     }
-    if (parts & 2) {
-        if (mood == 0) arcL(cx, cy + (my - 3.0f) * s, 6.0f * s, 4.0f * s, 0.15f * CPI, 0.85f * CPI, 1.8f * s, ink);
-        else if (mood == 1) {
-            slice(cx, cy + (my - 4.0f) * s, 9.0f * s, 9.0f * s, 0.0f, CPI, COL(140, 20, 30));
-            rect(cx - 8.0f * s, cy + (my - 4.0f) * s, cx + 8.0f * s, cy + (my - 1.2f) * s, wh);
-            ell(cx, cy + (my + 3.5f) * s, 4.5f * s, 2.8f * s, COL(235, 100, 120));
-        } else arcL(cx, cy + (my + 4.0f) * s, 6.5f * s, 4.5f * s, 1.15f * CPI, 1.85f * CPI, 1.8f * s, ink);
+    lR(-4.2f, 8.0f, 4.2f, shy + 1.0f, rdk(skin, 0.86f));                          /* pescoco */
+    if (!cFull) {                                                                 /* busto: ombros inclinados, sem bracos */
+        float p[] = { -9.0f, shy - 2.0f, -15.0f * bb, shy - 0.5f, -19.5f * bb, shy + 4.0f, -20.0f * bb, hy + 2.0f, 20.0f * bb, hy + 2.0f, 19.5f * bb, shy + 4.0f, 15.0f * bb, shy - 0.5f, 9.0f, shy - 2.0f };
+        float q[] = { 4.0f, shy - 1.5f, 15.0f * bb, shy - 0.5f, 19.5f * bb, shy + 4.0f, 20.0f * bb, hy + 2.0f, 5.0f, hy + 2.0f };
+        lP(p, 8, top, 0); lP(q, 5, ral(topD, 0x60), 0);
+        return;
+    }
+    {
+        float p[] = { -17.5f * bb, shy + 1.0f, -9.0f, shy - 2.0f, 9.0f, shy - 2.0f, 17.5f * bb, shy + 1.0f, 13.0f * bb, hy, -13.0f * bb, hy };
+        lP(p, 6, top, 0);
+        {   float q[] = { 4.0f, shy - 1.5f, 17.5f * bb, shy + 1.0f, 13.0f * bb, hy, 5.0f, hy };
+            lP(q, 4, ral(topD, 0x60), 0); }
+        lD(-17.2f * bb, shy + 3.0f, 4.6f, top); lD(17.2f * bb, shy + 3.0f, 4.6f, top);
+        (void)longTop;
+    }
+    for (k = -1; k <= 1; k += 2) {                                                /* bracos */
+        float sx = k * 17.6f * bb, sy = shy + 3.0f, ex, ey, hx, hh;
+        if (cMood == 1) { ex = k * 19.5f * bb; ey = 37.0f; hx = -k * 6.0f; hh = 33.0f + (k > 0 ? 3.0f : 0.0f); }
+        else if (cMood == 2) { ex = k * 19.0f * bb; ey = 38.0f; hx = k * 16.0f * bb; hh = 57.0f; }
+        else { ex = k * 20.0f * bb; ey = 38.0f; hx = k * 18.0f * bb; hh = 55.0f; }
+        { PRgb ac = bArmOn ? bArm : top;
+        lB(sx, sy, ex, ey, 7.6f, ac); lD(ex, ey, 3.8f, ac);
+        lB(ex, ey, hx, hh, 6.6f, bArmOn ? ac : rmix(top, topD, 0.35f)); }
+        lE(hx, hh + (cMood == 1 ? 0.0f : 2.4f), 2.7f, cMood == 1 ? 2.7f : 3.7f, skin);
     }
 }
 
-/* bracos: baixos (normal), levantados acenando (vitoria) ou caidos (derrota) */
-static void armsC(float cx, float cy, float s, int mood, int t, u64 sleeve, u64 hand, float w)
+static void personBegin(int full, float cx, float cy, float s, int mood, int t)
 {
-    int k;
-    for (k = -1; k <= 1; k += 2) {
-        float sx = cx + k * 26.0f * s, sy = cy + 44.0f * s, hx, hy;
-        if (mood == 1) {
-            hx = cx + k * (46.0f + 3.0f * sinf(t * 0.3f + k)) * s;
-            hy = cy + (2.0f + 7.0f * sinf(t * 0.35f + (k > 0 ? 3.1f : 0.0f))) * s;
-        } else if (mood == 2) { hx = cx + k * 31.0f * s; hy = cy + 86.0f * s; }
-        else                  { hx = cx + k * 37.0f * s; hy = cy + 74.0f * s; }
-        beam(sx, sy, hx, hy, w * s, sleeve);
-        discN(sx, sy, w * 0.5f * s, sleeve, 8);
-        discN(hx, hy, w * 0.62f * s, hand, 10);
-    }
+    float br = sinf(t * 0.05f) * 0.55f;
+    cFull = full; cMood = mood; cT = t; cYMax = full ? 1000.0f : 25.0f;
+    cS = s * (full ? 1.0f : 2.1f);
+    cX0 = cx; cY0 = full ? cy - 14.0f : cy;
+    cBr = br;
+    cSh = mood == 2 ? 2.2f : (mood == 1 ? -0.8f : 0.0f) + br * 0.35f;
+    cHX = sinf(t * 0.021f) * 0.5f + (mood == 2 ? 0.0f : 0.0f);
+    cHY = (mood == 2 ? 2.6f : (mood == 1 ? -0.8f : 0.0f)) + br * 0.25f;
+    cBlink = (t % 230) > 223;
+    setHead(0);
 }
 
-static void legsC(float cx, float cy, float s, u64 pants, u64 shoe)
+/* rosto padrao: cranio, olhos, sobrancelhas, nariz e boca */
+static void faceR(PRgb sk, PRgb iris, PRgb brow, PRgb lip, float jaw)
 {
-    int k;
-    for (k = -1; k <= 1; k += 2) {
-        rect(cx + (k > 0 ? 3.0f : -15.0f) * s, cy + 82.0f * s, cx + (k > 0 ? 15.0f : -3.0f) * s, cy + 99.0f * s, pants);
-        ell(cx + k * 10.0f * s, cy + 100.0f * s, 10.0f * s, 4.6f * s, shoe);
-    }
+    headR(sk, jaw);
+    eyesR(-2.6f, 3.7f, 2.2f, iris, rdk(sk, 0.35f));
+    browsR(-6.0f, 3.9f, 1.15f, brow);
+    noseR(sk);
+    mouthR(6.8f, 2.7f, lip);
 }
 
-static void torsoC(float cx, float cy, float s, u64 c, u64 dk)
-{
-    quad(cx - 29.0f * s, cy + 44.0f * s, cx + 29.0f * s, cy + 44.0f * s, cx + 27.0f * s, cy + 86.0f * s, cx - 27.0f * s, cy + 86.0f * s, c);
-    ell(cx, cy + 40.0f * s, 29.0f * s, 17.0f * s, c);
-    rect(cx - 27.0f * s, cy + 82.0f * s, cx + 27.0f * s, cy + 86.0f * s, dk);
-}
-
-/* desenha o personagem id. (cx, cy) = centro da cabeca; s = escala (1 = cabeca com raio 25);
-   mood: 0 normal, 1 vitoria, 2 derrota; full: 0 so a cabeca (avatar), 1 corpo inteiro */
 static void drawChar(int id, float cx, float cy, float s, int mood, int t, int full)
 {
-    int k;
-    u64 skin = COL(241, 192, 152), ink = COL(34, 22, 22), wh = COL(255, 255, 255), gold = COL(255, 205, 50);
-    #define XX(v) (cx + (v) * s)
-    #define YY(v) (cy + (v) * s)
-    #define ZZ(v) ((v) * s)
-
+    int k, q;
+    PRgb K = PRGB(18, 18, 22), WH = PRGB(236, 234, 228), GOLD = PRGB(206, 168, 66), LEA = PRGB(78, 52, 34);
+    personBegin(full, cx, cy, s, mood, t);
     switch (((id % NCHARS) + NCHARS) % NCHARS) {
-    case 0: {   /* PINGUIM */
-        u64 blk = COL(34, 38, 52), org = COL(255, 150, 30), red = COL(220, 50, 62);
-        if (full) {
-            ell(XX(-11), YY(101), ZZ(11), ZZ(4.6f), org); ell(XX(11), YY(101), ZZ(11), ZZ(4.6f), org);
-            ell(cx, YY(62), ZZ(33), ZZ(42), blk);
-            ell(cx, YY(66), ZZ(22), ZZ(34), wh);
-            for (k = -1; k <= 1; k += 2) {
-                float hx, hy;
-                if (mood == 1)      { hx = XX(k * (52 + 3 * sinf(t * 0.3f + k))); hy = YY(12 + 7 * sinf(t * 0.35f + (k > 0 ? 3.1f : 0.0f))); }
-                else if (mood == 2) { hx = XX(k * 38); hy = YY(84); }
-                else                { hx = XX(k * 42); hy = YY(66); }
-                beam(XX(k * 27), YY(42), hx, hy, ZZ(11), blk);
-                discN(hx, hy, ZZ(5.8f), blk, 8);
-            }
-        }
-        disc(cx, cy, ZZ(26), blk);
-        ell(cx, YY(5), ZZ(19), ZZ(16), wh);
-        for (k = -1; k <= 1; k += 2) {
-            if (mood == 1) {
-                beam(XX(k * 8 - 3.6f), YY(0.8f), XX(k * 8), YY(-2.4f), ZZ(2.2f), ink);
-                beam(XX(k * 8), YY(-2.4f), XX(k * 8 + 3.6f), YY(0.8f), ZZ(2.2f), ink);
-            } else {
-                discN(XX(k * 8), YY(mood == 2 ? 0 : -1), ZZ(mood == 2 ? 4.6f : 3.8f), ink, 8);
-                discN(XX(k * 8 - 1.2f), YY(mood == 2 ? -1.2f : -2.2f), ZZ(1.3f), wh, 6);
-            }
-            if (mood == 2) beam(XX(k * 8 - k * 4.5f), YY(-9), XX(k * 8 + k * 4.5f), YY(-5.5f), ZZ(2.0f), ink);
-        }
-        if (mood == 1) {
-            tri(XX(-6), YY(6.5f), XX(6), YY(6.5f), cx, YY(18), COL(140, 20, 30));
-            tri(XX(-7), YY(3), XX(7), YY(3), cx, YY(9), org);
-            tri(XX(-4), YY(16), XX(4), YY(16), cx, YY(12.5f), org);
-        } else if (mood == 2) {
-            tri(XX(-7), YY(5), XX(7), YY(5), cx, YY(12), org);
-            tears(cx, cy, s, t, 8, -1);
-        } else tri(XX(-7), YY(4), XX(7), YY(4), cx, YY(13), org);
-        if (full) {
-            beam(XX(-21), YY(27), XX(21), YY(27), ZZ(8), red);
-            beam(XX(13), YY(30), XX(18), YY(50), ZZ(6.5f), COL(180, 30, 45));
-        }
-        break; }
-
-    case 1: {   /* ROBO */
-        u64 st = COL(172, 184, 200), sd = COL(104, 114, 132), dk = COL(22, 28, 42), cn = COL(80, 232, 255), gr = COL(100, 255, 150);
-        if (full) {
-            legsC(cx, cy, s, sd, COL(60, 66, 80));
-            rect(XX(-30), YY(34), XX(30), YY(87), sd);
-            rect(XX(-28), YY(36), XX(28), YY(85), st);
-            rect(XX(-18), YY(46), XX(18), YY(72), dk);
-            discN(XX(-9), YY(54), ZZ(3.2f), COL(255, 80, 80), 8);
-            discN(cx, YY(54), ZZ(3.2f), ((t / 12) & 1) ? gr : COL(40, 120, 70), 8);
-            discN(XX(9), YY(54), ZZ(3.2f), COL(255, 220, 70), 8);
-            rect(XX(-14), YY(62), XX(14), YY(65), cn);
-            armsC(cx, cy, s, mood, t, sd, COL(210, 218, 230), 8.5f);
-        }
-        rect(XX(-27), YY(-24), XX(27), YY(25), sd);
-        rect(XX(-25), YY(-22), XX(25), YY(23), st);
-        rect(XX(-25), YY(-22), XX(25), YY(-17), COL(208, 218, 232));
-        rect(XX(-31), YY(-6), XX(-27), YY(8), sd); rect(XX(27), YY(-6), XX(31), YY(8), sd);
-        beam(cx, YY(-24), cx, YY(-38), ZZ(3), sd);
-        discN(cx, YY(-41), ZZ(4.6f), ((t / 12) & 1) ? COL(255, 70, 70) : COL(150, 30, 30), 8);
-        rect(XX(-21), YY(-11), XX(21), YY(5), dk);
-        if (mood == 1) {
-            for (k = -1; k <= 1; k += 2) arcL(XX(k * 11), YY(3), ZZ(6), ZZ(5.5f), 1.1f * CPI, 1.9f * CPI, ZZ(2.8f), cn);
-        } else if (mood == 2) {
-            for (k = -1; k <= 1; k += 2) beam(XX(k * 5), YY(-5), XX(k * 17), YY(1), ZZ(4), cn);
-            tears(cx, cy, s, t, 11, 1);
-        } else {
-            rect(XX(-17), YY(-8), XX(-6), YY(2), cn); rect(XX(6), YY(-8), XX(17), YY(2), cn);
-        }
-        rect(XX(-14), YY(11), XX(14), YY(20), dk);
-        if (mood == 1) {
-            rect(XX(-12), YY(13), XX(12), YY(18), gr);
-            for (k = -2; k <= 2; k++) rect(XX(k * 5 - 0.6f), YY(13), XX(k * 5 + 0.6f), YY(18), dk);
-        } else if (mood == 2) arcL(cx, YY(22), ZZ(9), ZZ(5), 1.15f * CPI, 1.85f * CPI, ZZ(1.8f), st);
-        else for (k = -2; k <= 2; k++) rect(XX(k * 5.5f - 0.8f), YY(12), XX(k * 5.5f + 0.8f), YY(19), st);
-        break; }
-
     case 2: {   /* PIRATA */
-        u64 red = COL(205, 40, 52), blk = COL(26, 24, 30);
-        if (full) {
-            legsC(cx, cy, s, COL(44, 54, 112), blk);
-            torsoC(cx, cy, s, COL(238, 238, 244), COL(200, 200, 210));
-            for (k = 0; k < 4; k++) rect(XX(-28), YY(50 + k * 9), XX(28), YY(54 + k * 9), red);
-            rect(XX(-28), YY(77), XX(28), YY(83), blk); rect(XX(-4.5f), YY(77), XX(4.5f), YY(83), gold);
-            armsC(cx, cy, s, mood, t, COL(238, 238, 244), skin, 8.5f);
-        }
-        disc(cx, cy, ZZ(25), skin);
-        ringN(XX(-25.5f), YY(8), ZZ(3.4f), ZZ(1.6f), 10, gold);
-        faceStd(cx, cy, s, mood, t, 9, -3, 15, COL(46, 28, 22), 3);
-        ell(XX(-7.5f), YY(8.5f), ZZ(8.5f), ZZ(3.6f), COL(62, 40, 30)); ell(XX(7.5f), YY(8.5f), ZZ(8.5f), ZZ(3.6f), COL(62, 40, 30));
-        beam(XX(-22), YY(-9), XX(24), YY(-13), ZZ(2.0f), blk);
-        discN(XX(-9), YY(-3), ZZ(6.0f), blk, 10);
-        beam(XX(-9), YY(-3), XX(-25), YY(1), ZZ(1.8f), blk);
-        ell(cx, YY(-20), ZZ(34), ZZ(7.5f), blk);
-        quad(XX(-22), YY(-20), XX(22), YY(-20), XX(16), YY(-42), XX(-16), YY(-42), blk);
-        ell(cx, YY(-42), ZZ(16), ZZ(5), blk);
-        beam(XX(-24), YY(-20), XX(24), YY(-20), ZZ(2.2f), gold);
-        beam(XX(-10), YY(-26), XX(10), YY(-37), ZZ(2.6f), wh); beam(XX(-10), YY(-37), XX(10), YY(-26), ZZ(2.6f), wh);
-        discN(cx, YY(-31.5f), ZZ(5.6f), wh, 10); rect(XX(-3), YY(-29), XX(3), YY(-25.5f), wh);
-        discN(XX(-2.2f), YY(-32), ZZ(1.4f), blk, 6); discN(XX(2.2f), YY(-32), ZZ(1.4f), blk, 6);
+        PRgb sk = PRGB(204, 152, 112), coat = PRGB(112, 40, 42), coatD = PRGB(70, 24, 28), hat = PRGB(30, 27, 32), hr = PRGB(52, 36, 28);
+        if (full) lB(-19.0f, 52.0f, -27.0f, 74.0f, 2.4f, PRGB(150, 150, 158));     /* espada */
+        bodyR(coat, coatD, PRGB(66, 54, 46), PRGB(26, 22, 22), sk, 1.0f, 0);
+        POLY(WH, 0, -6.5f, 15.5f, 6.5f, 15.5f, 3.4f, cFull ? 52.0f : CUT_V, -3.4f, cFull ? 52.0f : CUT_V);
+        lR(-1.0f, 17.0f, 1.0f, cFull ? 52.0f : CUT_V, ral(PRGB(150, 140, 126), 0x70));
+        lT(-6.5f, 15.5f, -2.0f, 15.5f, -4.5f, 22.0f, rdk(WH, 0.85f)); lT(6.5f, 15.5f, 2.0f, 15.5f, 4.5f, 22.0f, rdk(WH, 0.85f));
+        if (full) { lR(-13.5f, 54.0f, 13.5f, 58.0f, LEA); lR(-2.4f, 53.6f, 2.4f, 58.4f, GOLD); }
+        setHead(1);
+        lE(-9.6f, 5.0f, 2.8f, 7.5f, hr); lE(9.6f, 5.0f, 2.8f, 7.5f, hr);                  /* cabelo comprido atras */
+        faceR(sk, PRGB(70, 44, 24), hr, PRGB(120, 70, 64), 1.0f);
+        stubble(sk, 0xa8);
+        POLY(hr, 1, 0.0f, 4.8f, 3.6f, 4.0f, 7.0f, 6.0f, 5.6f, 7.6f, 3.0f, 6.6f, 0.0f, 6.8f);           /* bigode */
+        POLY(rdk(hr, 0.9f), 0, -3.2f, 9.2f, 3.2f, 9.2f, 2.0f, 15.0f, 0.0f, 16.5f, -2.0f, 15.0f);        /* cavanhaque */
+        lB(-5.8f, -8.2f, -2.6f, -1.6f, 0.7f, PRGB(176, 102, 98));                              /* cicatriz */
+        lE(3.7f, -2.6f, 3.1f, 2.8f, PRGB(14, 12, 14));                                         /* tapa-olho */
+        lB(0.8f, -4.6f, -9.3f, -7.8f, 0.9f, PRGB(14, 12, 14)); lB(6.6f, -3.6f, 9.4f, -2.2f, 0.9f, PRGB(14, 12, 14));
+        POLY(hat, 0, -18.5f, -5.0f, -13.0f, -12.5f, -4.5f, -14.0f, 0.0f, -18.0f, 4.5f, -14.0f, 13.0f, -12.5f, 18.5f, -5.0f, 8.0f, -8.8f, 0.0f, -7.6f, -8.0f, -8.8f);
+        POLY(rdk(hat, 1.5f), 0, -9.0f, -8.6f, -8.0f, -15.5f, 0.0f, -17.2f, 8.0f, -15.5f, 9.0f, -8.6f, 0.0f, -7.8f);
+        lB(-9.0f, -9.4f, 9.0f, -9.4f, 1.2f, GOLD);
+        lD(0.0f, -13.0f, 1.9f, WH); lR(-1.0f, -11.8f, 1.0f, -10.2f, WH); lD(-0.8f, -13.2f, 0.45f, K); lD(0.8f, -13.2f, 0.45f, K);
         break; }
-
-    case 3: {   /* NINJA */
-        u64 nv = COL(54, 60, 98), nd = COL(34, 38, 64), red = COL(215, 40, 52), mk = COL(122, 128, 172);
-        if (full) {
-            beam(XX(22), YY(26), XX(36), YY(4), ZZ(4.5f), COL(70, 50, 34));
-            beam(XX(28), YY(14), XX(35), YY(18), ZZ(3), gold);
-            legsC(cx, cy, s, nd, COL(14, 14, 24));
-            torsoC(cx, cy, s, nv, nd);
-            rect(XX(-28), YY(70), XX(28), YY(77), red);
-            armsC(cx, cy, s, mood, t, nv, COL(70, 76, 112), 8.5f);
-        }
-        disc(cx, cy, ZZ(25), nv);
-        ell(cx, YY(-2), ZZ(20), ZZ(8.5f), skin);
-        faceStd(cx, cy, s, mood, t, 8.5f, -2, 15, 0, 1);
-        if (mood == 1)      arcL(cx, YY(9), ZZ(10), ZZ(6), 0.15f * CPI, 0.85f * CPI, ZZ(2.0f), mk);
-        else if (mood == 2) arcL(cx, YY(17), ZZ(8), ZZ(4.5f), 1.15f * CPI, 1.85f * CPI, ZZ(2.0f), mk);
-        else                beam(XX(-6), YY(13), XX(6), YY(13), ZZ(1.6f), mk);
-        beam(XX(-26), YY(-12), XX(26), YY(-12), ZZ(7), red);
-        rect(XX(-9), YY(-15.5f), XX(9), YY(-8.5f), COL(190, 196, 208)); rect(XX(-2), YY(-14), XX(2), YY(-10), nd);
-        beam(XX(25), YY(-12), XX(43), YY(-6 + 3 * sinf(t * 0.2f)), ZZ(5), red);
-        beam(XX(25), YY(-12), XX(41), YY(-19 + 3 * sinf(t * 0.2f + 1.5f)), ZZ(5), COL(165, 30, 42));
-        break; }
-
-    case 4: {   /* ALIEN */
-        u64 gr = COL(122, 216, 96), gd = COL(70, 150, 62), su = COL(112, 82, 202), sd = COL(70, 50, 150);
-        if (full) {
-            legsC(cx, cy, s, su, sd);
-            torsoC(cx, cy, s, su, sd);
-            beam(XX(-14), YY(32), XX(14), YY(32), ZZ(6), COL(205, 210, 225));
-            discN(cx, YY(60), ZZ(5), COL(255, 230, 80), 8);
-            armsC(cx, cy, s, mood, t, su, gr, 8.5f);
-        }
-        for (k = -1; k <= 1; k += 2) {
-            beam(XX(k * 10), YY(-26), XX(k * 18), YY(-45 + 2 * sinf(t * 0.2f + k)), ZZ(3), gd);
-            discN(XX(k * 18), YY(-47 + 2 * sinf(t * 0.2f + k)), ZZ(5), (k < 0) ? COL(255, 230, 80) : COL(255, 120, 190), 10);
-        }
-        ell(cx, YY(0), ZZ(28), ZZ(31), gr);
-        for (k = -1; k <= 1; k += 2) {
-            float ry = mood == 1 ? 6.5f : (mood == 2 ? 13.0f : 12.0f);
-            ell(XX(k * 11), YY(mood == 1 ? 3 : 2), ZZ(9), ZZ(ry), COL(14, 18, 26));
-            discN(XX(k * 13.5f), YY(mood == 1 ? 1 : -3), ZZ(mood == 2 ? 3.4f : 2.6f), wh, 8);
-        }
-        discN(XX(-2), YY(13), ZZ(0.9f), gd, 6); discN(XX(2), YY(13), ZZ(0.9f), gd, 6);
-        if (mood == 1) slice(cx, YY(18), ZZ(8.5f), ZZ(8.5f), 0, CPI, COL(124, 22, 44));
-        else if (mood == 2) { arcL(cx, YY(25), ZZ(5.5f), ZZ(3.5f), 1.15f * CPI, 1.85f * CPI, ZZ(1.8f), COL(40, 100, 40)); tears(cx, cy, s, t, 11, 8); }
-        else beam(XX(-5), YY(22), XX(5), YY(22), ZZ(1.8f), COL(40, 100, 40));
-        break; }
-
     case 5: {   /* COWBOY */
-        u64 hat = COL(156, 100, 50), hd = COL(112, 70, 36), vest = COL(124, 80, 42), shirt = COL(238, 228, 204), red = COL(212, 44, 52);
-        if (full) {
-            legsC(cx, cy, s, COL(62, 92, 162), COL(92, 56, 30));
-            torsoC(cx, cy, s, shirt, COL(205, 195, 170));
-            quad(XX(-29), YY(44), XX(-8), YY(44), XX(-9), YY(86), XX(-27), YY(86), vest);
-            quad(XX(29), YY(44), XX(8), YY(44), XX(9), YY(86), XX(27), YY(86), vest);
-            tri(XX(-24), YY(50), XX(-12), YY(50), XX(-18), YY(62), gold);
-            rect(XX(-27), YY(79), XX(27), YY(84), COL(72, 42, 22)); rect(XX(-5), YY(78), XX(5), YY(85), gold);
-            tri(XX(-17), YY(21), XX(17), YY(21), cx, YY(46), red);
-            armsC(cx, cy, s, mood, t, shirt, skin, 8.5f);
-        }
-        disc(cx, cy, ZZ(25), skin);
-        discN(cx, YY(4), ZZ(3.6f), COL(218, 152, 112), 8);
-        faceStd(cx, cy, s, mood, t, 9, -3, 16, COL(80, 50, 25), 3);
-        ell(XX(-8.5f), YY(9.5f), ZZ(9.5f), ZZ(3.8f), COL(72, 46, 26)); ell(XX(8.5f), YY(9.5f), ZZ(9.5f), ZZ(3.8f), COL(72, 46, 26));
-        discN(XX(-18), YY(8), ZZ(3), COL(72, 46, 26), 6); discN(XX(18), YY(8), ZZ(3), COL(72, 46, 26), 6);
-        ell(cx, YY(-20), ZZ(40), ZZ(8.5f), hat);
-        tri(XX(-40), YY(-20), XX(-33), YY(-19), XX(-43), YY(-28), hat); tri(XX(40), YY(-20), XX(33), YY(-19), XX(43), YY(-28), hat);
-        quad(XX(-19), YY(-20), XX(19), YY(-20), XX(15), YY(-40), XX(-15), YY(-40), hat);
-        ell(cx, YY(-40), ZZ(15), ZZ(4.5f), COL(176, 120, 64));
-        beam(XX(-19), YY(-24), XX(19), YY(-24), ZZ(4.2f), hd);
-        discN(cx, YY(-24), ZZ(3), gold, 8);
+        PRgb sk = PRGB(214, 164, 124), vest = PRGB(124, 86, 52), vestD = PRGB(84, 56, 34), shirt = PRGB(176, 160, 138), hat = PRGB(150, 102, 62), mus = PRGB(104, 74, 46);
+        bodyR(shirt, rdk(shirt, 0.7f), PRGB(70, 84, 112), PRGB(92, 60, 36), sk, 1.0f, 0);
+        for (k = 0; k < 4 && cFull; k++) { lB(-12.0f, 24.0f + k * 8.0f, 12.0f, 24.0f + k * 8.0f, 0.6f, ral(PRGB(120, 60, 50), 0x50)); }
+        POLY(vest, 1, -17.0f, 18.0f, -8.0f, 15.0f, -3.0f, 16.0f, -3.5f, cFull ? 56.0f : CUT_V, -13.5f, cFull ? 56.0f : CUT_V);
+        POLY(ral(vestD, 0x70), 1, -17.0f, 18.0f, -8.0f, 15.0f, -4.5f, 17.0f, -7.0f, CUT_V);
+        if (cFull) star4(LX(-10.0f), LY(26.0f), LZ(3.2f), RCOL(GOLD));
+        if (full) { lR(-13.5f, 54.0f, 13.5f, 57.5f, LEA); lR(-3.4f, 53.4f, 3.4f, 58.2f, GOLD); lR(14.0f, 56.0f, 21.0f, 71.0f, PRGB(88, 58, 34)); lR(16.0f, 52.0f, 19.5f, 57.0f, PRGB(50, 40, 34)); }
+        POLY(PRGB(156, 44, 44), 0, -8.5f, 12.0f, 8.5f, 12.0f, 3.0f, 21.0f, 0.0f, 23.0f, -3.0f, 21.0f);       /* lenco no pescoco */
+        setHead(1);
+        faceR(sk, PRGB(74, 54, 34), PRGB(86, 60, 38), PRGB(150, 84, 76), 1.05f);
+        stubble(sk, 0x80);
+        POLY(mus, 1, 0.0f, 4.8f, 3.8f, 4.2f, 7.6f, 6.4f, 6.2f, 7.8f, 3.2f, 6.6f, 0.0f, 6.9f);
+        POLY(hat, 0, -19.5f, -6.5f, -13.0f, -10.5f, 0.0f, -9.2f, 13.0f, -10.5f, 19.5f, -6.5f, 14.0f, -3.6f, 0.0f, -5.4f, -14.0f, -3.6f);
+        POLY(hat, 0, -8.8f, -8.0f, -7.6f, -17.0f, -3.0f, -19.0f, 0.0f, -16.2f, 3.0f, -19.0f, 7.6f, -17.0f, 8.8f, -8.0f);
+        POLY(ral(rdk(hat, 0.7f), 0x70), 0, 1.0f, -8.0f, 3.0f, -19.0f, 7.6f, -17.0f, 8.8f, -8.0f);
+        lR(-8.8f, -10.2f, 8.8f, -8.2f, PRGB(70, 44, 28));
         break; }
-
     case 6: {   /* VAMPIRO */
-        u64 pale = COL(232, 232, 244), blk = COL(26, 22, 32), red = COL(176, 26, 50);
-        if (full) {
-            quad(XX(-38), YY(30), XX(38), YY(30), XX(52), YY(98), XX(-52), YY(98), COL(124, 18, 38));
-            tri(XX(-40), YY(-6), XX(-17), YY(34), XX(-42), YY(36), blk); tri(XX(40), YY(-6), XX(17), YY(34), XX(42), YY(36), blk);
-            tri(XX(-37), YY(2), XX(-20), YY(31), XX(-40), YY(32), red); tri(XX(37), YY(2), XX(20), YY(31), XX(40), YY(32), red);
-            legsC(cx, cy, s, blk, COL(10, 10, 16));
-            torsoC(cx, cy, s, blk, COL(10, 10, 16));
-            tri(XX(-11), YY(30), XX(11), YY(30), cx, YY(68), COL(244, 244, 250));
-            tri(cx, YY(36), XX(-11), YY(30), XX(-11), YY(42), red); tri(cx, YY(36), XX(11), YY(30), XX(11), YY(42), red);
-            discN(cx, YY(36), ZZ(3), COL(150, 20, 40), 8);
-            armsC(cx, cy, s, mood, t, blk, pale, 8.5f);
-        }
-        tri(XX(-24), YY(-4), XX(-23), YY(9), XX(-36), YY(-11), pale); tri(XX(24), YY(-4), XX(23), YY(9), XX(36), YY(-11), pale);
-        disc(cx, cy, ZZ(25), pale);
-        slice(cx, YY(-8), ZZ(26.5f), ZZ(18), CPI, 2 * CPI, blk);
-        tri(XX(-12), YY(-8), XX(12), YY(-8), cx, YY(-1), blk);
-        faceStd(cx, cy, s, mood, t, 9, 2, 16, blk, 3);
-        if (mood != 1) for (k = -1; k <= 1; k += 2) discN(XX(k * 9), YY(2 + (mood == 2 ? 1.6f : 0)), ZZ(2.6f), COL(224, 30, 52), 8);
-        {
-            float fy = (mood == 1) ? 11.5f : 12.8f, fl = (mood == 1) ? 7.5f : (mood == 2 ? 3.5f : 5.0f);
-            tri(XX(-5.5f), YY(fy), XX(-2), YY(fy), XX(-3.8f), YY(fy + fl), wh);
-            tri(XX(5.5f), YY(fy), XX(2), YY(fy), XX(3.8f), YY(fy + fl), wh);
-        }
+        PRgb sk = PRGB(222, 218, 228), suit = PRGB(26, 24, 32), cape = PRGB(110, 24, 38), hair = PRGB(14, 12, 18);
+        if (full) POLY(cape, 1, -12.0f, 14.0f, -23.0f, 22.0f, -29.0f, 66.0f, -22.0f, 96.0f, -9.0f, 70.0f);
+        bodyR(suit, PRGB(8, 8, 12), PRGB(22, 20, 28), PRGB(10, 10, 12), sk, 1.0f, 0);
+        POLY(WH, 0, -5.0f, 15.5f, 5.0f, 15.5f, 2.6f, cFull ? 52.0f : CUT_V, -2.6f, cFull ? 52.0f : CUT_V);
+        POLY(PRGB(150, 24, 38), 0, -3.0f, 16.0f, 3.0f, 16.0f, 1.6f, 22.0f, 0.0f, 24.0f, -1.6f, 22.0f);        /* gravata */
+        lT(-8.5f, 13.5f, -17.0f, -3.0f, -17.0f, 17.0f, PRGB(14, 12, 18)); lT(8.5f, 13.5f, 17.0f, -3.0f, 17.0f, 17.0f, PRGB(14, 12, 18));
+        lT(-9.0f, 13.5f, -15.5f, 0.0f, -16.0f, 15.0f, cape); lT(9.0f, 13.5f, 15.5f, 0.0f, 16.0f, 15.0f, cape);
+        setHead(1);
+        faceR(sk, PRGB(168, 30, 44), hair, PRGB(168, 110, 118), 0.95f);
+        POLY(hair, 0, -9.8f, -2.0f, -9.4f, -8.4f, -5.5f, -12.0f, 0.0f, -12.6f, 5.5f, -12.0f, 9.4f, -8.4f, 9.8f, -2.0f, 6.6f, -8.2f, 3.0f, -8.8f, 0.0f, -5.4f, -3.0f, -8.8f, -6.6f, -8.2f);
+        lT(-2.2f, 7.0f, -0.8f, 7.0f, -1.5f, 9.4f, WH); lT(2.2f, 7.0f, 0.8f, 7.0f, 1.5f, 9.4f, WH);
         break; }
-
     case 7: {   /* MAGO */
-        u64 robe = COL(56, 76, 188), rd = COL(36, 50, 132), hat = COL(72, 60, 176), wb = COL(247, 247, 252);
+        PRgb sk = PRGB(228, 192, 164), robe = PRGB(50, 58, 122), robeD = PRGB(30, 36, 84), beard = PRGB(226, 226, 230), hat = PRGB(44, 50, 112);
         if (full) {
-            ell(XX(-12), YY(101), ZZ(10), ZZ(4.6f), COL(100, 64, 34)); ell(XX(12), YY(101), ZZ(10), ZZ(4.6f), COL(100, 64, 34));
-            quad(XX(-29), YY(44), XX(29), YY(44), XX(38), YY(100), XX(-38), YY(100), robe);
-            ell(cx, YY(40), ZZ(29), ZZ(17), robe);
-            rect(XX(-38), YY(95), XX(38), YY(100), rd);
-            beam(XX(-29), YY(66), XX(29), YY(66), ZZ(5), gold); rect(XX(-4), YY(63), XX(4), YY(69), COL(255, 235, 140));
-            star4(XX(-15), YY(80), ZZ(5), COL(255, 230, 100)); star4(XX(14), YY(54), ZZ(4), COL(255, 230, 100));
-            armsC(cx, cy, s, mood, t, robe, skin, 10.5f);
+            POLY(robe, 0, -15.0f, 56.0f, 15.0f, 56.0f, 21.0f, 112.0f, -21.0f, 112.0f);
+            lB(26.0f, 22.0f, 26.0f, 118.0f, 2.2f, PRGB(110, 76, 44)); lD(26.0f, 20.0f, 4.2f, PRGB(150, 200, 255)); lD(26.0f, 20.0f, 2.0f, PRGB(240, 250, 255));
         }
-        disc(cx, cy, ZZ(25), skin);
-        discN(cx, YY(3), ZZ(4), COL(224, 160, 124), 8);
-        slice(cx, YY(6), ZZ(22), ZZ(20), 0, CPI, wb);
-        tri(XX(-20), YY(7), XX(20), YY(7), cx, YY(64), wb);
-        faceStd(cx, cy, s, mood, t, 9, -4, 14, wb, 3);
-        ell(cx, YY(-19), ZZ(34), ZZ(7.5f), hat);
-        tri(XX(-24), YY(-19), XX(24), YY(-19), XX(6), YY(-68), hat);
-        beam(XX(-25), YY(-20), XX(25), YY(-20), ZZ(5), gold);
-        discN(XX(6), YY(-68), ZZ(4), gold, 8);
-        star4(XX(-7), YY(-38), ZZ(4.5f), COL(255, 230, 100)); star4(XX(5), YY(-52), ZZ(3.5f), COL(255, 230, 100));
-        if (mood == 1) for (k = 0; k < 4; k++) {
-            float a = t * 0.09f + k * 1.571f;
-            star4(cx + cosf(a) * ZZ(46), cy - ZZ(10) + sinf(a) * ZZ(22), ZZ(3.5f + 1.5f * sinf(t * 0.3f + k)), COL(255, 245, 160));
-        }
+        bodyR(robe, robeD, robe, PRGB(60, 44, 34), sk, 1.05f, 1);
+        if (full) { lR(-14.0f, 54.0f, 14.0f, 57.0f, GOLD); lB(0.0f, 16.0f, 0.0f, 112.0f, 1.4f, ral(GOLD, 0x90)); }
+        setHead(1);
+        faceR(sk, PRGB(90, 130, 170), PRGB(232, 232, 236), PRGB(160, 100, 96), 1.0f);
+        for (k = 0; k < 3; k++) lB(-4.0f, -8.6f + k * 1.1f, 4.0f, -8.6f + k * 1.1f, 0.4f, ral(rdk(sk, 0.62f), 0x70));
+        POLY(beard, 0, -8.0f, 1.5f, -9.4f, 9.0f, -6.5f, 22.0f, -2.5f, 33.0f, 0.0f, 37.0f, 2.5f, 33.0f, 6.5f, 22.0f, 9.4f, 9.0f, 8.0f, 1.5f, 4.0f, 5.6f, 0.0f, 4.2f, -4.0f, 5.6f);
+        POLY(ral(PRGB(170, 170, 182), 0x70), 0, 2.0f, 8.0f, 8.4f, 6.0f, 6.0f, 22.0f, 2.4f, 33.0f);
+        POLY(beard, 1, 0.0f, 4.4f, 4.4f, 3.6f, 8.2f, 6.4f, 6.0f, 8.0f, 3.0f, 6.0f, 0.0f, 6.4f);
+        POLY(PRGB(232, 232, 236), 1, -9.4f, -3.4f, -9.4f, -7.0f, -3.0f, -6.6f, -3.2f, -4.6f);
+        lE(0.0f, -9.0f, 17.5f, 3.0f, rdk(hat, 0.8f));
+        POLY(hat, 0, -10.5f, -9.0f, -7.0f, -20.0f, -1.0f, -31.0f, 5.0f, -36.0f, 6.5f, -30.0f, 5.0f, -20.0f, 10.5f, -9.0f);
+        POLY(ral(rdk(hat, 0.6f), 0x80), 0, 2.0f, -9.0f, 4.0f, -22.0f, 6.5f, -30.0f, 5.0f, -36.0f, 10.5f, -9.0f);
+        lR(-10.4f, -12.2f, 10.4f, -10.0f, GOLD);
+        star4(LX(-2.0f), LY(-20.0f), LZ(2.4f), RCOL(GOLD)); star4(LX(3.0f), LY(-28.0f), LZ(1.6f), RCOL(GOLD));
         break; }
-
     case 8: {   /* VIKING */
-        u64 steel = COL(152, 158, 172), horn = COL(246, 238, 208), bd = COL(224, 130, 50), fur = COL(124, 86, 52);
-        if (full) {
-            legsC(cx, cy, s, COL(100, 106, 122), COL(80, 52, 30));
-            torsoC(cx, cy, s, fur, COL(72, 46, 26));
-            for (k = -4; k <= 4; k++) discN(XX(k * 6.5f), YY(33 + (k & 1) * 2), ZZ(6), COL(196, 166, 124), 8);
-            rect(XX(-27), YY(78), XX(27), YY(84), COL(70, 44, 24)); rect(XX(-5), YY(77), XX(5), YY(85), gold);
-            armsC(cx, cy, s, mood, t, skin, skin, 9.5f);
-        }
+        PRgb sk = PRGB(226, 176, 140), hair = PRGB(166, 84, 40), arm = PRGB(98, 72, 52), fur = PRGB(120, 98, 76), iron = PRGB(124, 130, 138);
+        bodyR(arm, PRGB(60, 42, 30), PRGB(74, 62, 52), PRGB(52, 38, 28), sk, 1.22f, 0);
+        if (full) { lR(-16.0f, 54.0f, 16.0f, 58.0f, LEA); lR(-2.6f, 53.6f, 2.6f, 58.4f, iron); lB(19.0f, 52.0f, 25.0f, 72.0f, 2.2f, PRGB(100, 72, 46)); lT(22.0f, 70.0f, 31.0f, 66.0f, 28.0f, 80.0f, iron); }
+        lE(-16.0f, 21.0f, 9.0f, 5.5f, fur); lE(16.0f, 21.0f, 9.0f, 5.5f, fur); lE(0.0f, 16.5f, 13.0f, 3.4f, rdk(fur, 0.9f));
+        for (k = -4; k <= 4; k++) lT(k * 4.0f - 2.0f, 19.0f, k * 4.0f + 2.0f, 19.0f, k * 4.0f, 24.5f, rdk(fur, 0.85f));
+        setHead(1);
+        POLY(hair, 1, -9.0f, 0.0f, -10.4f, 8.0f, -9.0f, 18.0f, -5.0f, 21.0f, -3.0f, 12.0f);               /* madeixas laterais */
+        faceR(sk, PRGB(80, 120, 150), hair, PRGB(160, 90, 80), 1.0f);
+        POLY(hair, 0, -9.2f, 3.0f, -10.0f, 13.0f, -6.0f, 22.0f, -2.0f, 29.0f, 0.0f, 33.0f, 2.0f, 29.0f, 6.0f, 22.0f, 10.0f, 13.0f, 9.2f, 3.0f, 5.0f, 6.4f, 0.0f, 5.0f, -5.0f, 6.4f);
+        POLY(ral(rdk(hair, 0.62f), 0x90), 0, 2.0f, 8.0f, 9.0f, 8.0f, 6.0f, 22.0f, 1.0f, 30.0f);
+        for (k = 0; k < 3; k++) lB(-2.0f + k * 2.0f, 12.0f, -1.6f + k * 2.0f, 28.0f, 0.5f, ral(rdk(hair, 0.55f), 0x90));
+        lD(0.0f, 28.5f, 1.4f, PRGB(210, 170, 70));
+        POLY(hair, 1, 0.0f, 4.6f, 4.2f, 3.8f, 8.0f, 6.6f, 6.2f, 8.2f, 3.0f, 6.2f, 0.0f, 6.6f);
+        POLY(iron, 0, -10.4f, -6.0f, -9.6f, -13.0f, -4.5f, -17.0f, 4.5f, -17.0f, 9.6f, -13.0f, 10.4f, -6.0f, 7.0f, -5.5f, 0.0f, -8.0f, -7.0f, -5.5f);
+        POLY(ral(PRGB(60, 64, 72), 0x80), 0, 1.0f, -16.5f, 4.5f, -17.0f, 9.6f, -13.0f, 10.4f, -6.0f, 7.0f, -5.5f, 3.0f, -7.0f);
+        lR(-10.4f, -8.4f, 10.4f, -6.6f, rdk(iron, 0.7f)); lR(-0.9f, -8.0f, 0.9f, 0.2f, iron);
         for (k = -1; k <= 1; k += 2) {
-            beam(XX(k * 22), YY(-15), XX(k * 34), YY(-19), ZZ(8), horn);
-            beam(XX(k * 34), YY(-19), XX(k * 39), YY(-38), ZZ(6), horn);
-            discN(XX(k * 39), YY(-39), ZZ(3), horn, 6);
-        }
-        disc(cx, cy, ZZ(25), skin);
-        slice(cx, YY(3), ZZ(26), ZZ(30), 0, CPI, bd);
-        for (k = -1; k <= 1; k += 2) { beam(XX(k * 14), YY(24), XX(k * 14), YY(42), ZZ(5.5f), bd); discN(XX(k * 14), YY(43), ZZ(3), COL(200, 40, 40), 6); }
-        ell(XX(-9.5f), YY(7), ZZ(10), ZZ(4), COL(244, 170, 80)); ell(XX(9.5f), YY(7), ZZ(10), ZZ(4), COL(244, 170, 80));
-        faceStd(cx, cy, s, mood, t, 9, 1, 18, COL(120, 70, 30), 3);
-        slice(cx, YY(-8), ZZ(26.5f), ZZ(18), CPI, 2 * CPI, steel);
-        rect(XX(-26), YY(-13), XX(26), YY(-8), COL(112, 118, 134));
-        rect(XX(-2), YY(-8), XX(2), YY(5), COL(112, 118, 134));
-        for (k = -2; k <= 2; k++) discN(XX(k * 9), YY(-10.5f), ZZ(1.5f), gold, 6);
-        break; }
-
-    case 10: {  /* CHAPOLIN COLORADO: capuz vermelho com duas antenas, coracao amarelo no peito */
-        u64 rd = COL(214, 36, 40), rdD = COL(158, 22, 28), yl = COL(255, 214, 40), yd = COL(206, 154, 18), nose = COL(224, 160, 120);
-        float wob = 2.5f * sinf(t * 0.2f) + (mood == 1 ? 3.0f * sinf(t * 0.5f) : 0.0f), drop = (mood == 2) ? 5.0f : 0.0f;
-        if (full) {
-            legsC(cx, cy, s, rd, yl);
-            torsoC(cx, cy, s, rd, yd);
-            rect(XX(-27), YY(76), XX(27), YY(88), yl);                                  /* calcao amarelo */
-            rect(XX(-27), YY(76), XX(27), YY(79), yd);
-            discN(XX(-6.5f), YY(55), ZZ(7.4f), yl, 10); discN(XX(6.5f), YY(55), ZZ(7.4f), yl, 10);   /* coracao */
-            tri(XX(-13.5f), YY(58), XX(13.5f), YY(58), cx, YY(73), yl);
-            discN(XX(-9), YY(53), ZZ(2), COL(255, 245, 190), 6);
-            armsC(cx, cy, s, mood, t, rd, yl, 8.5f);
-        }
-        for (k = -1; k <= 1; k += 2) {                                                  /* antenas */
-            float bx = XX(k * 21 + k * wob), by = YY(-47 + drop);
-            beam(XX(k * 10), YY(-20), bx, by, ZZ(2.4f), ink);
-            discN(bx, by, ZZ(5.2f), yl, 10);
-            discN(bx - ZZ(1.4f), by - ZZ(1.6f), ZZ(1.6f), COL(255, 245, 190), 6);
-        }
-        disc(cx, cy, ZZ(25), rd);                                                       /* capuz */
-        arcL(cx, cy, ZZ(24), ZZ(24), 1.1f * CPI, 1.9f * CPI, ZZ(2.2f), rdD);
-        ell(cx, YY(5), ZZ(17.5f), ZZ(19), skin);                                        /* rosto */
-        discN(cx, YY(5), ZZ(3.4f), nose, 8);
-        faceStd(cx, cy, s, mood, t, 8.5f, -3, 14, COL(60, 30, 20), 3);
-        break; }
-
-    case 11: {  /* HACKER: capuz escuro, oculos ciano e moletom com 01 */
-        u64 hd = COL(30, 34, 46), hdL = COL(56, 62, 80), cyn = COL(0, 240, 220), jeans = COL(36, 46, 84), shoe = COL(60, 255, 140);
-        if (full) {
-            legsC(cx, cy, s, jeans, shoe);
-            torsoC(cx, cy, s, hd, hdL);
-            beam(XX(-6), YY(44), XX(-6), YY(60), ZZ(1.6f), hdL); beam(XX(6), YY(44), XX(6), YY(60), ZZ(1.6f), hdL);
-            text(XX(-13), YY(60), 0.42f * s, cyn, "01");
-            armsC(cx, cy, s, mood, t, hd, skin, 8.5f);
-        }
-        disc(cx, cy, ZZ(26), hd);
-        arcL(cx, cy, ZZ(25), ZZ(25), 1.05f * CPI, 1.95f * CPI, ZZ(2.0f), hdL);
-        ell(cx, YY(5), ZZ(17.5f), ZZ(19), skin);
-        discN(cx, YY(5.5f), ZZ(3.2f), COL(218, 152, 112), 8);
-        faceStd(cx, cy, s, mood, t, 8.5f, -3, 14, 0, 3);
-        rect(XX(-16), YY(-8), XX(16), YY(2), CA(0, 240, 220, 0x50));                        /* oculos */
-        beam(XX(-16), YY(-8), XX(16), YY(-8), ZZ(1.4f), cyn); beam(XX(-16), YY(2), XX(16), YY(2), ZZ(1.4f), cyn);
-        beam(XX(-16), YY(-8), XX(-16), YY(2), ZZ(1.4f), cyn); beam(XX(16), YY(-8), XX(16), YY(2), ZZ(1.4f), cyn);
-        if (((t / 12) & 3) == 0) beam(XX(-11), YY(-6), XX(-6), YY(0), ZZ(1.2f), COL(255, 255, 255));
-        ell(XX(-27), YY(2), ZZ(4), ZZ(8), cyn); ell(XX(27), YY(2), ZZ(4), ZZ(8), cyn);     /* fone */
-        break; }
-
-    case 12: {  /* PAPAI NOEL */
-        u64 rd = COL(208, 32, 40), rdD = COL(150, 18, 28), wt = COL(248, 248, 252), wtD = COL(214, 220, 232), blk = COL(30, 24, 26);
-        if (full) {
-            legsC(cx, cy, s, rd, blk);
-            torsoC(cx, cy, s, rd, rdD);
-            rect(XX(-4), YY(44), XX(4), YY(78), wt);
-            rect(XX(-28), YY(77), XX(28), YY(85), blk); rect(XX(-6.5f), YY(75), XX(6.5f), YY(87), gold); rect(XX(-3.5f), YY(78), XX(3.5f), YY(84), blk);
-            for (k = 0; k < 3; k++) discN(cx, YY(52 + k * 8), ZZ(1.6f), blk, 6);
-            armsC(cx, cy, s, mood, t, rd, wt, 9.0f);
-        }
-        disc(cx, cy, ZZ(25), skin);
-        faceStd(cx, cy, s, mood, t, 9, -4, 17, wtD, 1);
-        discN(XX(-17), YY(6), ZZ(3.6f), CA(255, 110, 120, 0x50), 8); discN(XX(17), YY(6), ZZ(3.6f), CA(255, 110, 120, 0x50), 8);
-        ell(cx, YY(16), ZZ(23), ZZ(15), wt);                                              /* barba */
-        ell(cx, YY(19), ZZ(20), ZZ(11), wtD);
-        ell(cx, YY(15), ZZ(21), ZZ(12), wt);
-        ell(XX(-8), YY(9), ZZ(9), ZZ(4), wt); ell(XX(8), YY(9), ZZ(9), ZZ(4), wt);        /* bigode */
-        discN(cx, YY(5), ZZ(4.4f), COL(236, 120, 110), 8);                                /* nariz */
-        if (mood == 1) slice(cx, YY(16), ZZ(6), ZZ(6.5f), 0.0f, CPI, COL(140, 20, 30));
-        else if (mood == 2) arcL(cx, YY(21), ZZ(5), ZZ(3), 1.15f * CPI, 1.85f * CPI, ZZ(1.6f), ink);
-        quad(XX(-24), YY(-12), XX(24), YY(-12), XX(26), YY(-30), XX(-8), YY(-50), rd);   /* gorro */
-        ell(cx, YY(-12), ZZ(28), ZZ(7), wt);
-        discN(XX(-8), YY(-50), ZZ(5.6f), wt, 10);
-        break; }
-
-    case 13: {  /* MESTRE DO TEMPO: capuz azul com detalhes dourados, monoculo e relogio no peito */
-        u64 bl = COL(34, 48, 110), blD = COL(18, 26, 70), gd2 = COL(255, 214, 90), gdD = COL(190, 146, 40), cy2 = COL(120, 200, 255), sv = COL(214, 222, 236);
-        float ha = t * 0.05f;
-        if (full) {
-            legsC(cx, cy, s, blD, gdD);
-            torsoC(cx, cy, s, bl, gdD);
-            rect(XX(-27), YY(76), XX(27), YY(80), gd2);                                   /* cinto */
-            discN(cx, YY(62), ZZ(13), gdD, 16);                                           /* relogio */
-            discN(cx, YY(62), ZZ(11), COL(240, 244, 255), 16);
-            for (k = 0; k < 4; k++) discN(XX(cosf(k * CPI * 0.5f) * 8.6f), YY(62 + sinf(k * CPI * 0.5f) * 8.6f), ZZ(0.9f), blD, 6);
-            beam(cx, YY(62), XX(cosf(ha) * 8.0f), YY(62 + sinf(ha) * 8.0f), ZZ(1.4f), blD);
-            beam(cx, YY(62), XX(cosf(ha * 0.083f) * 5.0f), YY(62 + sinf(ha * 0.083f) * 5.0f), ZZ(1.8f), blD);
-            armsC(cx, cy, s, mood, t, bl, skin, 9.0f);
-        }
-        disc(cx, cy, ZZ(26), bl);                                                         /* capuz */
-        arcL(cx, cy, ZZ(25), ZZ(25), 1.05f * CPI, 1.95f * CPI, ZZ(2.2f), gd2);
-        discN(cx, YY(-17), ZZ(4.5f), gd2, 10); discN(cx, YY(-17), ZZ(3.0f), cy2, 8);      /* relogio na testa do capuz */
-        ell(cx, YY(5), ZZ(17.5f), ZZ(19), skin);
-        ell(cx, YY(22), ZZ(8.5f), ZZ(5.5f), sv);                                          /* barbicha */
-        faceStd(cx, cy, s, mood, t, 8.5f, -3, 14, sv, 3);
-        ring(XX(8.5f), YY(-3), ZZ(6.8f), gd2);                                            /* monoculo */
-        beam(XX(14), YY(1), XX(22), YY(18), ZZ(1.0f), gd2);
-        break; }
-
-    case 14: {  /* GRINCH: pelo verde, olhos amarelos, sobrancelha malvada, sorriso torto e gorro roubado do Noel */
-        u64 gr = COL(100, 184, 58), grD = COL(60, 126, 34), grL = COL(168, 216, 112), rd = COL(208, 32, 40), ye = COL(255, 226, 70);
-        if (full) {
-            legsC(cx, cy, s, gr, grD);
-            torsoC(cx, cy, s, gr, grD);
-            ell(cx, YY(66), ZZ(15), ZZ(18), grL);                                         /* barriga clara */
-            beam(XX(-19), YY(47), XX(19), YY(47), ZZ(8), rd);                             /* cachecol roubado */
-            beam(XX(10), YY(50), XX(14), YY(72), ZZ(6), rd);
-            armsC(cx, cy, s, mood, t, gr, gr, 9.0f);
-        }
-        tri(XX(-21), YY(-2), XX(-38), YY(-20), XX(-24), YY(12), gr); tri(XX(21), YY(-2), XX(38), YY(-20), XX(24), YY(12), gr);   /* orelhas pontudas */
-        ell(cx, YY(3), ZZ(24), ZZ(27), gr);                                               /* cabeca comprida */
-        ell(cx, YY(14), ZZ(14), ZZ(8), grL);                                              /* focinho claro */
-        for (k = -1; k <= 1; k += 2) {
-            float ex = XX(k * 9), yy = YY(-2);
-            if (mood == 1) {
-                beam(ex - ZZ(4.2f), yy + ZZ(2.0f), ex, yy - ZZ(2.2f), ZZ(2.4f), ink);
-                beam(ex, yy - ZZ(2.2f), ex + ZZ(4.2f), yy + ZZ(2.0f), ZZ(2.4f), ink);
-            } else {
-                discN(ex, yy, ZZ(4.8f), ye, 10);
-                rect(ex - ZZ(0.8f), yy - ZZ(3.2f) + (mood == 2 ? ZZ(1.6f) : 0.0f), ex + ZZ(0.8f), yy + ZZ(3.2f) + (mood == 2 ? ZZ(1.6f) : 0.0f), ink);
-            }
-            if (mood == 2) beam(XX(k * 14), YY(-6), XX(k * 4), YY(-12), ZZ(2.4f), grD);   /* triste: inclinada para cima */
-            else           beam(XX(k * 14), YY(-12), XX(k * 4), YY(-6), ZZ(2.4f), grD);   /* malvada: desce para o centro */
-        }
-        discN(cx, YY(6), ZZ(3.2f), grD, 8);                                               /* nariz */
-        faceStd(cx, cy, s, mood, t, 9, -2, 15, 0, 2);                                     /* so a boca */
-        quad(XX(-24), YY(-12), XX(24), YY(-12), XX(26), YY(-30), XX(-8), YY(-50), rd);   /* gorro roubado */
-        ell(cx, YY(-12), ZZ(28), ZZ(7), COL(248, 248, 252));
-        discN(XX(-8), YY(-50), ZZ(5.6f), COL(248, 248, 252), 10);
-        break; }
-
-    case 15: {  /* POSEIDON: cabelo e barba azuis, coroa de coral, tunica turquesa e tridente dourado */
-        u64 sk = COL(238, 190, 150), bd = COL(44, 132, 218), bdD = COL(24, 88, 170), bdL = COL(130, 205, 255);
-        u64 cr = COL(255, 118, 104), crD = COL(214, 72, 76), tn = COL(28, 152, 196), tnD = COL(16, 100, 148), gd2 = COL(255, 206, 60);
-        if (full) {
-            float hx, hy;
-            legsC(cx, cy, s, sk, gd2);
-            torsoC(cx, cy, s, tn, tnD);
-            beam(XX(-27), YY(79), XX(27), YY(79), ZZ(5), gd2);                            /* cinto dourado */
-            discN(cx, YY(79), ZZ(5.5f), cr, 8);                                           /* concha no cinto */
-            armsC(cx, cy, s, mood, t, tn, sk, 9.0f);
-            if (mood == 1)      { hx = XX(-(46 + 3 * sinf(t * 0.3f - 1.0f))); hy = YY(2 + 7 * sinf(t * 0.35f)); }   /* segue a mao esquerda */
-            else if (mood == 2) { hx = XX(-31); hy = YY(86); }
-            else                { hx = XX(-37); hy = YY(74); }
-            beam(hx, hy + ZZ(36), hx, hy - ZZ(46), ZZ(3.2f), gd2);                        /* tridente */
-            beam(hx - ZZ(9), hy - ZZ(52), hx - ZZ(9), hy - ZZ(38), ZZ(2.4f), gd2);
-            beam(hx + ZZ(9), hy - ZZ(52), hx + ZZ(9), hy - ZZ(38), ZZ(2.4f), gd2);
-            beam(hx - ZZ(9), hy - ZZ(38), hx, hy - ZZ(31), ZZ(2.4f), gd2);
-            beam(hx + ZZ(9), hy - ZZ(38), hx, hy - ZZ(31), ZZ(2.4f), gd2);
-            tri(hx - ZZ(3.6f), hy - ZZ(46), hx + ZZ(3.6f), hy - ZZ(46), hx, hy - ZZ(62), gd2);
-            tri(hx - ZZ(12.6f), hy - ZZ(52), hx - ZZ(5.4f), hy - ZZ(52), hx - ZZ(9), hy - ZZ(63), gd2);
-            tri(hx + ZZ(5.4f), hy - ZZ(52), hx + ZZ(12.6f), hy - ZZ(52), hx + ZZ(9), hy - ZZ(63), gd2);
-        }
-        ell(cx, YY(-2), ZZ(30), ZZ(28), bd);                                              /* cabelo */
-        ell(XX(-25), YY(20), ZZ(8), ZZ(21), bd); ell(XX(25), YY(20), ZZ(8), ZZ(21), bd);  /* mechas dos lados */
-        ell(cx, YY(4), ZZ(23), ZZ(24), sk);                                               /* rosto */
-        discN(cx, YY(5), ZZ(3.0f), COL(222, 160, 124), 8);                                /* nariz */
-        ell(cx, YY(20), ZZ(22), ZZ(15), bd);                                              /* barba */
-        tri(XX(-18), YY(24), XX(18), YY(24), cx, YY(46), bd);                             /* barba pontuda */
-        beam(cx, YY(28), cx, YY(42), ZZ(2.0f), bdL);
-        ell(XX(-8), YY(10), ZZ(8.5f), ZZ(3.4f), bdL); ell(XX(8), YY(10), ZZ(8.5f), ZZ(3.4f), bdL);   /* bigode */
-        faceStd(cx, cy, s, mood, t, 9, -3, 17, bdD, 3);                                   /* olhos, sobrancelhas e boca */
-        rect(XX(-20), YY(-31), XX(20), YY(-25), crD);                                     /* coroa de coral */
-        for (k = -2; k <= 2; k++) {
-            int ak = k < 0 ? -k : k;
-            float bx = k * 9.0f, ty = -31.0f - (ak == 0 ? 16.0f : (ak == 1 ? 12.0f : 9.0f)), tx = bx + (k < 0 ? -2.0f : (k > 0 ? 2.0f : 0.0f));
-            tri(XX(bx - 4.5f), YY(-31), XX(bx + 4.5f), YY(-31), XX(tx), YY(ty), ak == 1 ? crD : cr);
-            discN(XX(tx), YY(ty), ZZ(1.8f), COL(250, 250, 255), 6);                       /* perola na ponta */
+            lB(k * 10.0f, -11.0f, k * 15.5f, -13.5f, 3.0f, PRGB(232, 224, 202)); lB(k * 15.5f, -13.5f, k * 18.5f, -20.0f, 2.2f, PRGB(232, 224, 202)); lB(k * 18.5f, -20.0f, k * 18.0f, -25.0f, 1.2f, PRGB(238, 232, 214));
         }
         break; }
-
-    case 16: {  /* COVEIRO: chapeu preto, rosto palido, barba suja, casaco escuro e uma pa */
-        u64 pl = COL(206, 214, 196), pl2 = COL(150, 164, 146), coat = COL(46, 44, 56), coatD = COL(26, 24, 34), hatc = COL(30, 28, 36);
-        u64 band = COL(120, 96, 60), wd = COL(120, 82, 46), steel = COL(176, 184, 192), gl = COL(150, 255, 170);
-        if (full) {
-            float hx, hy;
-            legsC(cx, cy, s, coatD, COL(20, 18, 22));
-            torsoC(cx, cy, s, coat, coatD);
-            beam(cx, YY(46), cx, YY(84), ZZ(2.0f), coatD);                                /* abotoadura */
-            discN(cx, YY(58), ZZ(1.8f), band, 6); discN(cx, YY(70), ZZ(1.8f), band, 6);
-            armsC(cx, cy, s, mood, t, coat, pl, 9.0f);
-            if (mood == 1)      { hx = XX(-(46 + 3 * sinf(t * 0.3f - 1.0f))); hy = YY(2 + 7 * sinf(t * 0.35f)); }   /* segue a mao esquerda */
-            else if (mood == 2) { hx = XX(-31); hy = YY(86); }
-            else                { hx = XX(-37); hy = YY(74); }
-            beam(hx, hy + ZZ(34), hx, hy - ZZ(40), ZZ(3.0f), wd);                         /* cabo da pa */
-            quad(hx - ZZ(6), hy - ZZ(60), hx + ZZ(6), hy - ZZ(60), hx + ZZ(8), hy - ZZ(42), hx - ZZ(8), hy - ZZ(42), steel);   /* lamina */
-            beam(hx, hy - ZZ(58), hx, hy - ZZ(44), ZZ(1.0f), COL(120, 128, 138));
-        }
-        ell(cx, YY(4), ZZ(23), ZZ(25), pl);                                               /* rosto palido */
-        ell(cx, YY(23), ZZ(16), ZZ(8), pl2);                                              /* barba suja */
-        discN(cx, YY(8), ZZ(2.8f), pl2, 8);                                               /* nariz */
-        faceStd(cx, cy, s, mood, t, 9, 0, 16, coatD, 3);
-        ell(XX(-9), YY(6), ZZ(5.5f), ZZ(2.2f), CA(70, 80, 96, 0x40)); ell(XX(9), YY(6), ZZ(5.5f), ZZ(2.2f), CA(70, 80, 96, 0x40));   /* olheiras */
-        ell(cx, YY(-14), ZZ(36), ZZ(7), hatc);                                            /* aba do chapeu */
-        quad(XX(-20), YY(-14), XX(20), YY(-14), XX(17), YY(-42), XX(-17), YY(-42), hatc); /* copa */
-        beam(XX(-20), YY(-18), XX(20), YY(-18), ZZ(4), band);
-        discN(XX(31), YY(-8 + 3 * sinf(t * 0.2f)), ZZ(3.6f), CA(150, 255, 170, 0x70), 8); /* fogo-fatuo */
-        discN(XX(31), YY(-8 + 3 * sinf(t * 0.2f)), ZZ(1.4f), gl, 6);
+    case 17: {  /* POLICIAL */
+        PRgb sk = PRGB(222, 170, 134), uni = PRGB(38, 56, 112), uniD = PRGB(22, 32, 72), cap = PRGB(28, 40, 86), mus = PRGB(62, 44, 36);
+        bodyR(uni, uniD, PRGB(26, 34, 70), PRGB(14, 14, 18), sk, 1.0f, 0);
+        POLY(PRGB(150, 176, 214), 0, -6.0f, 15.5f, 6.0f, 15.5f, 2.6f, 24.0f, -2.6f, 24.0f);
+        POLY(K, 0, -1.6f, 17.0f, 1.6f, 17.0f, 1.2f, cFull ? 40.0f : CUT_V, 0.0f, cFull ? 43.0f : CUT_V, -1.2f, cFull ? 40.0f : CUT_V);
+        if (cFull) { lD(-8.0f, 28.0f, 2.8f, GOLD); lD(-8.0f, 28.0f, 1.5f, PRGB(236, 206, 110)); }
+        lB(-17.0f, 19.0f, -12.0f, 21.0f, 2.4f, GOLD); lB(17.0f, 19.0f, 12.0f, 21.0f, 2.4f, GOLD);
+        if (full) { lR(-13.5f, 54.0f, 13.5f, 58.0f, K); lR(-2.6f, 53.6f, 2.6f, 58.4f, GOLD); lR(13.0f, 56.0f, 19.0f, 70.0f, PRGB(34, 32, 36)); ring(LX(-12.0f), LY(61.0f), LZ(2.6f), RCOL(PRGB(190, 192, 200))); }
+        setHead(1);
+        faceR(sk, PRGB(70, 50, 34), PRGB(60, 44, 36), PRGB(150, 90, 84), 1.0f);
+        POLY(mus, 1, 0.0f, 4.8f, 3.6f, 4.2f, 7.2f, 6.2f, 5.8f, 7.6f, 3.0f, 6.4f, 0.0f, 6.8f);
+        POLY(cap, 0, -10.0f, -6.0f, -9.6f, -12.5f, -5.0f, -15.5f, 0.0f, -16.4f, 5.0f, -15.5f, 9.6f, -12.5f, 10.0f, -6.0f, 0.0f, -7.6f);
+        lR(-10.0f, -9.0f, 10.0f, -6.4f, PRGB(14, 18, 34));
+        POLY(PRGB(10, 10, 14), 0, -9.0f, -6.4f, 9.0f, -6.4f, 11.5f, -3.4f, 0.0f, -2.8f, -11.5f, -3.4f);
+        lD(0.0f, -11.5f, 2.2f, GOLD); lD(0.0f, -11.5f, 1.1f, PRGB(236, 206, 110));
         break; }
-
-    case 17: {  /* POLICIAL: bone azul-marinho com distintivo dourado, farda azul, bigode e algemas no cinto */
-        u64 bl = COL(36, 62, 128), blD = COL(20, 36, 84), cap = COL(22, 36, 88), vis = COL(12, 16, 30), bad = COL(255, 205, 50), mus = COL(70, 46, 30);
-        if (full) {
-            legsC(cx, cy, s, blD, COL(16, 16, 22));
-            torsoC(cx, cy, s, bl, blD);
-            rect(XX(-28), YY(77), XX(28), YY(85), COL(22, 22, 28));                       /* cinto */
-            rect(XX(-6), YY(76), XX(6), YY(86), bad);                                     /* fivela */
-            beam(cx, YY(46), cx, YY(76), ZZ(2.0f), blD);                                  /* abotoadura */
-            discN(XX(-14), YY(58), ZZ(5.0f), bad, 10); discN(XX(-14), YY(58), ZZ(2.4f), bl, 8);   /* distintivo no peito */
-            ringN(XX(18), YY(80), ZZ(3.6f), ZZ(1.4f), 12, COL(230, 232, 240));          /* algemas no cinto */
-            ringN(XX(24), YY(80), ZZ(3.6f), ZZ(1.4f), 12, COL(230, 232, 240));
-            armsC(cx, cy, s, mood, t, bl, skin, 9.0f);
-        }
-        disc(cx, cy, ZZ(25), skin);
-        faceStd(cx, cy, s, mood, t, 9, 0, 17, COL(40, 28, 22), 3);
-        ell(XX(-7), YY(10), ZZ(8), ZZ(3.2f), mus); ell(XX(7), YY(10), ZZ(8), ZZ(3.2f), mus);   /* bigode */
-        ell(cx, YY(-13), ZZ(33), ZZ(7), vis);                                         /* aba do bone */
-        quad(XX(-22), YY(-12), XX(22), YY(-12), XX(19), YY(-38), XX(-19), YY(-38), cap);   /* copa */
-        beam(XX(-22), YY(-17), XX(22), YY(-17), ZZ(4), vis);
-        discN(cx, YY(-27), ZZ(5.4f), bad, 10); discN(cx, YY(-27), ZZ(2.6f), COL(220, 40, 52), 8);   /* distintivo do bone */
-        break; }
-
-    default: {  /* GATO */
-        u64 og = COL(244, 152, 64), od = COL(206, 106, 34), pk = COL(250, 150, 172), cr = COL(255, 250, 244);
-        if (full) {
-            float wob = 4.0f * sinf(t * 0.15f);
-            beam(XX(26), YY(82), XX(44), YY(78), ZZ(8), og);
-            beam(XX(44), YY(78), XX(53), YY(62 + wob), ZZ(8), og);
-            beam(XX(53), YY(62 + wob), XX(47), YY(46 + wob), ZZ(8), og);
-            discN(XX(47), YY(45 + wob), ZZ(4.6f), cr, 8);
-            legsC(cx, cy, s, og, cr);
-            torsoC(cx, cy, s, og, od);
-            ell(cx, YY(64), ZZ(15), ZZ(19), cr);
-            armsC(cx, cy, s, mood, t, og, cr, 9);
-        }
-        tri(XX(-28), YY(-2), XX(-25), YY(-34), XX(-6), YY(-20), og); tri(XX(28), YY(-2), XX(25), YY(-34), XX(6), YY(-20), og);
-        tri(XX(-24), YY(-8), XX(-22.5f), YY(-27), XX(-11), YY(-19), pk); tri(XX(24), YY(-8), XX(22.5f), YY(-27), XX(11), YY(-19), pk);
-        ell(cx, YY(2), ZZ(29), ZZ(24), og);
-        beam(cx, YY(-21), cx, YY(-11), ZZ(2.6f), od); beam(XX(-7), YY(-20), XX(-5), YY(-12), ZZ(2.6f), od); beam(XX(7), YY(-20), XX(5), YY(-12), ZZ(2.6f), od);
-        for (k = -1; k <= 1; k += 2) {
-            if (mood == 1) {
-                beam(XX(k * 11 - 4.5f), YY(-0.5f), XX(k * 11), YY(-4.5f), ZZ(2.4f), ink);
-                beam(XX(k * 11), YY(-4.5f), XX(k * 11 + 4.5f), YY(-0.5f), ZZ(2.4f), ink);
-            } else {
-                ell(XX(k * 11), YY(-2), ZZ(mood == 2 ? 7.4f : 6.4f), ZZ(mood == 2 ? 8 : 7), COL(124, 222, 112));
-                ell(XX(k * 11), YY(-2), ZZ(mood == 2 ? 2.4f : 1.8f), ZZ(mood == 2 ? 6.5f : 5.6f), ink);
-                discN(XX(k * 11 - 2), YY(-5), ZZ(1.4f), wh, 6);
-            }
-        }
-        if (mood == 2) tears(cx, cy, s, t, 11, 1);
-        ell(cx, YY(11), ZZ(13), ZZ(9), cr);
-        tri(XX(-3.6f), YY(5), XX(3.6f), YY(5), cx, YY(9.5f), pk);
-        if (mood == 1) {
-            slice(cx, YY(10), ZZ(6), ZZ(7), 0, CPI, COL(130, 22, 40));
-            ell(cx, YY(15), ZZ(3), ZZ(2), pk);
-        } else if (mood == 2) {
-            arcL(XX(-3.2f), YY(14), ZZ(3.2f), ZZ(2.6f), 1.1f * CPI, 1.9f * CPI, ZZ(1.4f), ink);
-            arcL(XX(3.2f), YY(14), ZZ(3.2f), ZZ(2.6f), 1.1f * CPI, 1.9f * CPI, ZZ(1.4f), ink);
+    case 0: {   /* PINGUIM (imperador) */
+        PRgb blk = PRGB(26, 30, 40), blkL = PRGB(54, 60, 76), wh = PRGB(232, 232, 226), org = PRGB(226, 150, 48), yel = PRGB(238, 200, 84);
+        float fl = cMood == 1 ? 4.0f : (cMood == 2 ? -3.0f : 0.0f);
+        setHead(0);
+        if (cFull) {
+            for (k = -1; k <= 1; k += 2) { lE(k * 8.0f, 114.0f, 8.0f, 3.2f, PRGB(66, 58, 54)); lE(k * 8.0f, 113.4f, 6.0f, 1.5f, PRGB(98, 86, 78)); }
+            lE(0.0f, 58.0f, 22.0f, 52.0f, blk); lE(-9.0f, 40.0f, 5.0f, 26.0f, ral(blkL, 0x58));
+            lE(0.0f, 62.0f, 14.5f, 44.0f, wh); lE(5.0f, 64.0f, 9.0f, 40.0f, ral(rdk(wh, 0.78f), 0x70));
+            lE(0.0f, 25.0f, 10.5f, 8.0f, ral(yel, 0xb0));
+            POLY(blk, 1, 19.0f, 22.0f, 24.0f, 24.0f, 29.0f + fl, 60.0f, 26.0f + fl, 64.0f, 21.0f, 44.0f);
         } else {
-            arcL(XX(-3.2f), YY(10.5f), ZZ(3.2f), ZZ(2.6f), 0.1f * CPI, 0.9f * CPI, ZZ(1.4f), ink);
-            arcL(XX(3.2f), YY(10.5f), ZZ(3.2f), ZZ(2.6f), 0.1f * CPI, 0.9f * CPI, ZZ(1.4f), ink);
+            lE(0.0f, 15.0f, 21.0f, 9.0f, blk); lE(0.0f, 17.0f, 13.5f, 6.5f, wh); lE(4.0f, 18.0f, 8.0f, 5.5f, ral(rdk(wh, 0.78f), 0x70));
+            lE(0.0f, 17.0f, 9.0f, 3.6f, ral(yel, 0xb0));
+            POLY(blk, 1, 19.0f, 14.0f, 22.0f, 15.0f, 25.0f + fl * 0.5f, 22.0f, 21.0f, 23.0f);
         }
+        setHead(1);
+        lE(0.0f, 0.0f, 9.8f, 11.0f, blk); lE(-3.5f, -4.5f, 4.0f, 5.0f, ral(blkL, 0x50));
+        for (k = -1; k <= 1; k += 2) { lE(k * 7.6f, 5.2f, 2.2f, 3.8f, org); lE(k * 7.4f, 4.8f, 1.2f, 2.4f, yel); }
+        lE(0.0f, 9.4f, 6.4f, 2.6f, PRGB(236, 232, 224));                                          /* garganta clara */
+        POLY(PRGB(150, 128, 112), 0, -2.6f, 2.0f, 2.6f, 2.0f, 1.2f, 9.0f, 0.0f, 12.2f, -1.2f, 9.0f);
+        lB(-2.0f, 2.6f, -0.8f, 10.0f, 0.9f, PRGB(226, 140, 70)); lB(2.0f, 2.6f, 0.8f, 10.0f, 0.9f, PRGB(226, 140, 70));
         for (k = -1; k <= 1; k += 2) {
-            int q;
-            for (q = -1; q <= 1; q++)
-                beam(XX(k * 12), YY(9.5f + q * 2.2f), XX(k * 33), YY(8 + q * 5.5f), ZZ(1.2f), CA(255, 255, 255, 0x70));
-        }
-        if (full) {
-            beam(XX(-19), YY(30), XX(19), YY(30), ZZ(6), COL(210, 40, 50));
-            discN(cx, YY(37), ZZ(4.8f), gold, 8);
+            if (cBlink) lB(k * 4.4f - 1.4f, -2.4f, k * 4.4f + 1.4f, -2.4f, 0.8f, PRGB(150, 150, 160));
+            else { lD(k * 4.4f, -2.4f, 1.9f, PRGB(236, 232, 224)); lD(k * 4.4f, -2.4f, 1.3f, PRGB(8, 8, 10)); lD(k * 4.4f - 0.4f, -2.9f, 0.45f, WH); }
         }
         break; }
+    case 1: {   /* ROBO (androide industrial) */
+        PRgb st = PRGB(122, 132, 146), stL = PRGB(172, 184, 200), stD = PRGB(70, 78, 92), dk = PRGB(28, 32, 40), amb = PRGB(255, 176, 64);
+        float sc = sinf(t * 0.04f) * 4.5f, pu = 0.5f + 0.5f * sinf(t * 0.12f);
+        bodyR(st, stD, rdk(st, 0.72f), dk, dk, 1.0f, 0);
+        lR(-8.0f, 21.0f, 8.0f, cFull ? 44.0f : CUT_V, dk); lR(-7.0f, 22.0f, 7.0f, 24.0f, ral(stL, 0x60));
+        if (cFull) { lD(-4.0f, 28.5f, 1.5f, amb); lD(0.0f, 28.5f, 1.5f, PRGB(96, 204, 124)); lD(4.0f, 28.5f, 1.5f, PRGB(206, 76, 76)); }
+        for (k = 0; k < 3 && cFull; k++) lR(-6.0f, 34.0f + k * 3.4f, 6.0f, 35.2f + k * 3.4f, ral(stL, 0x50));
+        for (k = -1; k <= 1; k += 2) { lD(k * 17.4f, 20.0f, 3.2f, stD); lD(k * 17.4f, 20.0f, 1.4f, stL); }
+        if (cFull) { lR(-13.0f, 52.0f, 13.0f, 57.0f, dk); lD(0.0f, 54.5f, 2.2f, amb); for (k = -1; k <= 1; k += 2) { lD(k * 8.2f, 87.0f, 4.0f, stD); lD(k * 8.2f, 87.0f, 1.8f, stL); } }
+        setHead(1);
+        lR(-11.6f, -3.0f, -9.4f, 4.0f, stD); lR(9.4f, -3.0f, 11.6f, 4.0f, stD);
+        POLY(st, 0, -9.6f, -9.0f, -7.6f, -11.6f, 7.6f, -11.6f, 9.6f, -9.0f, 9.6f, 7.0f, 7.6f, 10.8f, -7.6f, 10.8f, -9.6f, 7.0f);
+        POLY(ral(stD, 0x70), 0, 3.0f, -11.6f, 7.6f, -11.6f, 9.6f, -9.0f, 9.6f, 7.0f, 7.6f, 10.8f, 3.0f, 10.8f);
+        lR(-9.2f, -9.0f, -7.8f, 7.0f, ral(stL, 0x70)); lR(-7.0f, -10.6f, 7.0f, -9.6f, ral(stL, 0x50));
+        lR(-7.8f, -5.2f, 7.8f, 1.2f, dk); lR(-7.2f, -3.4f, 7.2f, -0.8f, ral(amb, 0x38 + (int)(0x28 * pu)));
+        if (!cBlink) { lE(sc, -2.1f, 2.0f, 1.2f, amb); lE(sc, -2.1f, 0.9f, 0.6f, WH); }
+        for (k = 0; k < 5; k++) lR(-4.4f + k * 2.2f, 4.6f, -3.4f + k * 2.2f, 8.2f, dk);
+        lD(-8.2f, -8.4f, 0.6f, stL); lD(8.2f, -8.4f, 0.6f, stL); lD(-8.2f, 9.2f, 0.6f, stL); lD(8.2f, 9.2f, 0.6f, stL);
+        break; }
+    case 3: {   /* NINJA */
+        PRgb blk = PRGB(32, 34, 46), blkD = PRGB(16, 18, 26), red = PRGB(150, 34, 40), sk = PRGB(214, 170, 136);
+        if (full) { lB(-12.0f, 62.0f, 14.0f, 14.0f, 3.0f, PRGB(40, 30, 30)); lB(14.0f, 14.0f, 17.5f, 7.0f, 2.2f, PRGB(70, 50, 40)); lB(13.0f, 13.5f, 16.0f, 15.0f, 3.4f, GOLD); }
+        bodyR(blk, blkD, rdk(blk, 0.9f), blkD, sk, 0.96f, 0);
+        lB(-12.0f, 19.0f, 11.0f, cFull ? 46.0f : CUT_V, 1.8f, ral(blkD, 0xa0)); lB(12.0f, 19.0f, -11.0f, cFull ? 46.0f : CUT_V, 1.8f, ral(blkD, 0xa0));
+        if (full) { lR(-13.0f, 50.0f, 13.0f, 55.0f, red); lB(10.0f, 53.0f, 14.0f, 66.0f, 2.2f, red); }
+        for (k = -1; k <= 1; k += 2) if (cFull) lB(k * 18.0f * 0.96f, 49.0f, k * 18.5f * 0.96f, 53.0f, 5.0f, rdk(blk, 0.7f));      /* munhequeiras */
+        setHead(1);
+        headR(sk, 1.0f);
+        eyesR(-2.7f, 3.7f, 2.1f, PRGB(40, 26, 20), PRGB(20, 14, 12));
+        lB(-6.2f, -5.6f, -1.6f, -4.4f, 1.1f, blkD); lB(6.2f, -5.6f, 1.6f, -4.4f, 1.1f, blkD);
+        POLY(blk, 0, -9.6f, -0.4f, -9.4f, 6.0f, -5.0f, 10.4f, 0.0f, 11.6f, 5.0f, 10.4f, 9.4f, 6.0f, 9.6f, -0.4f, 6.0f, 0.6f, 0.0f, 0.0f, -6.0f, 0.6f);
+        POLY(ral(blkD, 0x70), 0, 2.0f, 1.0f, 9.6f, -0.4f, 9.4f, 6.0f, 5.0f, 10.4f, 1.0f, 11.4f);
+        POLY(blkD, 0, -10.0f, -3.0f, -9.6f, -9.4f, -5.6f, -12.8f, 0.0f, -13.6f, 5.6f, -12.8f, 9.6f, -9.4f, 10.0f, -3.0f, 6.0f, -5.8f, 0.0f, -6.4f, -6.0f, -5.8f);
+        lR(-10.0f, -8.8f, 10.0f, -6.6f, red);
+        lB(9.6f, -7.4f, 16.0f + sinf(t * 0.08f) * 1.5f, -4.0f, 1.8f, red); lB(9.6f, -7.4f, 15.0f + sinf(t * 0.08f + 1.0f) * 1.5f, -9.4f, 1.6f, rdk(red, 0.8f));
+        break; }
+    case 4: {   /* ALIEN (cinza) */
+        PRgb sk = PRGB(150, 164, 152), skD = rdk(sk, 0.74f), suit = PRGB(64, 68, 88);
+        bodyR(suit, rdk(suit, 0.62f), rdk(suit, 0.8f), K, sk, 0.78f, 0);
+        lR(-1.2f, 19.0f, 1.2f, cFull ? 54.0f : CUT_V, ral(PRGB(120, 220, 200), 0x60));
+        setHead(1);
+        lR(-2.8f, 8.0f, 2.8f, 14.0f, skD);
+        POLY(sk, 0, 0.0f, -13.8f, 7.6f, -12.6f, 11.4f, -6.8f, 11.2f, 0.0f, 8.6f, 6.8f, 5.0f, 11.4f, 0.0f, 13.2f, -5.0f, 11.4f, -8.6f, 6.8f, -11.2f, 0.0f, -11.4f, -6.8f, -7.6f, -12.6f);
+        POLY(ral(skD, 0x70), 0, 3.0f, -13.0f, 7.6f, -12.6f, 11.4f, -6.8f, 11.2f, 0.0f, 8.6f, 6.8f, 5.0f, 11.4f, 2.0f, 12.6f, 3.0f, 2.0f);
+        lE(-4.0f, -9.0f, 4.6f, 2.4f, ral(PRGB(230, 240, 232), 0x34));
+        if (cBlink) { lB(-8.0f, -1.5f, -2.0f, -0.5f, 1.0f, K); lB(8.0f, -1.5f, 2.0f, -0.5f, 1.0f, K); }
+        else {
+            POLY(K, 1, 1.2f, -1.6f, 3.4f, -4.4f, 7.2f, -3.6f, 9.0f, 0.2f, 6.4f, 3.6f, 3.0f, 3.8f);
+            lD(-6.2f, -1.0f, 0.8f, ral(WH, 0x90)); lD(6.2f, -1.0f, 0.8f, ral(WH, 0x90));
+        }
+        lD(-0.7f, 5.6f, 0.4f, skD); lD(0.7f, 5.6f, 0.4f, skD);
+        lB(-1.8f, 8.6f, 1.8f, 8.6f + (cMood == 2 ? 0.6f : 0.0f), 0.6f, rdk(sk, 0.5f));
+        break; }
+    case 9: {   /* GATO (jaqueta de couro) */
+        PRgb fur = PRGB(212, 132, 58), furD = PRGB(150, 84, 34), furL = PRGB(238, 196, 140), jac = PRGB(40, 42, 54), pink = PRGB(222, 148, 148);
+        if (full) { lB(11.0f, 60.0f, 26.0f, 66.0f, 3.6f, fur); lB(26.0f, 66.0f, 31.0f, 50.0f, 3.2f, fur); lB(31.0f, 50.0f, 27.0f, 38.0f, 2.8f, furD); }
+        bodyR(jac, rdk(jac, 0.55f), PRGB(34, 36, 46), K, fur, 1.0f, 0);
+        POLY(PRGB(214, 210, 204), 0, -5.0f, 15.5f, 5.0f, 15.5f, 2.2f, cFull ? 30.0f : CUT_V, -2.2f, cFull ? 30.0f : CUT_V);
+        lB(-17.0f, 19.0f, -8.0f, 15.0f, 2.2f, rdk(jac, 1.5f)); lB(17.0f, 19.0f, 8.0f, 15.0f, 2.2f, rdk(jac, 1.5f));
+        setHead(1);
+        for (k = -1; k <= 1; k += 2) { lT(k * 4.2f, -8.6f, k * 8.6f, -19.0f, k * 10.4f, -6.0f, fur); lT(k * 5.6f, -9.0f, k * 8.2f, -15.6f, k * 9.4f, -7.2f, pink); }
+        POLY(fur, 0, 0.0f, -10.6f, 6.4f, -9.8f, 10.0f, -5.4f, 10.8f, 0.0f, 9.2f, 6.0f, 5.0f, 10.6f, 0.0f, 11.2f, -5.0f, 10.6f, -9.2f, 6.0f, -10.8f, 0.0f, -10.0f, -5.4f, -6.4f, -9.8f);
+        POLY(ral(furD, 0x60), 0, 3.0f, -10.0f, 10.0f, -5.4f, 10.8f, 0.0f, 9.2f, 6.0f, 5.0f, 10.6f, 2.0f, 11.0f, 3.0f, 2.0f);
+        lB(0.0f, -10.4f, 0.0f, -6.4f, 1.0f, furD); lB(-2.8f, -10.0f, -2.2f, -6.8f, 0.8f, furD); lB(2.8f, -10.0f, 2.2f, -6.8f, 0.8f, furD);
+        lE(0.0f, 5.4f, 5.0f, 3.6f, furL);
+        for (k = -1; k <= 1; k += 2) {
+            if (cBlink) lB(k * 4.2f - 2.0f, -2.2f, k * 4.2f + 2.0f, -2.2f, 0.8f, furD);
+            else { lE(k * 4.2f, -2.4f, 2.6f, 1.8f, PRGB(150, 204, 92)); lE(k * 4.2f, -2.4f, 0.55f, 1.7f, K); }
+            lB(k * 1.6f, 6.0f, k * 12.5f, 4.2f, 0.4f, ral(WH, 0xa0)); lB(k * 1.8f, 7.2f, k * 12.0f, 8.0f, 0.4f, ral(WH, 0xa0));
+        }
+        lT(-1.6f, 2.8f, 1.6f, 2.8f, 0.0f, 4.8f, PRGB(214, 120, 124));
+        lB(0.0f, 4.8f, 0.0f, 6.4f, 0.6f, K); lB(0.0f, 6.4f, -2.0f, 7.6f, 0.6f, K); lB(0.0f, 6.4f, 2.0f, 7.6f, 0.6f, K);
+        break; }
+    case 10: {  /* CHAPOLIN COLORADO */
+        PRgb red = PRGB(176, 40, 44), redD = PRGB(110, 24, 30), yel = PRGB(224, 178, 62), sk = PRGB(226, 184, 150);
+        setHead(1);
+        for (k = -1; k <= 1; k += 2) { lB(k * 3.6f, -10.5f, k * 6.4f, -24.0f, 0.8f, redD); lD(k * 6.4f, -24.4f, 1.7f, yel); }
+        bodyR(red, redD, red, yel, red, 1.0f, 0);
+        if (cFull) { lE(-2.7f, 28.5f, 3.0f, 3.0f, yel); lE(2.7f, 28.5f, 3.0f, 3.0f, yel); lT(-5.5f, 29.6f, 5.5f, 29.6f, 0.0f, 37.0f, yel); }
+        if (full) { lR(-13.0f, 52.0f, 13.0f, 56.0f, yel); lR(-13.0f, 57.0f, 13.0f, 72.0f, rdk(red, 0.92f)); }
+        setHead(1);
+        lE(0.0f, -0.5f, 11.8f, 13.0f, red); lE(4.0f, 1.0f, 8.0f, 11.0f, ral(redD, 0x60));
+        POLY(sk, 0, 0.0f, -8.6f, 6.0f, -7.6f, 8.4f, -3.0f, 8.8f, 1.5f, 7.4f, 6.4f, 4.6f, 9.4f, 0.0f, 10.6f, -4.6f, 9.4f, -7.4f, 6.4f, -8.8f, 1.5f, -8.4f, -3.0f, -6.0f, -7.6f);
+        POLY(ral(rdk(sk, 0.78f), 0x58), 0, 3.0f, -8.0f, 8.4f, -3.0f, 8.8f, 1.5f, 7.4f, 6.4f, 4.6f, 9.4f, 2.0f, 10.2f, 3.0f, 1.0f);
+        eyesR(-2.4f, 3.4f, 2.1f, PRGB(70, 44, 28), rdk(sk, 0.35f));
+        browsR(-5.4f, 3.6f, 1.2f, PRGB(60, 36, 28)); noseR(sk); mouthR(6.2f, 2.5f, PRGB(150, 84, 78));
+        lB(-8.4f, -5.8f, 8.4f, -5.8f, 1.2f, redD);
+        break; }
+    case 11: {  /* HACKER */
+        PRgb hood = PRGB(46, 50, 62), hoodD = PRGB(22, 24, 32), sk = PRGB(204, 168, 140), cy = PRGB(96, 232, 232);
+        if (full) { lR(-29.0f, 40.0f, -16.0f, 52.0f, PRGB(62, 66, 78)); lR(-28.0f, 41.0f, -17.0f, 51.0f, ral(cy, 0x50)); }
+        bodyR(hood, hoodD, PRGB(34, 36, 44), PRGB(210, 212, 220), sk, 1.0f, 0);
+        if (full) { lR(-9.0f, 40.0f, 9.0f, 50.0f, ral(hoodD, 0x90)); lB(-3.0f, 19.0f, -3.4f, 31.0f, 0.7f, rdk(WH, 0.8f)); lB(3.0f, 19.0f, 3.4f, 29.0f, 0.7f, rdk(WH, 0.8f)); lR(-10.0f, 107.0f, 10.0f, 110.0f, ral(cy, 0x60)); }
+        setHead(1);
+        lE(0.0f, -1.0f, 12.2f, 13.6f, hood);
+        faceR(rmix(sk, hood, 0.22f), PRGB(60, 44, 30), rdk(hood, 0.7f), PRGB(140, 90, 84), 1.0f);
+        stubble(sk, 0x80);
+        lR(-8.4f, -4.6f, 8.4f, 0.6f, ral(cy, 0x40)); lE(-3.9f, -2.1f, 3.6f, 2.4f, ral(cy, 0x90)); lE(3.9f, -2.1f, 3.6f, 2.4f, ral(cy, 0x90));
+        lB(-5.7f, -3.5f, -3.0f, -3.5f, 0.7f, ral(WH, 0xb0)); lB(2.2f, -3.5f, 4.9f, -3.5f, 0.7f, ral(WH, 0xb0));
+        lE(0.0f, -9.8f, 11.6f, 4.8f, hood); lE(0.0f, -6.4f, 9.0f, 2.4f, ral(K, 0x70));
+        for (k = -1; k <= 1; k += 2) { lE(k * 11.0f, 1.0f, 2.8f, 4.6f, PRGB(30, 40, 48)); lE(k * 11.0f, 1.0f, 1.2f, 3.0f, ral(cy, 0xa0)); }
+        arcL(LX(0.0f), LY(-2.0f), LZ(11.0f), LZ(11.4f), 1.02f * CPI, 1.98f * CPI, LZ(1.3f), RCOL(PRGB(30, 40, 48)));
+        break; }
+    case 12: {  /* PAPAI NOEL */
+        PRgb red = PRGB(176, 34, 40), redD = PRGB(112, 20, 28), fur = PRGB(240, 238, 232), sk = PRGB(236, 188, 160);
+        bodyR(red, redD, red, K, sk, 1.15f, 0);
+        if (full) lE(0.0f, 40.0f, 17.0f, 16.0f, red);
+        lR(-3.0f, 17.0f, 3.0f, cFull ? 58.0f : CUT_V, fur);
+        if (full) {
+            for (k = -1; k <= 1; k += 2) lE(k * 19.5f, 51.0f, 4.6f, 2.6f, fur);
+            lR(-17.0f, 50.0f, 17.0f, 56.0f, K); lR(-3.6f, 49.6f, 3.6f, 56.4f, GOLD); lR(-2.2f, 51.0f, 2.2f, 55.0f, K);
+            lR(-17.0f, 57.0f, 17.0f, 59.5f, fur);
+        }
+        setHead(1);
+        faceR(sk, PRGB(76, 110, 150), fur, PRGB(190, 100, 100), 1.0f);
+        lE(-6.4f, 3.4f, 2.6f, 1.8f, PRGBA(230, 120, 120, 0x50)); lE(6.4f, 3.4f, 2.6f, 1.8f, PRGBA(230, 120, 120, 0x50));
+        POLY(fur, 0, -9.2f, 1.0f, -10.6f, 10.0f, -7.0f, 20.0f, -3.0f, 27.0f, 0.0f, 29.0f, 3.0f, 27.0f, 7.0f, 20.0f, 10.6f, 10.0f, 9.2f, 1.0f, 4.6f, 5.8f, 0.0f, 4.4f, -4.6f, 5.8f);
+        POLY(ral(PRGB(170, 170, 184), 0x70), 0, 2.0f, 8.0f, 9.6f, 8.0f, 6.4f, 20.0f, 1.6f, 27.0f);
+        POLY(fur, 1, 0.0f, 4.2f, 4.8f, 3.2f, 9.4f, 6.0f, 8.0f, 8.6f, 3.6f, 6.4f, 0.0f, 6.8f);
+        POLY(red, 0, -10.4f, -5.8f, -9.6f, -12.0f, -4.0f, -16.5f, 3.0f, -19.0f, 10.0f, -17.0f, 14.0f, -11.0f, 12.4f, -7.0f, 10.4f, -5.8f);
+        POLY(ral(redD, 0x70), 0, 3.0f, -17.5f, 10.0f, -17.0f, 14.0f, -11.0f, 12.4f, -7.0f, 10.4f, -5.8f, 4.0f, -6.0f);
+        lE(0.0f, -6.4f, 11.2f, 2.8f, fur); lD(14.0f, -10.6f, 3.0f, fur);
+        for (k = -1; k <= 1; k += 2) ring(LX(k * 3.7f), LY(-2.5f), LZ(3.0f), RCOL(GOLD));
+        lB(-0.7f, -2.5f, 0.7f, -2.5f, 0.4f, GOLD);
+        break; }
+    case 13: {  /* MESTRE DO TEMPO */
+        PRgb robe = PRGB(36, 54, 114), robeD = PRGB(20, 32, 76), sk = PRGB(214, 176, 144), hair = PRGB(178, 178, 190);
+        if (full) POLY(robe, 0, -15.0f, 56.0f, 15.0f, 56.0f, 20.0f, 112.0f, -20.0f, 112.0f);
+        bodyR(robe, robeD, robe, PRGB(44, 34, 28), sk, 1.05f, 1);
+        if (full) { lR(-14.0f, 52.0f, 14.0f, 56.5f, GOLD); lB(-8.0f, 58.0f, -11.0f, 112.0f, 1.2f, ral(GOLD, 0x90)); lB(8.0f, 58.0f, 11.0f, 112.0f, 1.2f, ral(GOLD, 0x90)); }
+        lB(-9.0f, 15.0f, -9.0f, cFull ? 52.0f : CUT_V, 1.4f, ral(GOLD, 0xa0)); lB(9.0f, 15.0f, 9.0f, cFull ? 52.0f : CUT_V, 1.4f, ral(GOLD, 0xa0));
+        if (cFull) { lD(0.0f, 30.0f, 6.4f, GOLD); lD(0.0f, 30.0f, 5.2f, PRGB(236, 232, 218)); lB(0.0f, 30.0f, 0.0f, 25.6f, 0.8f, K); lB(0.0f, 30.0f, 3.2f, 31.4f, 0.8f, K); }
+        setHead(1);
+        lE(0.0f, -1.0f, 12.6f, 14.0f, robe); lE(0.0f, 0.5f, 10.6f, 11.8f, rdk(robe, 0.4f));
+        faceR(sk, PRGB(60, 98, 142), hair, PRGB(150, 96, 90), 1.0f);
+        lE(0.0f, -9.6f, 11.8f, 4.8f, robe); lB(-10.0f, -8.0f, 10.0f, -8.0f, 1.0f, GOLD);
+        POLY(hair, 0, -3.0f, 9.0f, 3.0f, 9.0f, 1.8f, 14.8f, 0.0f, 16.4f, -1.8f, 14.8f);
+        POLY(hair, 1, 0.0f, 4.6f, 3.8f, 3.8f, 7.0f, 6.0f, 5.4f, 7.4f, 3.0f, 6.2f, 0.0f, 6.6f);
+        ring(LX(3.7f), LY(-2.5f), LZ(3.2f), RCOL(GOLD)); lE(3.7f, -2.5f, 3.0f, 3.0f, PRGBA(180, 220, 255, 0x28)); lB(6.6f, -0.2f, 9.6f, 14.0f, 0.4f, GOLD);
+        break; }
+    case 14: {  /* GRINCH */
+        PRgb fur = PRGB(106, 152, 74), furD = PRGB(66, 104, 46), furL = PRGB(152, 192, 108), red = PRGB(176, 34, 40);
+        bodyR(fur, furD, rdk(fur, 0.9f), furD, fur, 0.9f, 0);
+        lE(0.0f, cFull ? 40.0f : 28.0f, 9.0f, cFull ? 13.0f : 9.0f, ral(furL, 0x80));
+        if (full) { lR(-12.0f, 52.0f, 12.0f, 56.0f, red); for (k = -1; k <= 1; k += 2) for (q = 0; q < 4; q++) lT(k * 18.0f - 1.2f, 40.0f + q * 4.0f, k * 18.0f + 1.2f, 40.0f + q * 4.0f, k * 22.0f, 41.5f + q * 4.0f, rdk(fur, 0.85f)); }
+        setHead(1);
+        for (k = -1; k <= 1; k += 2) lT(k * 8.6f, -3.0f, k * 16.5f, -9.0f, k * 9.6f, 3.4f, fur);
+        POLY(fur, 0, 0.0f, -11.0f, 6.2f, -10.2f, 9.8f, -5.6f, 10.4f, 0.5f, 8.4f, 6.4f, 4.6f, 10.8f, 0.0f, 11.8f, -4.6f, 10.8f, -8.4f, 6.4f, -10.4f, 0.5f, -9.8f, -5.6f, -6.2f, -10.2f);
+        POLY(ral(furD, 0x68), 0, 3.0f, -10.6f, 9.8f, -5.6f, 10.4f, 0.5f, 8.4f, 6.4f, 4.6f, 10.8f, 2.0f, 11.4f, 3.0f, 2.0f);
+        for (k = -1; k <= 1; k += 2) {
+            if (cBlink) lB(k * 3.9f - 2.2f, -2.2f, k * 3.9f + 2.2f, -2.2f, 0.9f, furD);
+            else { lE(k * 3.9f, -2.3f, 2.6f, 1.5f, PRGB(238, 216, 72)); lE(k * 3.9f, -2.3f, 0.5f, 1.3f, K); lE(k * 3.9f, -3.2f, 2.8f, 0.7f, ral(PRGB(150, 30, 20), 0x80)); }
+            lB(k * 0.8f, -4.2f, k * 7.0f, -6.8f, 1.8f, furD);
+        }
+        lE(0.0f, 3.4f, 2.8f, 1.8f, furD);
+        lB(-3.6f, 7.6f, 0.0f, 8.6f, 0.9f, K); lB(0.0f, 8.6f, 4.8f, 6.0f, 0.9f, K); lT(1.4f, 8.0f, 3.2f, 7.0f, 2.4f, 9.2f, WH);
+        POLY(red, 0, -10.4f, -5.4f, -9.6f, -12.0f, -4.0f, -16.5f, 3.0f, -18.5f, 10.0f, -17.0f, 14.0f, -11.0f, 12.4f, -7.0f, 10.4f, -5.6f);
+        lE(0.0f, -6.2f, 11.2f, 2.8f, PRGB(240, 238, 232)); lD(14.0f, -10.6f, 3.0f, PRGB(240, 238, 232));
+        break; }
+    case 15: {  /* POSEIDON */
+        PRgb sk = PRGB(206, 166, 134), tun = PRGB(36, 144, 156), tunD = PRGB(20, 96, 108), hair = PRGB(66, 126, 186), hairL = PRGB(150, 200, 240), cor = PRGB(222, 112, 100);
+        if (full) { lB(27.0f, 18.0f, 27.0f, 118.0f, 2.2f, GOLD); lB(20.0f, 8.0f, 34.0f, 8.0f, 2.0f, GOLD); lB(20.0f, 8.0f, 20.0f, 22.0f, 1.8f, GOLD); lB(27.0f, 2.0f, 27.0f, 18.0f, 1.8f, GOLD); lB(34.0f, 8.0f, 34.0f, 22.0f, 1.8f, GOLD); }
+        setHead(1);
+        POLY(hair, 1, -9.4f, -3.0f, -12.8f, 8.0f, -11.6f, 22.0f, -7.0f, 28.0f, -5.0f, 12.0f);
+        bArm = sk; bArmOn = 1;
+        bodyR(tun, tunD, tun, GOLD, sk, 1.18f, 0);
+        bArmOn = 0;
+        lB(-14.0f, 18.0f, 13.0f, cFull ? 52.0f : CUT_V, 1.8f, GOLD);
+        POLY(sk, 0, -14.0f, 17.0f, 14.0f, 17.0f, 14.0f, cFull ? 31.0f : CUT_V, -14.0f, cFull ? 31.0f : CUT_V);
+        lB(0.0f, 20.0f, 0.0f, cFull ? 30.0f : CUT_V, 0.5f, ral(rdk(sk, 0.7f), 0x90)); lB(-14.0f, 17.4f, 14.0f, 17.4f, 1.2f, ral(rdk(sk, 0.8f), 0x80));
+        lB(-14.0f, 18.0f, 13.0f, cFull ? 52.0f : CUT_V, 1.8f, GOLD);
+        setHead(1);
+        faceR(sk, PRGB(66, 112, 156), hair, PRGB(150, 90, 84), 1.0f);
+        POLY(hair, 0, -9.2f, 3.0f, -9.8f, 11.0f, -6.0f, 18.0f, -2.0f, 23.0f, 0.0f, 25.0f, 2.0f, 23.0f, 6.0f, 18.0f, 9.8f, 11.0f, 9.2f, 3.0f, 5.0f, 6.4f, 0.0f, 5.0f, -5.0f, 6.4f);
+        POLY(ral(hairL, 0x70), 0, -4.0f, 9.0f, -1.0f, 8.0f, -2.0f, 20.0f, -4.0f, 17.0f);
+        POLY(hair, 1, 0.0f, 4.6f, 4.0f, 3.8f, 7.6f, 6.2f, 6.0f, 7.8f, 3.0f, 6.2f, 0.0f, 6.6f);
+        POLY(hair, 0, -10.0f, -3.0f, -9.4f, -9.2f, -5.6f, -12.2f, 0.0f, -12.8f, 5.6f, -12.2f, 9.4f, -9.2f, 10.0f, -3.0f, 6.0f, -7.0f, 0.0f, -7.6f, -6.0f, -7.0f);
+        lR(-9.6f, -9.4f, 9.6f, -7.4f, GOLD);
+        for (k = -3; k <= 3; k++) lT(k * 2.8f - 1.5f, -9.4f, k * 2.8f + 1.5f, -9.4f, k * 2.8f, -14.5f - (k == 0 ? 2.4f : 0.0f) + (k & 1 ? 1.0f : 0.0f), cor);
+        break; }
+    case 16: {  /* COVEIRO */
+        PRgb sk = PRGB(188, 194, 182), coat = PRGB(34, 34, 42), coatD = PRGB(16, 16, 22), hat = PRGB(22, 22, 28), beard = PRGB(72, 68, 62);
+        if (full) { lB(-28.0f, 38.0f, -28.0f, 112.0f, 2.2f, PRGB(112, 82, 52)); lQ(-32.0f, 104.0f, -24.0f, 104.0f, -25.0f, 118.0f, -31.0f, 118.0f, PRGB(146, 152, 158)); lR(-31.0f, 36.0f, -25.0f, 39.0f, PRGB(112, 82, 52)); }
+        if (full) POLY(coat, 0, -14.0f, 56.0f, 14.0f, 56.0f, 19.0f, 98.0f, -19.0f, 98.0f);
+        bodyR(coat, coatD, PRGB(30, 30, 36), K, sk, 1.0f, 1);
+        POLY(PRGB(150, 152, 150), 0, -5.0f, 15.5f, 5.0f, 15.5f, 2.4f, cFull ? 30.0f : CUT_V, -2.4f, cFull ? 30.0f : CUT_V);
+        if (cFull) { lT(-8.5f, 15.0f, -2.0f, 17.0f, -10.0f, 42.0f, coatD); lT(8.5f, 15.0f, 2.0f, 17.0f, 10.0f, 42.0f, coatD); }
+        if (full) { lR(-14.0f, 54.0f, 14.0f, 57.0f, coatD); lD(0.0f, 40.0f, 1.0f, GOLD); lD(0.0f, 46.0f, 1.0f, GOLD); }
+        setHead(1);
+        faceR(sk, PRGB(60, 76, 62), PRGB(46, 44, 42), PRGB(120, 100, 100), 0.95f);
+        lE(-3.7f, -1.4f, 3.0f, 2.2f, PRGBA(60, 70, 66, 0x70)); lE(3.7f, -1.4f, 3.0f, 2.2f, PRGBA(60, 70, 66, 0x70));
+        lE(-6.2f, 4.6f, 2.0f, 3.4f, PRGBA(70, 80, 74, 0x50)); lE(6.2f, 4.6f, 2.0f, 3.4f, PRGBA(70, 80, 74, 0x50));
+        stubble(sk, 0xb0);
+        POLY(beard, 0, -4.0f, 9.0f, 4.0f, 9.0f, 3.0f, 15.0f, 0.0f, 17.0f, -3.0f, 15.0f);
+        lE(0.0f, -9.4f, 14.2f, 2.8f, hat);
+        lR(-8.4f, -23.0f, 8.4f, -9.4f, hat); lE(0.0f, -23.0f, 8.4f, 1.8f, rdk(hat, 1.5f)); lR(-8.4f, -13.0f, 8.4f, -10.6f, PRGB(48, 72, 56));
+        lR(3.0f, -22.0f, 8.4f, -9.4f, ral(K, 0x60));
+        break; }
+    default: break;
     }
-    #undef XX
-    #undef YY
-    #undef ZZ
 }
 
 /* menu de tacos: foto do taco, nome e estatisticas */
@@ -6783,7 +6685,7 @@ static void vsPortrait(int pl, float cx, float ty, float S, int mood, int t, int
         rect(x1, ya, x2, yb, pl ? COL(150 - k * 9, 56 - k * 3, 62 - k * 3) : COL(46 - k * 3, 96 - k * 5, 170 - k * 9));
     }
     discN(cx, y1 + 56.0f, 52.0f, CA(255, 255, 255, 0x12), 20);
-    drawChar(id, cx, y1 + 66.0f + bob, 1.3f, mood, t, 0);
+    drawChar(id, cx, y1 + S * 0.46f + bob, S / 96.0f, mood, t, 0);   /* busto: cabeca e ombros dentro do quadro */
     if (dim) rect(x1, y1, x2, y2, CA(0, 0, 24, 0x58));                   /* quem perdeu fica mais escuro */
     frameR(x1, y1, x2, y2, 1.0f, CA(0, 0, 0, 0x60));
 }
@@ -6793,7 +6695,7 @@ static void drawOverScreen(void)
     int w = winner, l = 1 - winner, k, pl;
     int youLost = (mode == 0 && w == 1);                 /* contra o bot e o bot venceu */
     float tt = (float)overT, ent = tt < 30.0f ? tt / 30.0f : 1.0f, ty = 100.0f, S = 124.0f;
-    float cxs[2] = { 160.0f, 480.0f }, wx = cxs[w], jump = fabsf(sinf(tt * 0.11f)) * 7.0f * ent;
+    float cxs[2] = { 160.0f, 480.0f }, wx = cxs[w], jump = (0.5f + 0.5f * sinf(tt * 0.05f)) * 2.0f * ent;
     int *ws = mode == 0 ? winsBot : winsVs;
     const char *hint = tourney ? "X: CONTINUAR" : "X: REVANCHE   START: MENU";
     const char *tit = (tourney && tRound == 2 && w == 0) ? "CAMPEAO" : "VENCEDOR";
@@ -7250,8 +7152,8 @@ static void csTile(int slot, float x, float y)
     rect(x + 3, y + h * 0.55f, x + w - 3, y + h - 3, CA(rr, rg, rb, 0x1c));                  /* degrade de baixo na cor da raridade */
     rect(x + 4, y + 1, x + w - 4, y + 3, CA(255, 255, 255, 0x22));                           /* brilho no topo */
     if (slot < NCHARS) {
-        discN(x + w * 0.5f, y + 22.0f, 17.0f, CA(rr, rg, rb, 0x20), 14);                     /* aura atras do rosto */
-        drawChar(csOrd[slot], x + w * 0.5f, y + 30.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
+        discN(x + w * 0.5f, y + 20.0f, 17.0f, CA(rr, rg, rb, 0x20), 14);                     /* aura atras do rosto */
+        drawChar(csOrd[slot], x + w * 0.5f, y + 24.0f, 0.5f, isCur ? 1 : 0, menuT, 0);
         rect(x + 6.0f, y + h - 6.0f, x + w - 6.0f, y + h - 4.0f, rarCol(CHAR_RAR[csOrd[slot]]));      /* faixa da raridade */
     } else if (slot == CS_RND) {
         text(x + w * 0.5f - tw(0.9f, "?") * 0.5f, y + 6.0f, 0.9f, COL(255,230,120), "?");
@@ -7275,7 +7177,7 @@ static void csPed(int pl, float px)                               /* pedestal: o
 {
     int ci = charRand[pl] ? (menuT / 90) % NCHARS : charSel[pl];
     int hot = (csStage < 2 && csChooser() == pl), rdy = csReady[pl];
-    float bob = hot ? -3.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
+    float bob = hot ? -1.0f * (0.5f + 0.5f * sinf(menuT * 0.06f)) : 0.0f;      /* sobe e desce de leve (antes pulava) */
     int on = hot || rdy;
     u64 ac = on ? COL(CSC[pl][0], CSC[pl][1], CSC[pl][2]) : COL(70,80,104);
     const char *nm = charRand[pl] ? "ALEATORIO" : CHAR_NAME[ci], *st;
@@ -7594,7 +7496,7 @@ static void drawSetupScreen(void)
             int hot;
             if (SOLO && i == 1) continue;                        /* torneio: os rivais sao sorteados; treino: sem adversario */
             hot = (setStep == 1 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
-            float bob = hot ? -4.0f * fabsf(sinf(menuT * 0.15f)) : 0.0f;
+            float bob = hot ? -1.0f * (0.5f + 0.5f * sinf(menuT * 0.06f)) : 0.0f;
             const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
             int ci = charRand[i] ? (menuT / 90) % NCHARS : charSel[i];
             drawChar(ci, px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
