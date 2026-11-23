@@ -398,3 +398,7 @@ Quando você joga com o **taco VAMPIRO** (com HABILIDADES ligadas), aparece uma 
 ## Vampiro e Grinch (PUXÃO)
 
 O puxão ficou mais suave: em vez de um ímã que arrastava a bola para a caçapa mais próxima, a bola alvo agora **curva aos poucos** para a caçapa que ela já está mirando (até ~57°), sem ganhar velocidade extra.
+
+## Rodape com icones (novo)
+- O medidor de **FPS / MUSICA / PICO** foi desligado (`DEBUG_FPS 0` no `main.c`), entao nao aparece mais por cima do rodape. Para voltar a ver, ponha `DEBUG_FPS 1`
+- Os botoes do rodape agora sao icones desenhados (funcao `uiKey()`): **X** (cruz), **O** (anel), **triangulo** e **quadrado** vazados, **START** com simbolo de play, **SELECT** com tracinhos, **direcional** em cruz (destaca cima/baixo ou esquerda/direita) e **L1/R1** como dois gatilhos

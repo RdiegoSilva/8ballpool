@@ -1085,7 +1085,7 @@ static void text(float x, float y, float s, u64 c, const char *t)
 /* ---------- MEDIDOR DE DESEMPENHO (DEBUG_FPS): mostra FPS e quanto tempo o musicUpdate() e o resto do quadro gastam ----------
    Serve para descobrir se a lentidao vem da musica/USB ou do desenho. Ponha DEBUG_FPS 0 para esconder. */
 #ifndef DEBUG_FPS
-#define DEBUG_FPS 1   /* 1 = mostra FPS e tempo da musica no canto da tela */
+#define DEBUG_FPS 0   /* 1 = mostra FPS e tempo da musica no canto da tela (desligado: nao aparece mais no rodape) */
 #endif
 #if DEBUG_FPS
 #define DBG_CPU_HZ 294912000.0f                       /* clock do EE: o contador COP0 Count anda a esse ritmo */
@@ -6569,24 +6569,68 @@ static void uiTitle(const char *t)                    /* faixa do topo (roxo + d
     }
 }
 
-/* botoes do controle: 0 X, 1 O, 2 TRIANGULO, 3 QUADRADO, 4 START, 5 SELECT, 6 CIMA/BAIXO, 7 ESQ/DIR, 8 L1/R1 */
-static const float UIKW[9] = { 20, 20, 20, 20, 46, 52, 24, 24, 36 };
+/* botoes do controle: 0 X, 1 O, 2 TRIANGULO, 3 QUADRADO, 4 START, 5 SELECT, 6 CIMA/BAIXO, 7 ESQ/DIR, 8 L1/R1
+   Todos desenhados com formas (sem letras nos botoes de acao), no estilo do controle do PS2 */
+static const float UIKW[9] = { 20, 20, 20, 20, 52, 52, 24, 24, 40 };
+
+static void uiPill(float x, float y, float w, float h)             /* pilula cinza com borda clara e brilho no topo */
+{
+    cham(x - 1.0f, y - 1.0f, x + w + 1.0f, y + h + 1.0f, 5.0f, COL(150,158,176));
+    cham(x, y, x + w, y + h, 4.0f, COL(54,60,78));
+    rect(x + 4.0f, y + 1.0f, x + w - 4.0f, y + 3.0f, CA(255, 255, 255, 0x28));
+}
+
 static void uiKey(float x, float y, int k)
 {
     float cx = x + 10.0f, cy = y + 9.0f;
-    u64 wh = COL(255,255,255), pill = COL(74,80,98);
+    u64 wh = COL(255,255,255), dim = COL(100,108,128);
     switch (k) {
-    case 0: discN(cx, cy, 9.0f, COL(70,120,235), 14); text(cx - tw(0.34f, "X") * 0.5f, y + 2.0f, 0.34f, wh, "X"); break;
-    case 1: discN(cx, cy, 9.0f, COL(220,64,64), 14);  text(cx - tw(0.34f, "O") * 0.5f, y + 2.0f, 0.34f, wh, "O"); break;
-    case 2: discN(cx, cy, 9.0f, COL(40,170,110), 14); tri(cx, cy - 5, cx - 5, cy + 4, cx + 5, cy + 4, wh); break;
-    case 3: discN(cx, cy, 9.0f, COL(200,90,170), 14); rect(cx - 4, cy - 4, cx + 4, cy + 4, wh); break;
-    case 4: rect(x, y + 1, x + 46, y + 17, pill); text(x + 23 - tw(0.24f, "START") * 0.5f, y + 5, 0.24f, wh, "START"); break;
-    case 5: rect(x, y + 1, x + 52, y + 17, pill); text(x + 26 - tw(0.22f, "SELECT") * 0.5f, y + 5, 0.22f, wh, "SELECT"); break;
-    case 6: rect(x, y, x + 24, y + 18, pill);
-            tri(x + 12, y + 2, x + 7, y + 8, x + 17, y + 8, wh); tri(x + 12, y + 16, x + 7, y + 10, x + 17, y + 10, wh); break;
-    case 7: rect(x, y, x + 24, y + 18, pill);
-            tri(x + 3, y + 9, x + 9, y + 4, x + 9, y + 14, wh); tri(x + 21, y + 9, x + 15, y + 4, x + 15, y + 14, wh); break;
-    default: rect(x, y + 1, x + 36, y + 17, pill); text(x + 18 - tw(0.22f, "L1/R1") * 0.5f, y + 5, 0.22f, wh, "L1/R1"); break;
+    case 0: case 1: case 2: case 3: {                                /* botoes de acao: disco colorido + simbolo branco */
+        u64 body = k == 0 ? COL(70,120,235) : k == 1 ? COL(220,64,64) : k == 2 ? COL(40,170,110) : COL(200,90,170);
+        discN(cx, cy, 10.0f, COL(18,20,32), 14);                   /* contorno escuro */
+        discN(cx, cy, 9.0f, body, 14);
+        discN(cx - 2.5f, cy - 3.5f, 3.0f, CA(255, 255, 255, 0x28), 8);   /* brilho */
+        if (k == 0) {                                              /* X: dois tracos cruzados */
+            beam(cx - 3.8f, cy - 3.8f, cx + 3.8f, cy + 3.8f, 2.4f, wh);
+            beam(cx + 3.8f, cy - 3.8f, cx - 3.8f, cy + 3.8f, 2.4f, wh);
+        } else if (k == 1) {                                       /* O: anel */
+            ringN(cx, cy, 4.4f, 2.0f, 14, wh);
+        } else if (k == 2) {                                       /* triangulo vazado */
+            tri(cx, cy - 5.5f, cx - 5.8f, cy + 4.2f, cx + 5.8f, cy + 4.2f, wh);
+            tri(cx, cy - 2.2f, cx - 2.7f, cy + 2.2f, cx + 2.7f, cy + 2.2f, body);
+        } else {                                                   /* quadrado vazado */
+            rect(cx - 4.6f, cy - 4.6f, cx + 4.6f, cy + 4.6f, wh);
+            rect(cx - 2.6f, cy - 2.6f, cx + 2.6f, cy + 2.6f, body);
+        }
+        break; }
+    case 4:                                                          /* START: pilula com o simbolo de "play" */
+        uiPill(x, y + 1.0f, 52.0f, 16.0f);
+        tri(x + 8.0f, y + 5.0f, x + 8.0f, y + 13.0f, x + 15.0f, y + 9.0f, wh);
+        text(x + 19.0f, y + 5.0f, 0.22f, wh, "START");
+        break;
+    case 5:                                                          /* SELECT: pilula com dois tracinhos */
+        uiPill(x, y + 1.0f, 52.0f, 16.0f);
+        rect(x + 6.0f, y + 6.0f, x + 12.0f, y + 8.0f, wh);
+        rect(x + 6.0f, y + 10.0f, x + 12.0f, y + 12.0f, wh);
+        text(x + 16.0f, y + 5.0f, 0.2f, wh, "SELECT");
+        break;
+    case 6: case 7: {                                                /* direcional (cruz): destaca cima/baixo ou esquerda/direita */
+        u64 av = k == 6 ? wh : dim, ah = k == 7 ? wh : dim;
+        rect(x + 7.5f, y - 1.0f, x + 16.5f, y + 19.0f, COL(150,158,176));       /* borda */
+        rect(x + 1.5f, y + 3.5f, x + 22.5f, y + 14.5f, COL(150,158,176));
+        rect(x + 8.5f, y, x + 15.5f, y + 18.0f, COL(54,60,78));                 /* corpo */
+        rect(x + 2.5f, y + 4.5f, x + 21.5f, y + 13.5f, COL(54,60,78));
+        tri(x + 12.0f, y + 1.5f, x + 9.0f, y + 6.0f, x + 15.0f, y + 6.0f, av);   /* cima */
+        tri(x + 12.0f, y + 16.5f, x + 9.0f, y + 12.0f, x + 15.0f, y + 12.0f, av); /* baixo */
+        tri(x + 3.5f, y + 9.0f, x + 8.0f, y + 6.0f, x + 8.0f, y + 12.0f, ah);     /* esquerda */
+        tri(x + 20.5f, y + 9.0f, x + 16.0f, y + 6.0f, x + 16.0f, y + 12.0f, ah); /* direita */
+        break; }
+    default:                                                         /* L1 / R1: dois "gatilhos" lado a lado */
+        uiPill(x, y + 2.0f, 18.0f, 14.0f);
+        uiPill(x + 22.0f, y + 2.0f, 18.0f, 14.0f);
+        text(x + 9.0f - tw(0.2f, "L1") * 0.5f, y + 5.0f, 0.2f, wh, "L1");
+        text(x + 31.0f - tw(0.2f, "R1") * 0.5f, y + 5.0f, 0.2f, wh, "R1");
+        break;
     }
 }
 
