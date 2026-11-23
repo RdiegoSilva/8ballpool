@@ -1085,7 +1085,7 @@ static void text(float x, float y, float s, u64 c, const char *t)
 /* ---------- MEDIDOR DE DESEMPENHO (DEBUG_FPS): mostra FPS e quanto tempo o musicUpdate() e o resto do quadro gastam ----------
    Serve para descobrir se a lentidao vem da musica/USB ou do desenho. Ponha DEBUG_FPS 0 para esconder. */
 #ifndef DEBUG_FPS
-#define DEBUG_FPS 0   /* 1 = mostra FPS e tempo da musica no canto da tela */
+#define DEBUG_FPS 1   /* 1 = mostra FPS e tempo da musica no canto da tela */
 #endif
 #if DEBUG_FPS
 #define DBG_CPU_HZ 294912000.0f                       /* clock do EE: o contador COP0 Count anda a esse ritmo */
@@ -3030,6 +3030,12 @@ static void botPlan(void)
 /* analogico: sticks de -1 a 1 (zona morta radial); stX/stY = esquerdo, rsX/rsY = direito; anX.. = versao suavizada usada no jogo */
 static float stX[2], stY[2], rsX[2], rsY[2], anX, anY, anRX, anRY;
 static int padAnalogSet[2];
+#ifndef PAD_STATE_DISCONN
+#define PAD_STATE_DISCONN 0x00
+#endif
+#ifndef PAD_STATE_ERROR
+#define PAD_STATE_ERROR 0x07
+#endif
 static u32 padLastBtn[2];                    /* ultimo estado bom dos botoes: leitura que falha NAO vira "soltou" (causava duplo clique) */
 static int stOff[2][4], stPrevRaw[2][4], stSame[2][2];   /* centro real de cada stick (corrige analogico que "anda sozinho") */
 static float frameK = 1.0f;                      /* escala de tempo do quadro: 1.0 = 60 FPS; maior se o quadro demorou (mira nao fica lenta) */
@@ -3049,6 +3055,8 @@ static u32 readpad(int port)
 {
     struct padButtonStatus s;
     int st = padGetState(port, 0), k;
+    if (st != PAD_STATE_DISCONN && st != PAD_STATE_ERROR && st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1)
+        return padLastBtn[port];                               /* pad ocupado um instante (EXECCMD/FINDPAD): mantem o ultimo estado em vez de "soltar tudo" */
     if (st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1) {
         padAnalogSet[port] = 0; padLastBtn[port] = 0;
         stX[port] = stY[port] = rsX[port] = rsY[port] = 0.0f;
@@ -9471,13 +9479,18 @@ int main(int argc, char *argv[])
             anRX += (kx - anRX) * 0.4f; if (kx == 0.0f && fabsf(anRX) < 0.02f) anRX = 0.0f;
             anRY += (ky - anRY) * 0.4f; if (ky == 0.0f && fabsf(anRY) < 0.02f) anRY = 0.0f;
         }
-        {   /* anti duplo clique: botao que some por 1 quadro so (ruido/atraso do pad) continua apertado; soltar de verdade dura mais que isso */
-            static u32 dbRaw, dbGrace;
-            u32 raw = in, miss = dbRaw & ~raw & ~dbGrace;
-            dbGrace = miss; in = raw | miss; dbRaw = raw;
+        {   /* ANTI DUPLO CLIQUE: botao que "pisca" (contato do pad/ruido) por menos de 40 ms nao conta como soltar e apertar de novo.
+               So vale para o CLIQUE (pressed); 'in' fica cru, entao segurar/mirar continua igual */
+            static u32 dbHeld; static unsigned int dbSeen[16];
+            unsigned int nowc = frameClock(); int kk;
+            for (kk = 0; kk < 16; kk++) {
+                u32 m = 1u << kk;
+                if (in & m) { dbSeen[kk] = nowc; dbHeld |= m; }
+                else if ((dbHeld & m) && (nowc - dbSeen[kk]) > 11800000u) dbHeld &= ~m;     /* 40 ms a 294,9 MHz */
+            }
+            pressed = dbHeld & ~prev;
+            prev = dbHeld;
         }
-        pressed = in & ~prev;
-        prev = in;
         {                                                 /* sons de menu */
             int ui = paused || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER ||
                      state == S_BRACKET || state == S_SHOP || state == S_CUES || state == S_CREDITS || state == S_OVER || state == S_TAKE || state == S_VS;
@@ -9558,7 +9571,7 @@ int main(int argc, char *argv[])
                 if (!charging && ((in & PAD_LEFT) != 0) != ((in & PAD_RIGHT) != 0)) {   /* direcional (travado enquanto a barra enche): comeca fino e acelera aos poucos */
                     float ds;
                     if (dpadHold < 60) dpadHold++;
-                    ds = (0.010f + 0.020f * (dpadHold > 24 ? 1.0f : dpadHold / 24.0f)) * frameK;
+                    ds = (0.006f + 0.018f * (dpadHold > 30 ? 1.0f : dpadHold / 30.0f)) * frameK;
                     ang += ((in & PAD_RIGHT) ? ds : -ds) * (curse[cur] ? -1.0f : 1.0f);   /* MALDICAO: botoes invertidos */
                 } else dpadHold = 0;
                 if (!charging && anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f * frameK * (curse[cur] ? -1.0f : 1.0f);   /* analogico: quanto mais inclina, mais gira */
