@@ -5656,6 +5656,10 @@ static void drawHUD(void)
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
+/* triangulo com degrade (cada vertice com a sua cor): da volume aos personagens sem gastar mais primitivas */
+static void triG(float x1, float y1, u64 c1, float x2, float y2, u64 c2, float x3, float y3, u64 c3)
+{ gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3); }
+
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
 #define NCHARS 18
 #define CPI 3.14159265f
@@ -5724,13 +5728,50 @@ static int cMood, cT, cFull, cBlink;
 #define LZ(v) ((v) * cS)
 static void setHead(int on) { cX = cX0 + (on ? cHX * cS : 0.0f); cY = cY0 + (on ? cHY * cS : 0.0f); }
 
+/* QUALIDADE DOS PERSONAGENS: CHAR_SHADE 1 = formas com degrade (luz de cima/esquerda: centro claro, borda escura);
+   CHAR_AA 1 = contorno suave (linhas antisserrilhadas) nas bordas das formas. 0 volta ao visual chapado de antes. */
+#ifndef CHAR_SHADE
+#define CHAR_SHADE 1
+#endif
+#ifndef CHAR_AA
+#define CHAR_AA 1
+#endif
+#define SH_LIT  0.16f      /* quanto o centro clareia */
+#define SH_DARK 0.80f      /* quanto a borda escurece (multiplicador) */
+static void aaOn(void)  { g->PrimAAEnable = GS_SETTING_ON; }
+/* durante a partida (retratos pequenos do HUD) o contorno suave fica desligado para segurar os 60 FPS; nos menus, VS e selecao fica ligado */
+#define AA_NOW (state != S_AIM && state != S_ROLL && state != S_PLACE && state != S_STRIKE && state != S_TAKE && state != S_REWIND)
+static void aaOff(void) { g->PrimAAEnable = GS_SETTING_OFF; }
+
 static void lE(float x, float y, float rx, float ry, PRgb c)
 {
-    int i, n = (rx * cS > 7.0f || ry * cS > 7.0f) ? 14 : 8;
+    int i, n = (rx * cS > 7.0f || ry * cS > 7.0f) ? 20 : ((rx * cS > 3.5f || ry * cS > 3.5f) ? 12 : 8);   /* mais lados nas formas grandes: a silhueta deixa de parecer poligono */
     const float *t = circ(n);
     u64 col = RCOL(c);
-    for (i = 0; i < n; i++)
-        tri(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), col);
+#if CHAR_SHADE
+    if (rx * cS > 3.2f && ry * cS > 3.2f && c.a >= 0x70) {         /* formas grandes e opacas: degrade */
+        PRgb hi = rmix(c, PRGB(255, 250, 240), SH_LIT), lo = rdk(c, SH_DARK);
+        u64 cH = RCOL(hi), cL = RCOL(lo);
+        float hx = x - rx * 0.22f, hy = y - ry * 0.28f;               /* ponto de luz um pouco acima e a esquerda */
+        for (i = 0; i < n; i++)
+            triG(LX(hx), LY(hy), cH,
+                 LX(x + t[2*i] * rx),       LY(y + t[2*i+1] * ry),       cL,
+                 LX(x + t[2*i+2] * rx),     LY(y + t[2*i+3] * ry),       cL);
+    } else
+#endif
+    {
+        for (i = 0; i < n; i++)
+            tri(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), col);
+    }
+#if CHAR_AA
+    if (AA_NOW && c.a >= 0x70 && rx * cS > 3.0f) {                 /* contorno suave com a cor da forma (um pouco mais escura) */
+        u64 ec = RCOL(rdk(c, 0.88f));
+        aaOn();
+        for (i = 0; i < n; i++)
+            line(LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), ec);
+        aaOff();
+    }
+#endif
 }
 static void lD(float x, float y, float r, PRgb c) { lE(x, y, r, r, c); }
 static void lB(float x1, float y1, float x2, float y2, float w, PRgb c) { beam(LX(x1), LY(y1), LX(x2), LY(y2), LZ(w), RCOL(c)); }
@@ -5745,6 +5786,10 @@ static void lP(const float *p, int n, PRgb c, int mir)
     float mx = 0.0f, my = 0.0f;
     int i, m;
     u64 col = RCOL(c);
+#if CHAR_SHADE
+    int useGrad = (c.a >= 0x70);                                        /* so formas opacas ganham degrade (sombras/brilhos translucidos ficam como estao) */
+    u64 cH = RCOL(rmix(c, PRGB(255, 250, 240), SH_LIT * 0.8f)), cL = RCOL(rdk(c, 0.86f));
+#endif
     for (i = 0; i < n; i++) { mx += p[2*i]; my += p[2*i+1]; }
     mx /= n; my /= n;
     for (m = 0; m <= mir; m++) {
@@ -5752,8 +5797,27 @@ static void lP(const float *p, int n, PRgb c, int mir)
         for (i = 0; i < n; i++) {
             int j = (i + 1) % n;
             float yi = p[2*i+1] > cYMax ? cYMax : p[2*i+1], yj = p[2*j+1] > cYMax ? cYMax : p[2*j+1];      /* busto: barbas e mantos cortam em cYMax */
-            tri(LX(sg * mx), LY(my > cYMax ? cYMax : my), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), col);
+            float cy0 = my > cYMax ? cYMax : my;
+#if CHAR_SHADE
+            if (useGrad) {
+                triG(LX(sg * mx), LY(cy0), cH, LX(sg * p[2*i]), LY(yi), cL, LX(sg * p[2*j]), LY(yj), cL);
+                continue;
+            }
+#endif
+            tri(LX(sg * mx), LY(cy0), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), col);
         }
+#if CHAR_AA
+        if (AA_NOW && c.a >= 0x70) {                                  /* contorno suave so no limite da forma */
+            u64 ec = RCOL(rdk(c, 0.90f));
+            aaOn();
+            for (i = 0; i < n; i++) {
+                int j = (i + 1) % n;
+                float yi = p[2*i+1] > cYMax ? cYMax : p[2*i+1], yj = p[2*j+1] > cYMax ? cYMax : p[2*j+1];
+                line(LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), ec);
+            }
+            aaOff();
+        }
+#endif
     }
 }
 #define POLY(c, mir, ...) do { const float _p[] = { __VA_ARGS__ }; lP(_p, (int)(sizeof(_p) / sizeof(_p[0]) / 2), c, mir); } while (0)
@@ -5889,6 +5953,13 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
     int k, q;
     PRgb K = PRGB(18, 18, 22), WH = PRGB(236, 234, 228), GOLD = PRGB(206, 168, 66), LEA = PRGB(78, 52, 34);
     personBegin(full, cx, cy, s, mood, t);
+#if CHAR_SHADE
+    if (full) {                                                      /* sombra suave embaixo dos pes */
+        int sk2;
+        for (sk2 = 0; sk2 < 3; sk2++)
+            lE(0.0f, 116.0f, 24.0f - sk2 * 6.0f, 5.0f - sk2 * 1.2f, PRGBA(0, 0, 0, 0x16 + sk2 * 0x0c));
+    }
+#endif
     switch (((id % NCHARS) + NCHARS) % NCHARS) {
     case 2: {   /* PIRATA */
         PRgb sk = PRGB(204, 152, 112), coat = PRGB(112, 40, 42), coatD = PRGB(70, 24, 28), hat = PRGB(30, 27, 32), hr = PRGB(52, 36, 28);
