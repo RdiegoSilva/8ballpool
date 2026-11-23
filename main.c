@@ -5259,67 +5259,66 @@ static float keycap(float x, float y, const char *k, const char *d, u64 kc, u64 
     return kw + 6 + tw(s, d);
 }
 
-/* taco vertical que serve de "ponteiro" da barra de forca (estilo 8 Ball Pool): ponta azul, virola branca,
-   cabo claro, anel dourado e base escura. cx = centro, cy = centro do taco, len = comprimento total */
-static void pbCueSeg(float cx, float top, float len, float a, float b, float grow, u64 col)
+/* barra de forca (nova): medidor vertical em BLOCOS, como um marcador de LEDs. 20 blocos: verde (fraca) > amarelo > laranja > vermelho (maxima).
+   Os blocos acendem de baixo para cima conforme a forca; o bloco do topo acende por partes (fica suave). Uma linha branca com setinhas marca a
+   forca exata, tracinhos mostram 25/50/75% e o % aparece num mostrador embaixo, na cor da zona. Embaixo = 0%, em cima = 100%.
+   Ao apertar X ela sobe e desce sozinha; X de novo dispara, O cancela. Depois da tacada volta a zero. */
+static void pbZone(float t, int *r, int *g, int *b)
 {
-    float y0 = top + len * a, y1 = top + len * b;
-    float w0 = 1.4f + 1.5f * a + grow, w1 = 1.4f + 1.5f * b + grow;      /* o taco engrossa da ponta para a base */
-    quad(cx - w0, y0, cx + w0, y0, cx + w1, y1, cx - w1, y1, col);
+    if      (t < 0.40f) { *r = 70;  *g = 220; *b = 100; }       /* verde: tacada leve */
+    else if (t < 0.70f) { *r = 250; *g = 226; *b = 60;  }       /* amarelo: media */
+    else if (t < 0.88f) { *r = 255; *g = 146; *b = 30;  }       /* laranja: forte */
+    else                { *r = 240; *g = 52;  *b = 52;  }       /* vermelho: maxima */
 }
 
-static void pbCue(float cx, float cy, float len)
-{
-    float top = cy - len * 0.5f;
-    pbCueSeg(cx + 1.5f, top + 1.5f, len, 0.0f, 1.0f, 0.6f, CA(0, 0, 0, 0x34));       /* sombra */
-    pbCueSeg(cx, top, len, 0.0f, 1.0f, 1.1f, COL(34, 18, 8));                       /* contorno escuro */
-    pbCueSeg(cx, top, len, 0.00f, 0.07f, 0.0f, COL(90, 170, 255));                  /* ponta */
-    pbCueSeg(cx, top, len, 0.07f, 0.19f, 0.0f, COL(244, 244, 240));                 /* virola */
-    pbCueSeg(cx, top, len, 0.19f, 0.63f, 0.0f, COL(236, 184, 104));                 /* cabo */
-    pbCueSeg(cx, top, len, 0.63f, 0.69f, 0.0f, COL(226, 172, 44));                  /* anel dourado */
-    pbCueSeg(cx, top, len, 0.69f, 1.00f, 0.0f, COL(112, 52, 18));                   /* base */
-    rect(cx - 1.4f, top + len * 0.19f, cx - 0.6f, top + len * 0.63f, CA(255, 255, 255, 0x40));   /* brilho */
-}
-
-/* barra de forca vertical no lado esquerdo (estilo 8 Ball Pool): moldura clara, degrade amarelo > laranja > vermelho
-   e um taco que sobe e desce. Ao apertar X ela sobe e desce sozinha; X de novo dispara, O cancela. Depois da tacada volta a zero. */
 static void drawPowerBar(void)
 {
-    const float bx = 11.0f, by0 = TY0, by1 = TY1, bw = 20.0f;
-    const float cueL = 44.0f, half = cueL * 0.5f, cx = bx + bw * 0.5f;
-    const int   nseg = 56;
-    float H = by1 - by0;
-    float cy = (by1 - half) - barLevel * (H - cueL);                  /* centro do taco: embaixo = 0%, em cima = 100% */
+    const float bx = 9.0f, bw = 20.0f, by0 = TY0, by1 = TY1, H = TY1 - TY0, gap = 2.0f;
+    const int   NB = 20;
+    const float bh = (H - gap * (NB - 1)) / NB;
+    float lv = barLevel < 0.0f ? 0.0f : (barLevel > 1.0f ? 1.0f : barLevel);
+    float ly = by1 - lv * H;
+    int k, r, gg, b;
     char buf[16];
-    int k;
 
-    cham(bx - 3.0f, by0 - 3.0f, bx + bw + 5.0f, by1 + 5.0f, 6.0f, CA(0, 0, 0, 0x30));      /* sombra */
-    cham(bx - 4.5f, by0 - 4.5f, bx + bw + 4.5f, by1 + 4.5f, 6.0f, COL(214, 204, 184));     /* moldura clara */
-    cham(bx - 3.2f, by0 - 3.2f, bx + bw + 3.2f, by1 + 3.2f, 5.0f, COL(120, 112, 100));
-    cham(bx - 2.2f, by0 - 2.2f, bx + bw + 2.2f, by1 + 2.2f, 4.0f, COL(30, 26, 30));
-    for (k = 0; k < nseg; k++) {                                      /* degrade: amarelo (topo) > laranja > vermelho (base) */
-        float t = (k + 0.5f) / nseg, ya = by0 + H * k / nseg, yb = by0 + H * (k + 1) / nseg;
-        int r, g, b;
-        if (t < 0.45f) { float u = t / 0.45f;          r = 255;                   g = (int)(226 - 76 * u);  b = (int)(24 - 12 * u); }
-        else           { float u = (t - 0.45f) / 0.55f; r = (int)(255 - 41 * u); g = (int)(150 - 98 * u);  b = (int)(12 - 2 * u); }
-        rect(bx, ya, bx + bw, yb + (k == nseg - 1 ? 0.0f : 0.6f), COL(r, g, b));
+    hbox(bx - 5.0f, by0 - 5.0f, bx + bw + 5.0f, by1 + 5.0f, CA(214, 204, 184, 0xa0), CA(10, 10, 18, 0x9c));      /* caixa do medidor */
+    for (k = 0; k < NB; k++) {                                        /* blocos (k = 0 e o de baixo) */
+        float yb = by1 - k * (bh + gap), yt = yb - bh;
+        float frac = (lv - (float)k / NB) * NB;                        /* quanto deste bloco esta aceso (0 a 1) */
+        pbZone(((float)k + 0.5f) / NB, &r, &gg, &b);
+        rect(bx, yt, bx + bw, yb, COL(28, 24, 36));                    /* bloco apagado */
+        rect(bx, yt, bx + bw, yb, CA(r, gg, b, 0x26));                 /* com um toque da cor da zona */
+        if (frac > 0.0f) {
+            float lt = yb - bh * (frac > 1.0f ? 1.0f : frac);
+            rect(bx, lt, bx + bw, yb, COL(r, gg, b));                  /* aceso */
+            rect(bx, lt, bx + bw, lt + 1.5f, CA(255, 255, 255, 0x60)); /* brilho no gume */
+            rect(bx + 2.0f, lt, bx + 4.0f, yb, CA(255, 255, 255, 0x2a));
+            rect(bx + bw - 2.0f, lt, bx + bw, yb, CA(0, 0, 0, 0x28));
+        }
     }
-    if (cy > by0)                                                     /* acima do taco: escurecido (so o que falta ate a forca maxima) */
-        rect(bx, by0, bx + bw, cy, CA(14, 8, 8, 0x3c));
-    rect(bx + 2.0f, by0 + 1.0f, bx + 4.0f, by1 - 1.0f, CA(255, 255, 255, 0x22));       /* brilho de vidro na esquerda */
-    rect(bx + bw - 2.0f, by0 + 1.0f, bx + bw, by1 - 1.0f, CA(0, 0, 0, 0x22));           /* sombra na direita */
-    rect(bx, by0, bx + bw, by0 + 1.0f, CA(255, 255, 255, 0x30));
-    pbCue(cx, cy, cueL);
+    for (k = 1; k <= 3; k++) {                                        /* tracinhos de 25 / 50 / 75% */
+        float ty = by1 - H * k * 0.25f;
+        rect(bx - 4.0f, ty - 0.5f, bx - 1.0f, ty + 0.5f, COL(226, 172, 44));
+        rect(bx + bw + 1.0f, ty - 0.5f, bx + bw + 4.0f, ty + 0.5f, COL(226, 172, 44));
+    }
+    if (lv > 0.0f) {                                                  /* marcador da forca: linha branca + setinhas */
+        rect(bx - 2.0f, ly - 2.0f, bx + bw + 2.0f, ly + 2.0f, CA(0, 0, 0, 0x70));
+        rect(bx - 1.0f, ly - 1.0f, bx + bw + 1.0f, ly + 1.0f, COL(255, 255, 255));
+        tri(bx - 1.0f, ly - 4.0f, bx - 1.0f, ly + 4.0f, bx + 4.0f, ly, COL(255, 236, 130));
+        tri(bx + bw + 1.0f, ly - 4.0f, bx + bw + 1.0f, ly + 4.0f, bx + bw - 4.0f, ly, COL(255, 236, 130));
+    }
     if (hackOn && state == S_AIM) {                                   /* HACK: marca a forca ideal */
-        float hy = (by1 - half) - hackPow * (H - cueL);
+        float hy = by1 - hackPow * H;
         rect(bx - 6, hy - 1.5f, bx + bw + 6, hy + 1.5f, COL(0, 255, 220));
-        text(bx + bw + 8, hy - 6, 0.26f, COL(0, 255, 220), "IDEAL");
+        rect(bx + bw + 7, hy - 8, bx + bw + 11 + tw(0.26f, "IDEAL"), hy + 7, CA(0, 0, 0, 0xa0));
+        text(bx + bw + 9, hy - 6, 0.26f, COL(0, 255, 220), "IDEAL");
     }
+    pbZone(lv, &r, &gg, &b);
     hbox(2, 44, 40, 62, CA(226, 172, 44, 0x90), CA(8, 12, 22, 0x78));
-    text(21.0f - tw(0.3f, "FORCA") * 0.5f, 49, 0.3f, COL(255,235,150), "FORCA");
-    sprintf(buf, "%d%%", (int)(barLevel * 100 + 0.5f));
-    hbox(4, by1 + 8, 38, by1 + 24, CA(226, 172, 44, 0x70), CA(8, 12, 22, 0x78));
-    text(21.0f - tw(0.34f, buf) * 0.5f, by1 + 12, 0.34f, COL(255,230,60), buf);
+    text(21.0f - tw(0.3f, "FORCA") * 0.5f, 49, 0.3f, COL(255, 235, 150), "FORCA");
+    sprintf(buf, "%d%%", (int)(lv * 100 + 0.5f));
+    hbox(4, by1 + 8, 38, by1 + 24, CA(r, gg, b, 0xa0), CA(8, 12, 22, 0x78));
+    text(21.0f - tw(0.34f, buf) * 0.5f, by1 + 12, 0.34f, COL(r, gg, b), buf);
 }
 
 /* indicador de efeito (estilo 8 Ball Pool): bola branca com aro metalico; o ponto vermelho mostra o lado (L2/R2)
@@ -7363,6 +7362,7 @@ static void drawModeCards(float y, int foc)
     }
 }
 
+static void textCF(float cx, float y, float sc, u64 c, const char *t, float maxw);
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
@@ -7370,12 +7370,15 @@ static void drawSetupScreen(void)
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
-    const float rh = (setStep == 0 && n >= 6) ? 30.0f : 36.0f;     /* muitas linhas na etapa 1: um pouco mais juntas para caber os cartoes de modo */
+    const float rh = (setStep == 0) ? 34.0f : 36.0f;             /* linhas com folga: o que sobra de tela fica livre (nada mais embaixo do painel na etapa 1) */
     float ry[NSR + 1], y2, acc = 0.0f;
     const char *hint;
     char buf[40];
 
-    for (i = 0; i < n; i++) { ry[i] = 86.0f + acc; acc += (v[i] == SR_MODE) ? MCARD_H : rh; }   /* a linha do MODO e mais alta (cartoes) */
+    for (i = 0; i < n; i++) {
+        if (v[i] == SR_NEXT || v[i] == SR_GO) acc += 6.0f;                 /* respiro antes do botao verde */
+        ry[i] = 86.0f + acc; acc += (v[i] == SR_MODE) ? MCARD_H : rh;
+    }   /* a linha do MODO e mais alta (cartoes) */
     y2 = 86.0f + acc - 4.0f;
 
     uiTitle(tourney ? "CONFIGURAR TORNEIO" : (training ? "MODO TREINO" : "CONFIGURAR PARTIDA"));
@@ -7409,6 +7412,8 @@ static void drawSetupScreen(void)
         u64 tc = sel ? COL(255,240,150) : COL(175,185,195), vc = COL(255,255,255);
 
         if (row == SR_MODE) { drawModeCards(y, sel); continue; }          /* seletor de modo: cartoes lado a lado */
+        if (row != SR_NEXT && row != SR_GO && row != SR_RPL)
+            rect(76, y + rh - 8.5f, 564, y + rh - 7.5f, CA(255, 255, 255, 0x12));   /* divisoria fina entre as linhas */
 
         if (row == SR_NEXT || row == SR_GO) {                     /* botao verde grande (como o JOGAR do 8 Ball Pool) */
             cham(70.0f, y - 6, 570.0f, y + 25, 6.0f, sel ? COL(255,236,120) : COL(18,70,24));
@@ -7463,7 +7468,15 @@ static void drawSetupScreen(void)
         default:       sprintf(buf, "< %s >", BRC_NAME[colSel[1]]); break;
         }
         vx = 556 - tw(0.5f, buf);
-        text(vx, y, 0.5f, vc, buf);
+        {   /* setas ficam douradas na linha escolhida e apagadas nas outras; o valor fica em destaque */
+            char inner[40];
+            int ln = (int)strlen(buf);
+            u64 ac = sel ? COL(255, 215, 60) : COL(105, 114, 138);
+            memcpy(inner, buf + 2, ln - 4); inner[ln - 4] = 0;
+            text(vx, y, 0.5f, ac, "<");
+            text(556 - tw(0.5f, ">"), y, 0.5f, ac, ">");
+            text(vx + tw(0.5f, "< "), y, 0.5f, vc, inner);
+        }
         if (row == SR_WB) drawSwatch(0, wbSel[0], vx - 18, y + 7);
         else if (row == SR_GD) drawSwatch(1, gdSel[0], vx - 24, y + 7);
         if (row == SR_TABLE) {                          /* mini mesa */
@@ -7506,6 +7519,11 @@ static void drawSetupScreen(void)
         hint = "PROFISSIONAL: MIRA QUASE PERFEITA, RESPONDE NA HORA E NAO PERDOA ERRO";
     else if (v[setSel] == SR_LVL && botLevel == 4)
         hint = "MESTRE: COMO O PROFISSIONAL, USA TACOS E PODERES, E A BOLA 8 EXIGE ESCOLHER A CACAPA";
+    else if (v[setSel] == SR_LVL)
+        hint = botLevel == 0 ? "FACIL: ERRA MAIS A MIRA E A FORCA, PENSA DEVAGAR"
+             : (botLevel == 1 ? "MEDIO: COMPORTAMENTO PADRAO DO BOT" : "DIFICIL: MIRA QUASE PERFEITA E RESPOSTA RAPIDA");
+    else if (v[setSel] == SR_OPP)
+        hint = oppSel ? "JOGADOR 2: DOIS JOGADORES NO MESMO CONSOLE" : "BOT: VOCE JOGA CONTRA O CONSOLE";
     else if (v[setSel] == SR_WB)
         hint = "A COR DA BOLA BRANCA VALE PARA A PARTIDA TODA";
     else if (v[setSel] == SR_GD)
@@ -7520,14 +7538,18 @@ static void drawSetupScreen(void)
         hint = tourney ? "X OU START: ESCOLHER O NOME E COMECAR O TORNEIO   O: ETAPA ANTERIOR" : "X OU START: INICIAR   O: ETAPA ANTERIOR";
     else
         hint = "";
-    if (hint[0]) textC(y2 + 10, 0.3f, COL(170,180,195), hint);
+    if (hint[0]) {                                        /* faixa de dica fixa, logo acima do rodape: nunca cobre o painel nem o desenho */
+        rect(0, 394, 640, 422, CA(0, 0, 12, 0x58));
+        rect(0, 394, 640, 395, CA(255, 205, 60, 0x44));
+        textCF(320.0f, 402.0f, 0.3f, COL(205, 214, 228), hint, 600.0f);
+    }
 
     if (setStep == 2) {                                   /* previa grande da mesa */
         if (tourney) textC(184, 0.4f, COL(255,215,70), "A MESA MUDA A CADA PARTIDA DO TORNEIO");
-        drawTablePreview(320.0f, 346.0f, 230.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
+        drawTablePreview(320.0f, 326.0f, 230.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
     } else if (setStep == 3) {                            /* bola branca e linha guia em destaque */
         const u8 *c = WB_COL[wbSel[0]];
-        float bx = 118.0f, by = 346.0f;
+        float bx = 118.0f, by = 326.0f;
         int r, gg, bb;
         if (gdSel[0] == NGD - 1) hue3(menuT * 0.01f, &r, &gg, &bb);
         else { r = GD_COL[gdSel[0]][0]; gg = GD_COL[gdSel[0]][1]; bb = GD_COL[gdSel[0]][2]; }
@@ -7536,37 +7558,19 @@ static void drawSetupScreen(void)
         discN(bx - 1.0f, by - 1.0f, 27.5f, shade(c, 1.0f, 0), 20);
         discN(bx - 10.0f, by - 11.0f, 7.0f, CA(255, 255, 255, 0x58), 10);
         text(bx - tw(0.3f, "BOLA BRANCA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "BOLA BRANCA");
-        drawTablePreview(320.0f, 350.0f, 190.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
+        drawTablePreview(320.0f, 330.0f, 190.0f, &TABLES[tourney ? (menuT / 150) % NTABLES : effTable()]);
         beam(432.0f, by, 560.0f, by, 8.0f, CA(r, gg, bb, 0x18));
         beam(432.0f, by, 560.0f, by, 4.0f, CA(r, gg, bb, 0x34));
         beam(432.0f, by, 560.0f, by, 1.8f, COL(r, gg, bb));
         ringN(574.0f, by, 9.0f, 1.4f, 18, COL(r, gg, bb));
         text(500.0f - tw(0.3f, "LINHA GUIA") * 0.5f, by + 40, 0.3f, COL(175,185,195), "LINHA GUIA");
-    } else {                                              /* etapas 0 e 1: os dois personagens */
-        float sc = setStep == 1 ? 1.35f : 0.85f, cy = setStep == 1 ? 327.0f : 342.0f, px0 = setStep == 1 ? 170.0f : 150.0f;
-        for (i = 0; i < 2; i++) {
-            float px = SOLO ? 320.0f : (i == 0 ? px0 : 640.0f - px0);
-            int hot;
-            if (SOLO && i == 1) continue;                        /* torneio: os rivais sao sorteados; treino: sem adversario */
-            hot = (setStep == 1 && v[setSel] == (i == 0 ? SR_CH0 : SR_CH1));
-            float bob = hot ? -1.0f * (0.5f + 0.5f * sinf(menuT * 0.06f)) : 0.0f;
-            const char *nm = (i == 1 && oppSel == 0) ? "BOT" : pnames[i];
-            int ci = charRand[i] ? (menuT / 90) % NCHARS : charSel[i];
-            drawChar(ci, px, cy + bob, sc, hot ? 1 : 0, menuT, 0);
-            text(px - tw(0.34f, charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]) * 0.5f, 390, 0.34f, hot ? COL(255,240,150) : COL(175,185,195), charRand[i] ? "ALEATORIO" : CHAR_NAME[ci]);
-            text(px - tw(0.28f, nm) * 0.5f, 403, 0.28f, COL(130,140,155), nm);
-            text(px - tw(0.28f, RAR_NAME[CHAR_RAR[ci]]) * 0.5f, setStep == 1 ? 361 : 376, 0.28f, rarCol(CHAR_RAR[ci]), RAR_NAME[CHAR_RAR[ci]]);
-            if (setStep == 1) {                                       /* kit do personagem: taco e mesa */
-                char kt[40];
-                sprintf(kt, "TACO: %s", CHAR_CUE[ci] >= 0 ? CUES[CHAR_CUE[ci]].name : "PADRAO");
-                text(px - tw(0.26f, kt) * 0.5f, 374, 0.26f, COL(255,190,110), kt);
-                sprintf(kt, "MESA: %s", CHAR_TAB[ci] >= 0 ? TABLES[CHAR_TAB[ci]].name : "LIVRE");
-                text(px - tw(0.26f, kt) * 0.5f, 387, 0.26f, COL(150,220,255), kt);
-            }
+    } else {                                              /* etapa 1: so uma linha de resumo abaixo do painel (personagens ficam na etapa 2) */
+        if (SOLO) textC(y2 + 22.0f, 0.4f, COL(255,215,70), training ? "TREINO LIVRE: SEM ADVERSARIO" : "MATA-MATA: PERDEU, ESTA FORA!");
+        else {
+            char vs[64];
+            sprintf(vs, "%s  VS  %s", pnames[0], oppSel ? pnames[1] : "BOT");
+            textC(y2 + 22.0f, 0.4f, COL(255,215,70), vs);
         }
-        if (setStep == 0 && !SOLO) textC(340, 0.9f, COL(255,215,70), "VS");
-        else if (setStep == 0 && training) textC(298, 0.4f, COL(255,215,70), "TREINO LIVRE: SEM ADVERSARIO");
-        else if (setStep == 0) textC(298, 0.4f, COL(255,215,70), "MATA-MATA: PERDEU, ESTA FORA!");
     }
     {
         static const int fk[4] = { 6, 7, 8, 1 };

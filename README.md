@@ -5,8 +5,16 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
-## Barra de força no estilo 8 Ball Pool (novo)
-A barra de força (lado esquerdo) ganhou o visual do 8 Ball Pool: **moldura clara** com sombra, **degradê amarelo > laranja > vermelho** e um **taco vertical** (ponta azul, virola branca, cabo claro, anel dourado e base escura) que sobe e desce conforme a força. Embaixo = 0%, em cima = 100%; a parte acima do taco fica levemente escurecida. O rótulo **FORCA**, o **%** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbCue()` no `main.c`.
+## Barra de força nova: medidor em blocos (novo)
+A barra de força (lado esquerdo) foi refeita do zero: não tem mais o taco vertical. Agora é um **medidor de LEDs com 20 blocos** que acendem de baixo para cima: **verde** (tacada leve) > **amarelo** > **laranja** > **vermelho** (força máxima). O bloco do topo acende por partes, então a subida é suave. Uma **linha branca com setinhas** marca a força exata, **tracinhos** mostram 25/50/75%, e o **%** aparece num mostrador embaixo, na cor da zona. O rótulo **FORCA** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbZone()` no `main.c`.
+
+## Configurar partida / torneio mais organizado (novo)
+- **Etapa 1 (Partida)**: tirei os personagens, o "VS" e o texto "MATA-MATA" que ficavam desenhados por cima do painel (os personagens já aparecem na etapa 2). Agora só sobra uma linha de resumo embaixo do painel
+- Linhas com mais folga, **divisória fina** entre elas e um respiro antes do botão verde
+- **Setas < >** douradas na linha escolhida e apagadas nas outras; o valor fica em destaque
+- A **dica** da opção escolhida agora fica numa **faixa fixa logo acima do rodapé**, em vez de flutuar embaixo do painel. Ganharam dica também ADVERSARIO e DIFICULDADE (Facil/Medio/Dificil)
+- As prévias da mesa (etapas 3 e 4) subiram um pouco para não encostar na faixa de dica
+- Vale para o versus e para o torneio (os dois usam `drawSetupScreen()`)
 
 ## Graficos mais nitidos (novo)
 - **Bolas** com malha 16x8 (antes 12x6): contorno mais redondo e os numeros nao entortam ao girar
