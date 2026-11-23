@@ -3030,31 +3030,52 @@ static void botPlan(void)
 /* analogico: sticks de -1 a 1 (zona morta radial); stX/stY = esquerdo, rsX/rsY = direito; anX.. = versao suavizada usada no jogo */
 static float stX[2], stY[2], rsX[2], rsY[2], anX, anY, anRX, anRY;
 static int padAnalogSet[2];
+static u32 padLastBtn[2];                    /* ultimo estado bom dos botoes: leitura que falha NAO vira "soltou" (causava duplo clique) */
+static int stOff[2][4], stPrevRaw[2][4], stSame[2][2];   /* centro real de cada stick (corrige analogico que "anda sozinho") */
+static float frameK = 1.0f;                      /* escala de tempo do quadro: 1.0 = 60 FPS; maior se o quadro demorou (mira nao fica lenta) */
 
-static void stickDead(int hx, int vy, float *ox, float *oy)
+#define STICK_DEAD 0.30f
+static void stickDead(int hx, int vy, int ox, int oy, float *ox_, float *oy_)
 {
-    float x = (hx - 128) / 128.0f, y = (vy - 128) / 128.0f, m = sqrtf(x * x + y * y);
-    if (m < 0.2f) { *ox = 0.0f; *oy = 0.0f; return; }
-    m = (m > 1.0f ? 1.0f : m);
-    { float k = (m - 0.2f) / 0.8f / sqrtf(x * x + y * y); *ox = x * k; *oy = y * k; }
+    float x = (hx - 128 - ox) / 128.0f, y = (vy - 128 - oy) / 128.0f, m0 = sqrtf(x * x + y * y), m;
+    if (m0 < STICK_DEAD) { *ox_ = 0.0f; *oy_ = 0.0f; return; }
+    m = (m0 > 1.0f ? 1.0f : m0);
+    { float k = (m - STICK_DEAD) / (1.0f - STICK_DEAD) / m0; *ox_ = x * k; *oy_ = y * k; }
 }
+
+static unsigned int frameClock(void) { unsigned int v; __asm__ volatile ("mfc0 %0, $9" : "=r"(v)); return v; }   /* contador do EE (294,912 MHz) */
 
 static u32 readpad(int port)
 {
     struct padButtonStatus s;
-    int st = padGetState(port, 0);
-    stX[port] = stY[port] = rsX[port] = rsY[port] = 0.0f;
-    if (st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1) { padAnalogSet[port] = 0; return 0; }
+    int st = padGetState(port, 0), k;
+    if (st != PAD_STATE_STABLE && st != PAD_STATE_FINDCTP1) {
+        padAnalogSet[port] = 0; padLastBtn[port] = 0;
+        stX[port] = stY[port] = rsX[port] = rsY[port] = 0.0f;
+        for (k = 0; k < 4; k++) { stOff[port][k] = 0; stPrevRaw[port][k] = 128; }
+        stSame[port][0] = stSame[port][1] = 0;
+        return 0;
+    }
     if (!padAnalogSet[port] && st == PAD_STATE_STABLE) {          /* liga o modo analogico (o jogador ainda pode trocar no botao ANALOG) */
         padAnalogSet[port] = 1;
         if (padInfoMode(port, 0, PAD_MODETABLE, -1) > 0) padSetMainMode(port, 0, PAD_MMODE_DUALSHOCK, PAD_MMODE_UNLOCK);
     }
-    if (padRead(port, 0, &s) == 0) return 0;
+    if (padRead(port, 0, &s) == 0) return padLastBtn[port];      /* sem dado novo neste quadro: mantem o ultimo estado (sticks tambem) */
     if ((s.mode >> 4) == PAD_TYPE_DUALSHOCK) {
-        stickDead(s.ljoy_h, s.ljoy_v, &stX[port], &stY[port]);
-        stickDead(s.rjoy_h, s.rjoy_v, &rsX[port], &rsY[port]);
-    }
-    return 0xffff ^ s.btns;
+        int v[4];
+        v[0] = s.ljoy_h; v[1] = s.ljoy_v; v[2] = s.rjoy_h; v[3] = s.rjoy_v;
+        for (k = 0; k < 2; k++) {                                /* stick parado ~1,5 s perto do meio: esse e o novo "zero" */
+            int *pr = &stPrevRaw[port][k * 2], h = v[k * 2], w = v[k * 2 + 1];
+            int same = (abs(h - pr[0]) <= 1 && abs(w - pr[1]) <= 1);
+            pr[0] = h; pr[1] = w;
+            stSame[port][k] = same ? (stSame[port][k] < 1000 ? stSame[port][k] + 1 : 1000) : 0;
+            if (stSame[port][k] >= 90 && abs(h - 128) <= 40 && abs(w - 128) <= 40) { stOff[port][k * 2] = h - 128; stOff[port][k * 2 + 1] = w - 128; }
+        }
+        stickDead(v[0], v[1], stOff[port][0], stOff[port][1], &stX[port], &stY[port]);
+        stickDead(v[2], v[3], stOff[port][2], stOff[port][3], &rsX[port], &rsY[port]);
+    } else stX[port] = stY[port] = rsX[port] = rsY[port] = 0.0f;
+    padLastBtn[port] = 0xffff ^ s.btns;
+    return padLastBtn[port];
 }
 
 /* ---------- desenho do jogo ---------- */
@@ -9409,6 +9430,12 @@ int main(int argc, char *argv[])
 #else
         musicUpdate();
 #endif
+        {   /* tempo do quadro (1.0 = 60 FPS). Se a musica/USB atrasar o quadro, a mira anda proporcional e nao fica lenta */
+            static unsigned int fkLast; static int fkInit;
+            unsigned int nowc = frameClock();
+            if (fkInit) { frameK = (nowc - fkLast) / 4915200.0f; if (frameK < 1.0f) frameK = 1.0f; if (frameK > 3.0f) frameK = 3.0f; }
+            fkInit = 1; fkLast = nowc;
+        }
         p0 = readpad(0);
         p1 = (mode == 1 || state == S_MENU || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) ? readpad(1) : 0;
         if (state == S_MENU || state == S_OVER || state == S_VS || state == S_REPLAY || state == S_CREDITS || state == S_OPTS || state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP) in = p0 | p1;
@@ -9423,15 +9450,31 @@ int main(int argc, char *argv[])
                       state == S_SETUP || state == S_NAME || state == S_PLAYER || state == S_BRACKET || state == S_SHOP;
             float jx = 0.0f, jy = 0.0f, kx = 0.0f, ky = 0.0f;
             if (all || cur == 0) { jx = stX[0]; jy = stY[0]; kx = rsX[0]; ky = rsY[0]; }
-            if (all && rd1)      { jx += stX[1]; jy += stY[1]; kx += rsX[1]; ky += rsY[1]; }
+            if (all && rd1) {
+                if (fabsf(stX[1]) + fabsf(stY[1]) > fabsf(jx) + fabsf(jy))   { jx = stX[1]; jy = stY[1]; }
+                if (fabsf(rsX[1]) + fabsf(rsY[1]) > fabsf(kx) + fabsf(ky)) { kx = rsX[1]; ky = rsY[1]; }
+            }
             if (jx > 1.0f) jx = 1.0f; if (jx < -1.0f) jx = -1.0f; if (jy > 1.0f) jy = 1.0f; if (jy < -1.0f) jy = -1.0f;
             if (kx > 1.0f) kx = 1.0f; if (kx < -1.0f) kx = -1.0f; if (ky > 1.0f) ky = 1.0f; if (ky < -1.0f) ky = -1.0f;
-            if (paused || (state != S_AIM && state != S_PLACE))      /* fora da mira e da bola na mao o stick vira direcional */
-                in |= (jx < -0.6f ? PAD_LEFT : 0) | (jx > 0.6f ? PAD_RIGHT : 0) | (jy < -0.6f ? PAD_UP : 0) | (jy > 0.6f ? PAD_DOWN : 0);
+            {   /* fora da mira e da bola na mao o stick vira direcional (histerese: liga em 0.6, so desliga abaixo de 0.45 = nao pisca) */
+                static u32 sd;
+                if (paused || (state != S_AIM && state != S_PLACE)) {
+                    if (jx < -0.6f) sd |= PAD_LEFT;  else if (jx > -0.45f) sd &= ~PAD_LEFT;
+                    if (jx >  0.6f) sd |= PAD_RIGHT; else if (jx <  0.45f) sd &= ~PAD_RIGHT;
+                    if (jy < -0.6f) sd |= PAD_UP;    else if (jy > -0.45f) sd &= ~PAD_UP;
+                    if (jy >  0.6f) sd |= PAD_DOWN;  else if (jy <  0.45f) sd &= ~PAD_DOWN;
+                    in |= sd;
+                } else sd = 0;
+            }
             anX += (jx - anX) * 0.4f;  if (jx == 0.0f && fabsf(anX) < 0.02f) anX = 0.0f;      /* suaviza: a mira desliza */
             anY += (jy - anY) * 0.4f;  if (jy == 0.0f && fabsf(anY) < 0.02f) anY = 0.0f;
             anRX += (kx - anRX) * 0.4f; if (kx == 0.0f && fabsf(anRX) < 0.02f) anRX = 0.0f;
             anRY += (ky - anRY) * 0.4f; if (ky == 0.0f && fabsf(anRY) < 0.02f) anRY = 0.0f;
+        }
+        {   /* anti duplo clique: botao que some por 1 quadro so (ruido/atraso do pad) continua apertado; soltar de verdade dura mais que isso */
+            static u32 dbRaw, dbGrace;
+            u32 raw = in, miss = dbRaw & ~raw & ~dbGrace;
+            dbGrace = miss; in = raw | miss; dbRaw = raw;
         }
         pressed = in & ~prev;
         prev = in;
@@ -9512,26 +9555,27 @@ int main(int argc, char *argv[])
                 }
                 if (hackOn) { fineHold = 0; }                    /* HACK: mira, efeito e pulo travados */
                 else {
-                if (((in & PAD_LEFT) != 0) != ((in & PAD_RIGHT) != 0)) {   /* direcional: comeca fino e acelera aos poucos */
+                if (!charging && ((in & PAD_LEFT) != 0) != ((in & PAD_RIGHT) != 0)) {   /* direcional (travado enquanto a barra enche): comeca fino e acelera aos poucos */
                     float ds;
                     if (dpadHold < 60) dpadHold++;
-                    ds = 0.010f + 0.020f * (dpadHold > 24 ? 1.0f : dpadHold / 24.0f);
+                    ds = (0.010f + 0.020f * (dpadHold > 24 ? 1.0f : dpadHold / 24.0f)) * frameK;
                     ang += ((in & PAD_RIGHT) ? ds : -ds) * (curse[cur] ? -1.0f : 1.0f);   /* MALDICAO: botoes invertidos */
                 } else dpadHold = 0;
-                if (anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f * (curse[cur] ? -1.0f : 1.0f);   /* analogico: quanto mais inclina, mais gira */
-                if (((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
+                if (!charging && anX != 0.0f) ang += (anX < 0.0f ? -1.0f : 1.0f) * powf(fabsf(anX), 1.5f) * 0.032f * frameK * (curse[cur] ? -1.0f : 1.0f);   /* analogico: quanto mais inclina, mais gira */
+                if (!charging && ((in & PAD_L1) != 0) != ((in & PAD_R1) != 0)) {
                     float st;                                   /* ajuste fino: comeca bem devagar e so acelera um pouco segurando */
                     if (fineHold < 600) fineHold++;
                     st = 0.0007f + (fineHold > 20 ? (fineHold - 20) * 0.00002f : 0.0f);
                     if (st > 0.0028f) st = 0.0028f;
+                    st *= frameK;
                     ang += ((in & PAD_R1) ? st : -st) * (curse[cur] ? -1.0f : 1.0f);
                 } else fineHold = 0;
-                if (in & PAD_L2) { spinSel -= 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; }
-                if (in & PAD_R2) { spinSel += 0.03f; if (spinSel >  1.0f) spinSel =  1.0f; }
-                if (in & PAD_UP)   { spinV += 0.03f; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */
-                if (in & PAD_DOWN) { spinV -= 0.03f; if (spinV < -1.0f) spinV = -1.0f; }   /* puxa */
-                if (anRX != 0.0f) { spinSel += anRX * 0.03f; if (spinSel < -1.0f) spinSel = -1.0f; if (spinSel > 1.0f) spinSel = 1.0f; }   /* stick direito: efeito */
-                if (anRY != 0.0f) { spinV -= anRY * 0.03f; if (spinV < -1.0f) spinV = -1.0f; if (spinV > 1.0f) spinV = 1.0f; }
+                if (in & PAD_L2) { spinSel -= 0.03f * frameK; if (spinSel < -1.0f) spinSel = -1.0f; }
+                if (in & PAD_R2) { spinSel += 0.03f * frameK; if (spinSel >  1.0f) spinSel =  1.0f; }
+                if (in & PAD_UP)   { spinV += 0.03f * frameK; if (spinV >  1.0f) spinV =  1.0f; }   /* rola */
+                if (in & PAD_DOWN) { spinV -= 0.03f * frameK; if (spinV < -1.0f) spinV = -1.0f; }   /* puxa */
+                if (anRX != 0.0f) { spinSel += anRX * 0.03f * frameK; if (spinSel < -1.0f) spinSel = -1.0f; if (spinSel > 1.0f) spinSel = 1.0f; }   /* stick direito: efeito */
+                if (anRY != 0.0f) { spinV -= anRY * 0.03f * frameK; if (spinV < -1.0f) spinV = -1.0f; if (spinV > 1.0f) spinV = 1.0f; }
                 }
                 if (!charging) {
                     if ((pressed & PAD_CROSS) && hackOn) { pwr = hackPow; startStrike(hackPow); }          /* HACK: X atira na forca ideal exata */
@@ -9560,7 +9604,7 @@ int main(int argc, char *argv[])
                     }
                     else if (pressed & PAD_CIRCLE) useAbility();
                 } else {
-                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f);   /* sobe e desce sozinha (HACK: mais lenta) */
+                    pwr += barDir * cueBarSpeed(curCue()) * (hackOn ? 0.6f : 1.0f) * frameK;   /* sobe e desce sozinha (HACK: mais lenta) */
                     if (pwr >= 1.0f) { pwr = 1.0f; barDir = -1.0f; }
                     if (pwr <= 0.0f) { pwr = 0.0f; barDir = 1.0f; }
                     if (pressed & PAD_CIRCLE) { charging = 0; pwr = 0; }
@@ -9649,11 +9693,11 @@ int main(int argc, char *argv[])
 
         case S_PLACE:
             if (!isBot()) {
-                if (in & PAD_LEFT)  b[0].x -= 2;
-                if (in & PAD_RIGHT) b[0].x += 2;
-                if (in & PAD_UP)    b[0].y -= 2;
-                if (in & PAD_DOWN)  b[0].y += 2;
-                b[0].x += anX * 2.6f; b[0].y += anY * 2.6f;           /* analogico: movimento suave */
+                if (in & PAD_LEFT)  b[0].x -= 2 * frameK;
+                if (in & PAD_RIGHT) b[0].x += 2 * frameK;
+                if (in & PAD_UP)    b[0].y -= 2 * frameK;
+                if (in & PAD_DOWN)  b[0].y += 2 * frameK;
+                b[0].x += anX * 2.6f * frameK; b[0].y += anY * 2.6f * frameK;           /* analogico: movimento suave */
                 if (b[0].x < TX0+R) b[0].x = TX0+R;
                 if (b[0].x > TX1-R) b[0].x = TX1-R;
                 if (b[0].y < TY0+R) b[0].y = TY0+R;
