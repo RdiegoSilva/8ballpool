@@ -5,6 +5,9 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Barra de força no estilo 8 Ball Pool (novo)
+A barra de força (lado esquerdo) ganhou o visual do 8 Ball Pool: **moldura clara** com sombra, **degradê amarelo > laranja > vermelho** e um **taco vertical** (ponta azul, virola branca, cabo claro, anel dourado e base escura) que sobe e desce conforme a força. Embaixo = 0%, em cima = 100%; a parte acima do taco fica levemente escurecida. O rótulo **FORCA**, o **%** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbCue()` no `main.c`.
+
 ## Graficos mais nitidos (novo)
 - **Bolas** com malha 16x8 (antes 12x6): contorno mais redondo e os numeros nao entortam ao girar
 - **Circulos** (discos, aneis, brilhos) usam mais segmentos: a borda deixa de parecer quadradona

@@ -5259,37 +5259,61 @@ static float keycap(float x, float y, const char *k, const char *d, u64 kc, u64 
     return kw + 6 + tw(s, d);
 }
 
-/* barra de forca vertical no lado esquerdo: ao apertar X ela sobe e desce
-   sozinha; X de novo dispara, O cancela. Depois da tacada ela volta a zero. */
+/* taco vertical que serve de "ponteiro" da barra de forca (estilo 8 Ball Pool): ponta azul, virola branca,
+   cabo claro, anel dourado e base escura. cx = centro, cy = centro do taco, len = comprimento total */
+static void pbCueSeg(float cx, float top, float len, float a, float b, float grow, u64 col)
+{
+    float y0 = top + len * a, y1 = top + len * b;
+    float w0 = 1.4f + 1.5f * a + grow, w1 = 1.4f + 1.5f * b + grow;      /* o taco engrossa da ponta para a base */
+    quad(cx - w0, y0, cx + w0, y0, cx + w1, y1, cx - w1, y1, col);
+}
+
+static void pbCue(float cx, float cy, float len)
+{
+    float top = cy - len * 0.5f;
+    pbCueSeg(cx + 1.5f, top + 1.5f, len, 0.0f, 1.0f, 0.6f, CA(0, 0, 0, 0x34));       /* sombra */
+    pbCueSeg(cx, top, len, 0.0f, 1.0f, 1.1f, COL(34, 18, 8));                       /* contorno escuro */
+    pbCueSeg(cx, top, len, 0.00f, 0.07f, 0.0f, COL(90, 170, 255));                  /* ponta */
+    pbCueSeg(cx, top, len, 0.07f, 0.19f, 0.0f, COL(244, 244, 240));                 /* virola */
+    pbCueSeg(cx, top, len, 0.19f, 0.63f, 0.0f, COL(236, 184, 104));                 /* cabo */
+    pbCueSeg(cx, top, len, 0.63f, 0.69f, 0.0f, COL(226, 172, 44));                  /* anel dourado */
+    pbCueSeg(cx, top, len, 0.69f, 1.00f, 0.0f, COL(112, 52, 18));                   /* base */
+    rect(cx - 1.4f, top + len * 0.19f, cx - 0.6f, top + len * 0.63f, CA(255, 255, 255, 0x40));   /* brilho */
+}
+
+/* barra de forca vertical no lado esquerdo (estilo 8 Ball Pool): moldura clara, degrade amarelo > laranja > vermelho
+   e um taco que sobe e desce. Ao apertar X ela sobe e desce sozinha; X de novo dispara, O cancela. Depois da tacada volta a zero. */
 static void drawPowerBar(void)
 {
-    const float bx = 14.0f, by0 = TY0, by1 = TY1, bw = 14.0f;
-    const int   nseg = 24;
-    float sh = (by1 - by0) / nseg, fillTop = by1 - barLevel * (by1 - by0);
+    const float bx = 11.0f, by0 = TY0, by1 = TY1, bw = 20.0f;
+    const float cueL = 44.0f, half = cueL * 0.5f, cx = bx + bw * 0.5f;
+    const int   nseg = 56;
+    float H = by1 - by0;
+    float cy = (by1 - half) - barLevel * (H - cueL);                  /* centro do taco: embaixo = 0%, em cima = 100% */
     char buf[16];
     int k;
 
-    cham(bx - 5.5f, by0 - 5.5f, bx + bw + 5.5f, by1 + 5.5f, 5.0f, COL(226,172,44));      /* moldura dourada */
-    cham(bx - 4.0f, by0 - 4.0f, bx + bw + 4.0f, by1 + 4.0f, 4.0f, COL(30,16,56));
-    rect(bx - 2.0f, by0 - 2.0f, bx - 1.0f, by1 + 2.0f, CA(255, 255, 255, 0x1c));
-    for (k = 0; k < nseg; k++) {
-        float t = (k + 0.5f) / nseg;
-        int r = (int)(255 * (t * 2 > 1 ? 1 : t * 2));
-        int g = (int)(255 * ((1 - t) * 2 > 1 ? 1 : (1 - t) * 2));
-        float sb = by1 - k * sh, st = sb - sh;
-        rect(bx, st + 1, bx + bw, sb - 0.5f, COL(r / 6, g / 6, 8));            /* apagado */
-        if (fillTop < sb) {
-            if (st < fillTop) st = fillTop;
-            rect(bx, st + 1 > sb - 0.5f ? st : st + 1, bx + bw, sb - 0.5f, COL(r, g, 40));  /* aceso */
-        }
+    cham(bx - 3.0f, by0 - 3.0f, bx + bw + 5.0f, by1 + 5.0f, 6.0f, CA(0, 0, 0, 0x30));      /* sombra */
+    cham(bx - 4.5f, by0 - 4.5f, bx + bw + 4.5f, by1 + 4.5f, 6.0f, COL(214, 204, 184));     /* moldura clara */
+    cham(bx - 3.2f, by0 - 3.2f, bx + bw + 3.2f, by1 + 3.2f, 5.0f, COL(120, 112, 100));
+    cham(bx - 2.2f, by0 - 2.2f, bx + bw + 2.2f, by1 + 2.2f, 4.0f, COL(30, 26, 30));
+    for (k = 0; k < nseg; k++) {                                      /* degrade: amarelo (topo) > laranja > vermelho (base) */
+        float t = (k + 0.5f) / nseg, ya = by0 + H * k / nseg, yb = by0 + H * (k + 1) / nseg;
+        int r, g, b;
+        if (t < 0.45f) { float u = t / 0.45f;          r = 255;                   g = (int)(226 - 76 * u);  b = (int)(24 - 12 * u); }
+        else           { float u = (t - 0.45f) / 0.55f; r = (int)(255 - 41 * u); g = (int)(150 - 98 * u);  b = (int)(12 - 2 * u); }
+        rect(bx, ya, bx + bw, yb + (k == nseg - 1 ? 0.0f : 0.6f), COL(r, g, b));
     }
-    for (k = 1; k < 4; k++)
-        line(bx + bw + 4, by1 - k * (by1 - by0) / 4, bx + bw + 8, by1 - k * (by1 - by0) / 4,
-             COL(190,190,190));
+    if (cy > by0)                                                     /* acima do taco: escurecido (so o que falta ate a forca maxima) */
+        rect(bx, by0, bx + bw, cy, CA(14, 8, 8, 0x3c));
+    rect(bx + 2.0f, by0 + 1.0f, bx + 4.0f, by1 - 1.0f, CA(255, 255, 255, 0x22));       /* brilho de vidro na esquerda */
+    rect(bx + bw - 2.0f, by0 + 1.0f, bx + bw, by1 - 1.0f, CA(0, 0, 0, 0x22));           /* sombra na direita */
+    rect(bx, by0, bx + bw, by0 + 1.0f, CA(255, 255, 255, 0x30));
+    pbCue(cx, cy, cueL);
     if (hackOn && state == S_AIM) {                                   /* HACK: marca a forca ideal */
-        float hy = by1 - hackPow * (by1 - by0);
-        rect(bx - 8, hy - 1.5f, bx + bw + 8, hy + 1.5f, COL(0, 255, 220));
-        text(bx + bw + 10, hy - 6, 0.26f, COL(0, 255, 220), "IDEAL");
+        float hy = (by1 - half) - hackPow * (H - cueL);
+        rect(bx - 6, hy - 1.5f, bx + bw + 6, hy + 1.5f, COL(0, 255, 220));
+        text(bx + bw + 8, hy - 6, 0.26f, COL(0, 255, 220), "IDEAL");
     }
     hbox(2, 44, 40, 62, CA(226, 172, 44, 0x90), CA(8, 12, 22, 0x78));
     text(21.0f - tw(0.3f, "FORCA") * 0.5f, 49, 0.3f, COL(255,235,150), "FORCA");
