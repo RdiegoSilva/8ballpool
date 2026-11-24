@@ -361,8 +361,10 @@ static void pj(float x, float y, float *sx, float *sy, float *sc)
         if (d < 12.0f) d = 12.0f;
         k = FP_F / d;
         px = 320.0f + lat * k; py = FP_HOR + FP_H * k;
-        if (px < -800.0f) px = -800.0f; if (px > 1440.0f) px = 1440.0f;
-        if (py < -800.0f) py = -800.0f; if (py > 1300.0f) py = 1300.0f;
+        if (px < -800.0f) { px = -800.0f; }
+        if (px > 1440.0f) { px = 1440.0f; }
+        if (py < -800.0f) { py = -800.0f; }
+        if (py > 1300.0f) { py = 1300.0f; }
         pjVs = FP_H / sqrtf(FP_H * FP_H + d * d); if (pjVs < 0.1f) pjVs = 0.1f;
         *sc = k; *sx = px; *sy = py;
         return;
@@ -406,8 +408,8 @@ static void fpPoly(const FPV *v, int n, int gour)         /* recorta, projeta e 
     if (m < 3) return;
     for (i = 0; i < m; i++) pj(o[i].x, o[i].y, &px[i], &py[i], &s);
     for (i = 1; i + 1 < m; i++) {
-        if (gour) gsKit_prim_triangle_gouraud(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c, o[i].c, o[i+1].c);
-        else gsKit_prim_triangle(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c);
+        if (gour) { gsKit_prim_triangle_gouraud(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c, o[i].c, o[i+1].c); }
+        else { gsKit_prim_triangle(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c); }
     }
 }
 
