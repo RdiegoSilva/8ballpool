@@ -5,6 +5,14 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Física nas bordas das caçapas (novo)
+As **pontas das tabelas** em volta de cada caçapa agora são **quinas redondas** com colisão de verdade. Antes a bola passava reto por elas (a tabela "abria" na boca da caçapa e a bola atravessava a ponta); agora ela **bate na quina e rebate** no ângulo certo: bola bem no meio da boca entra, bola na beirada **bate na trave** e volta pra mesa ou escorrega para dentro, e tacada rasante pela tabela raramente cai (como na sinuca de verdade)
+- São 12 quinas (2 por caçapa). Quando a bola bate, toca o som de tabela, mais forte conforme a velocidade
+- A **ponta da tabela dos cantos** foi para 24 px do canto (antes 13 px, só no desenho). Com 13 px o vão ficava menor que a bola e a caçapa de canto seria impossível; com 24 px o vão fica ~2 bolas, como numa mesa real. O desenho e a física usam o mesmo valor (`PK_TIP`), então a bola bate exatamente onde a tabela termina
+- Nos testes de simulação, o acerto de uma tacada bem mirada caiu pouco (~80% do que era), mas agora com rebote realista na quina
+- Ajustes no `main.c` (perto de `jawHit()`): `PK_TIP` (menor = canto mais apertado, não passe de ~20), `KN_R` (quina mais gorda = mais difícil), `KN_E` (quique: 1.0 = sem perda) e `KN_FT` (atrito de lado). `KN_ON 0` desliga tudo
+- Durante o poder **CHAMINE** (caçapas maiores) as quinas ficam desligadas. Funções: `knuckleHit()` e `pocketKnuckles()`
+
 ## Barra de força nova: medidor em blocos (novo)
 A barra de força (lado esquerdo) foi refeita do zero: não tem mais o taco vertical. Agora é um **medidor de LEDs com 20 blocos** que acendem de baixo para cima: **verde** (tacada leve) > **amarelo** > **laranja** > **vermelho** (força máxima). O bloco do topo acende por partes, então a subida é suave. Uma **linha branca com setinhas** marca a força exata, **tracinhos** mostram 25/50/75%, e o **%** aparece num mostrador embaixo, na cor da zona. O rótulo **FORCA** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbZone()` no `main.c`.
 

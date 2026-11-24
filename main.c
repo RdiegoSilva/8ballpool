@@ -2098,6 +2098,38 @@ static void jawHit(Ball *q, int alongX, float pc, float rr)
     }
 }
 
+/* BORDAS DAS CACAPAS (fisica): a ponta de cada tabela e uma quina redonda fixa. A bola que roça a quina rebate com o angulo certo
+   (para dentro da cacapa ou de volta para a mesa) em vez de passar reto; bola bem na boca entra, bola na beirada "bate na trave".
+   KN_R = raio da quina (maior = quina mais gorda, cacapa mais dificil); KN_E = quique (1.0 = sem perda); KN_FT = atrito de lado */
+#define PK_TIP 24.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; menor = canto mais apertado) */
+#define KN_ON 1
+#define KN_R  1.6f
+#define KN_E  0.62f
+#define KN_FT 0.97f
+static int knuckleHit(Ball *q, float kx, float ky)       /* devolve a velocidade do impacto (0 = nao bateu) */
+{
+    float dx = q->x - kx, dy = q->y - ky, d2 = dx*dx + dy*dy, rr = R + KN_R, d, nx, ny, vn, tx, ty;
+    if (d2 >= rr*rr || d2 < 0.0001f) return 0;
+    d = sqrtf(d2); nx = dx / d; ny = dy / d;
+    q->x = kx + nx * rr; q->y = ky + ny * rr;               /* tira a bola de dentro da quina */
+    vn = q->vx * nx + q->vy * ny;
+    if (vn >= 0.0f) return 0;                               /* ja esta saindo: so reposiciona */
+    tx = q->vx - vn * nx; ty = q->vy - vn * ny;             /* parte que desliza pela quina */
+    q->vx = tx * KN_FT - vn * KN_E * nx;
+    q->vy = ty * KN_FT - vn * KN_E * ny;
+    return (int)(-vn);
+}
+
+static int pocketKnuckles(Ball *q)                       /* testa as 12 quinas (2 por cacapa); devolve o maior impacto */
+{
+    float cm = PRC[1] * tabPock(), ce = PK_TIP;             /* ce/cm = onde a ponta da tabela termina (igual ao desenho: cushH / cushV) */
+    float kx[12] = { TX0 + ce, TX0, TX1 - ce, TX1, TX0 + ce, TX0, TX1 - ce, TX1, TCX - cm, TCX + cm, TCX - cm, TCX + cm };
+    float ky[12] = { TY0, TY0 + ce, TY0, TY0 + ce, TY1, TY1 - ce, TY1, TY1 - ce, TY0, TY0, TY1, TY1 };
+    int k, hit = 0, h;
+    for (k = 0; k < 12; k++) { h = knuckleHit(q, kx[k], ky[k]); if (h > hit) hit = h; }
+    return hit;
+}
+
 /* habilidade acionada na primeira bola que a branca toca */
 static void abilOnFirstHit(int j)
 {
@@ -2275,6 +2307,12 @@ static int stepPhysics(float dt)
             if (inMouth && b[i].y - (TY1-R) > 2.0f) jawHit(&b[i], 1, mpx, mpr);
             else { b[i].y = TY1-R; if (b[i].vy > 0) { wl = 1; b[i].vy = -b[i].vy * cushionE(b[i].vy); b[i].vx *= 0.985f; } }
         }
+#if KN_ON
+        if (!air && pockMul <= 1.0f) {                    /* quinas das cacapas (CHAMINE abre as cacapas: ai nao tem quina) */
+            int kh = pocketKnuckles(&b[i]);
+            if (kh > 25) SFX(SFX_CUSHION, 20 + (int)(kh * 0.14f));
+        }
+#endif
         if (wl) {                                         /* som da tabela (mais forte quanto mais rapida a bola) */
             float cs = sqrtf(b[i].vx * b[i].vx + b[i].vy * b[i].vy);
             if (cs > 25.0f) SFX(SFX_CUSHION, 20 + (int)(cs * 0.14f));
@@ -3135,8 +3173,8 @@ static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores deri
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
     float la = xa - ra, lb = xb + rb;
-    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcMouth);
+    if (ra > 8.0f) quad(xa - 34, yo, xa - ra, yo, xa, yi, xa - 34, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 34, yo, xb + 34, yi, xb, yi, tcMouth);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
@@ -3146,8 +3184,8 @@ static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcMouth);
+    quad(xo, ya - 34, xo, ya - 11, xi, ya, xi, ya - 34, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    quad(xo, yb + 11, xo, yb + 34, xi, yb + 34, xi, yb, tcMouth);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
@@ -4314,7 +4352,7 @@ static void tableDecoPool(int stage)
         for (k = 0; k < 4; k++)                                                                        /* borda do feltro mais escura */
             outlineRect(TX0 + k, TY0 + k, TX1 - k, TY1 - k, CA(6, 30, 62, 0x30 - k * 8));
     } else {
-        float ce = 13.0f, cm = PRC[1];                                                   /* mesmas aberturas visuais das tabelas (cev em drawTable) */
+        float ce = PK_TIP, cm = PRC[1];                                                  /* mesmas aberturas visuais das tabelas (cev em drawTable) */
         u64 hi = CA(170, 230, 255, 0x5a);
         line(TX0 + ce, TY0 + 0.5f, TCX - cm, TY0 + 0.5f, hi);                                          /* brilho azul-claro no gume das tabelas */
         line(TCX + cm, TY0 + 0.5f, TX1 - ce, TY0 + 0.5f, hi);
@@ -4678,7 +4716,7 @@ static void drawTable(void)
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
     {   /* a abertura da tabela e a mesma da fisica (PRC), senao a bola bate numa parede invisivel */
         float cm = PRC[1] * tabPock();
-        float cev = 13.0f;                                              /* so visual, em todas as mesas: as pontas das tabelas dos cantos encostam no buraco (a fisica continua usando ce) */
+        float cev = PK_TIP;                                             /* as pontas das tabelas dos cantos: o desenho e a fisica (quinas, pocketKnuckles) usam o mesmo valor */
         u64 scoop = shade(T->felt, 0.42f, 0);                            /* vao das cacapas do meio: escuro, continua o buraco ate o feltro */
         rect(TCX - cm, TY0 - 11, TCX + cm, TY0, scoop);                  /* meio: o vao entre as pontas mostra o feltro (sombra do buraco) */
         rect(TCX - cm, TY1, TCX + cm, TY1 + 11, scoop);
