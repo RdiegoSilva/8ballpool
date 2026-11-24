@@ -163,7 +163,7 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define POM 14.2f                                   /* meio: o buraco fica na tabela, encostando no feltro sem invadir */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 16.0f, 12.0f, 16.0f, 16.0f, 12.0f, 16.0f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
+static const float PR[6] = { 13.5f, 11.0f, 13.5f, 13.5f, 11.0f, 13.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
 static const float PRC[6] = { 31.0f, 17.0f, 31.0f, 31.0f, 17.0f, 31.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
@@ -2101,7 +2101,7 @@ static void jawHit(Ball *q, int alongX, float pc, float rr)
 /* BORDAS DAS CACAPAS (fisica): a ponta de cada tabela e uma quina redonda fixa. A bola que roça a quina rebate com o angulo certo
    (para dentro da cacapa ou de volta para a mesa) em vez de passar reto; bola bem na boca entra, bola na beirada "bate na trave".
    KN_R = raio da quina (maior = quina mais gorda, cacapa mais dificil); KN_E = quique (1.0 = sem perda); KN_FT = atrito de lado */
-#define PK_TIP 22.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13; 22 = boca media; maior = mais aberto (30 fica facil demais)) */
+#define PK_TIP 18.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13; 18 = boca fechada; maior = mais aberto (22 e 30 ficaram abertos demais)) */
 #define KN_ON 1
 #define KN_R  1.0f
 #define KN_E  0.62f
@@ -4744,7 +4744,7 @@ static void drawTable(void)
         int mid = (p % 3 == 1);
         static const float IA[6] = { 0.7854f, 1.5708f, 2.3562f, 5.4978f, 4.7124f, 3.9270f };
         float ia = IA[p];                                                            /* direcao do buraco para dentro da mesa */
-        if (mid) { float cmv = PRC[1] * tabPock() - 1.0f; if (r0 < cmv) r0 = cmv; }   /* so visual: o buraco do meio preenche o vao entre as tabelas (abertura para a bola entrar) */
+        if (mid) { float cmv = PRC[1] * tabPock() - 3.0f; if (r0 < cmv) r0 = cmv; }   /* so visual: o buraco do meio preenche o vao entre as tabelas (abertura para a bola entrar) */
         if (!mid) {                                                                  /* chapa prateada do canto (nao entra no feltro) */
             float a0 = ia + 0.75f, a1 = ia + 6.283f - 0.75f;
             (void)a0; (void)a1; (void)arcBand;                                         /* sem chapa prateada: buraco direto na madeira, como no 8 Ball Pool */
