@@ -375,12 +375,55 @@ static void pj(float x, float y, float *sx, float *sy, float *sc)
     *sy = CAM_SY - v * CAM_SIN * k;
 }
 
+/* ---- 1a pessoa: recorte no plano proximo (pontos atras da camera nao podem ser projetados) ---- */
+#define FP_NEAR 40.0f
+typedef struct { float x, y; u64 c; } FPV;
+static float fpDepth(float x, float y) { return (x - fpX) * fpC + (y - fpY) * fpS + FP_BACK; }
+static u64 fpLerpC(u64 a, u64 b, float t)
+{
+    u64 r = a & ~0xFFFFFFFFull; int i;
+    for (i = 0; i < 4; i++) { int sh = i * 8, ca = (int)((a >> sh) & 255), cb = (int)((b >> sh) & 255); r |= (u64)(ca + (int)((cb - ca) * t)) << sh; }
+    return r;
+}
+static int fpClip(const FPV *in, int n, FPV *out)         /* poligono convexo contra d >= FP_NEAR (saida com ate n+1 vertices) */
+{
+    int i, m = 0;
+    for (i = 0; i < n; i++) {
+        const FPV *a = &in[i], *b = &in[(i + 1) % n];
+        float da = fpDepth(a->x, a->y) - FP_NEAR, db = fpDepth(b->x, b->y) - FP_NEAR;
+        if (da >= 0.0f) out[m++] = *a;
+        if ((da >= 0.0f) != (db >= 0.0f)) {
+            float t = da / (da - db);
+            out[m].x = a->x + (b->x - a->x) * t; out[m].y = a->y + (b->y - a->y) * t; out[m].c = fpLerpC(a->c, b->c, t); m++;
+        }
+    }
+    return m;
+}
+static void fpPoly(const FPV *v, int n, int gour)         /* recorta, projeta e desenha em leque */
+{
+    FPV o[8]; float px[8], py[8], s; int m, i;
+    m = fpClip(v, n, o);
+    if (m < 3) return;
+    for (i = 0; i < m; i++) pj(o[i].x, o[i].y, &px[i], &py[i], &s);
+    for (i = 1; i + 1 < m; i++) {
+        if (gour) gsKit_prim_triangle_gouraud(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c, o[i].c, o[i+1].c);
+        else gsKit_prim_triangle(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c);
+    }
+}
+
 /* ---------- desenho ---------- */
 static void rect(float x1, float y1, float x2, float y2, u64 c)
 {
 #if CAM_3D
     if (camOn) {
         float ax, ay, bx, by, cx2, cy2, dx, dy, s;
+        if (camFP) {
+            if (x2 - x1 < 2.5f && y2 - y1 < 2.5f && fpDepth((x1 + x2) * 0.5f, (y1 + y2) * 0.5f) < FP_NEAR) return;
+            if (!(x2 - x1 < 2.5f && y2 - y1 < 2.5f)) {
+                FPV v[4] = { {x1, y1, c}, {x2, y1, c}, {x2, y2, c}, {x1, y2, c} };
+                fpPoly(v, 4, 0); return;
+            }
+        }
         if (x2 - x1 < 2.5f && y2 - y1 < 2.5f) {            /* pontinho: um sprite no centro projetado */
             pj((x1 + x2) * 0.5f, (y1 + y2) * 0.5f, &ax, &ay, &s);
             gsKit_prim_sprite(g, ax + OX - (x2 - x1) * 0.5f * s, ay + OY - (y2 - y1) * 0.5f * s * pjVs,
@@ -401,6 +444,12 @@ static void line(float x1, float y1, float x2, float y2, u64 c)
 #if CAM_3D
     if (camOn) {
         float ax, ay, bx, by, s;
+        if (camFP) {
+            float da = fpDepth(x1, y1) - FP_NEAR, db = fpDepth(x2, y2) - FP_NEAR;
+            if (da < 0.0f && db < 0.0f) return;
+            if (da < 0.0f) { float t = da / (da - db); x1 += (x2 - x1) * t; y1 += (y2 - y1) * t; }
+            else if (db < 0.0f) { float t = db / (db - da); x2 += (x1 - x2) * t; y2 += (y1 - y2) * t; }
+        }
         pj(x1, y1, &ax, &ay, &s); pj(x2, y2, &bx, &by, &s);
         gsKit_prim_line(g, ax+OX, ay+OY, bx+OX, by+OY, 1, c);
         return;
@@ -452,7 +501,7 @@ static void discN(float cx, float cy, float r, u64 c, int n)
     const float *t;
     float rx = r, ry = r;                               /* raio na horizontal e na vertical (a camera 3D achata o disco do plano da mesa) */
 #if CAM_3D
-    if (camOn) { float s; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * pjVs; }
+    if (camOn) { float s; if (camFP && fpDepth(cx, cy) < FP_NEAR) return; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * pjVs; }
 #endif
 #if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
@@ -482,7 +531,11 @@ static void quad(float x1, float y1, float x2, float y2,
                  float x3, float y3, float x4, float y4, u64 c)
 {
 #if CAM_3D
-    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); pj(x4, y4, &x4, &y4, &s); }
+    if (camOn) {
+        float s;
+        if (camFP) { FPV v[4] = { {x1, y1, c}, {x2, y2, c}, {x3, y3, c}, {x4, y4, c} }; fpPoly(v, 4, 0); return; }
+        pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); pj(x4, y4, &x4, &y4, &s);
+    }
 #endif
     gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c);
     gsKit_prim_triangle(g, x1+OX, y1+OY, x3+OX, y3+OY, x4+OX, y4+OY, 1, c);
@@ -497,6 +550,7 @@ static void gradQ(float x1, float y1, float x2, float y2, u64 ctl, u64 ctr, u64 
 #if CAM_3D
     if (camOn) {
         float ax, ay, bx, by, cx2, cy2, dx, dy, s;
+        if (camFP) { FPV v[4] = { {x1, y1, ctl}, {x2, y1, ctr}, {x2, y2, cbr}, {x1, y2, cbl} }; fpPoly(v, 4, 1); return; }
         pj(x1, y1, &ax, &ay, &s); pj(x2, y1, &bx, &by, &s); pj(x1, y2, &cx2, &cy2, &s); pj(x2, y2, &dx, &dy, &s);
         gsKit_prim_quad_gouraud(g, ax+OX, ay+OY, bx+OX, by+OY, cx2+OX, cy2+OY, dx+OX, dy+OY, 1, ctl, ctr, cbl, cbr);
         return;
@@ -509,7 +563,11 @@ static void gradH(float x1, float y1, float x2, float y2, u64 lf, u64 rt) { grad
 static void triG(float x1, float y1, float x2, float y2, float x3, float y3, u64 c1, u64 c2, u64 c3)
 {
 #if CAM_3D
-    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); }
+    if (camOn) {
+        float s;
+        if (camFP) { FPV v[3] = { {x1, y1, c1}, {x2, y2, c2}, {x3, y3, c3} }; fpPoly(v, 3, 1); return; }
+        pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s);
+    }
 #endif
     gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3);
 }
@@ -1613,6 +1671,7 @@ static void drawBallMesh(int id, float x, float y, float r)
 static void drawBallAt(int i, float x, float y, float r)
 {
     int was = camOn, vec = (!useTex || r < R - 0.5f);                  /* bolas pequenas (chiquitolina) usam o desenho vetorial */
+    if (was && camFP && fpDepth(x, y) < FP_NEAR) return;
     if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: a bola e uma esfera, continua redonda; so a posicao e o tamanho seguem a perspectiva */
     if (vec) drawBallVec(i, x, y, r);
     else drawBallMesh(i, x, y, r);
@@ -1629,6 +1688,7 @@ static void drawFall(int i)
     float y = fallY[i] + (gy - fallY[i]) * e;
     float r = R * (0.42f + 0.58f * t);
     int was = camOn;
+    if (was && camFP && fpDepth(x, y) < FP_NEAR) return;
     if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: esfera redonda na posicao projetada */
     if (useTex) drawBallMesh(i, x, y, r); else drawBallVec(i, x, y, r);
     discN(x, y, r * 1.02f, GS_SETREG_RGBAQ(0, 0, 0, (int)(0x78 * (1.0f - t)), 0x00), 10);
@@ -6083,7 +6143,11 @@ static void drawHUD(void)
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
 {
 #if CAM_3D
-    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); }
+    if (camOn) {
+        float s;
+        if (camFP) { FPV v[3] = { {x1, y1, c}, {x2, y2, c}, {x3, y3, c} }; fpPoly(v, 3, 0); return; }
+        pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s);
+    }
 #endif
     gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c);
 }
