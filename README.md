@@ -12,7 +12,8 @@ O jogo todo da mesa passou a ser visto de uma **câmera inclinada (75°)**, em p
 - **A jogabilidade não mudou**: a física, a mira, os controles e o BOT continuam no plano da mesa. Só o desenho passa pela projeção `pj()`
 - **HUD, menus, VS, pausa e catálogo de tacos ficam planos**, como antes. As prévias de mesa dos menus continuam vistas de cima (com o 3D de volume da seção abaixo)
 - Fica no começo do `main.c` (`pj()`, `rect()`, `line()`, `discN()`, `quad()`, `gradQ()`, `triG()`, `tri()`) e em `drawScene()`, que liga a câmera antes de `drawTable()` e desliga antes de `drawHUD()`. As bolas passam por `drawBallAt()` e `drawFall()`
-- Chave **`CAM_3D`** (0 = visão de cima de antes, mais leve). Ajustes: `CAM_SIN`/`CAM_COS` (inclinação: 75° por padrão; menos graus = mais deitada), `CAM_Z0` (menor = perspectiva mais forte) e `CAM_SY` (onde a borda de perto da mesa fica na tela)
+- **Opção CAMERA** (3D ou NORMAL): fica em **OPÇÕES > VISUAL** e também no **menu de PAUSA**, então dá para trocar no meio da partida. Começa em 3D. É a variável `camMode`; a escolha não é salva ao desligar o console (como as outras opções)
+- Chave **`CAM_3D`** (0 = tira a câmera 3D do código, mais leve). Ajustes: `CAM_SIN`/`CAM_COS` (inclinação: 75° por padrão; menos graus = mais deitada), `CAM_Z0` (menor = perspectiva mais forte) e `CAM_SY` (onde a borda de perto da mesa fica na tela)
 - **Não foi testado no PS2**, só conferida a sintaxe e a geometria no PC. Confira o FPS: se cair de 60, ponha `CAM_3D 0` ou `TABLE_3D 0`. Se algo do HUD ficar em cima da mesa, ajuste `CAM_SY`
 
 ## Mesas em 3D (novo)

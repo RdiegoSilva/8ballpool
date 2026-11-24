@@ -339,6 +339,7 @@ static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; r
 #define CAM_YN  394.0f                   /* y do mundo da borda de perto da moldura (TY1 + 30) */
 #define CAM_SY  374.0f                   /* y da tela onde essa borda fica */
 static int camOn = 0;                    /* 1 so enquanto desenha a cena da mesa */
+static int camMode = 1;                  /* opcao CAMERA (Opcoes e Pausa): 1 = 3D com perspectiva, 0 = normal (de cima) */
 static void pj(float x, float y, float *sx, float *sy, float *sc)
 {
     float v = CAM_YN - y, den = CAM_Z0 + v * CAM_COS, k;
@@ -8080,7 +8081,7 @@ static void drawNameScreen(void)
 }
 
 /* ---------- OPCOES (som, musica, volume, efeitos, dicas, creditos) ---------- */
-enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_CRED, NOP };
+enum { OP_SND, OP_MUS, OP_VOL, OP_FX, OP_TIPS, OP_CAM, OP_CRED, NOP };
 static int optSel;
 
 static void optInput(u32 pr)
@@ -8095,6 +8096,7 @@ static void optInput(u32 pr)
     case OP_VOL:  if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case OP_FX:   if (tog) fxOn = !fxOn; break;
     case OP_TIPS: if (tog) tipsOn = !tipsOn; break;
+    case OP_CAM:  if (tog) camMode = !camMode; break;
     case OP_CRED: if (pr & PAD_CROSS) state = S_CREDITS; break;
     }
 }
@@ -8114,11 +8116,11 @@ static void selBar(float x1, float x2, float y, float h)
 
 static void drawOptionsScreen(void)
 {
-    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CREDITOS" };
+    static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CAMERA", "CREDITOS" };
     static const char *DS[NOP] = { "EFEITOS SONOROS DA MESA, DOS MENUS E DA VITORIA", "LIGA E DESLIGA AS MUSICAS DO PEN DRIVE",
                                    "VOLUME DAS MUSICAS (OS EFEITOS NAO MUDAM)", "ANIMACOES DAS MESAS E BRILHO DA MIRA",
-                                   "BARRA DE TECLAS E DICAS NA MIRA", "CRIADOR E VERSAO DO JOGO" };
-    static const float OY0[NOP] = { 74, 102, 130, 182, 207, 278 };
+                                   "BARRA DE TECLAS E DICAS NA MIRA", "VISAO DA MESA: 3D (PERSPECTIVA) OU NORMAL (DE CIMA)", "CRIADOR E VERSAO DO JOGO" };
+    static const float OY0[NOP] = { 74, 102, 130, 182, 207, 232, 278 };
     static const int fk[4] = { 6, 7, 0, 1 };
     static const char *const fl[4] = { "ESCOLHER", "MUDAR", "OK", "VOLTAR" };
     char buf[32];
@@ -8139,6 +8141,7 @@ static void drawOptionsScreen(void)
         case OP_MUS:  uiToggle(544, y, musOn, "LIGADA", "DESLIGADA"); break;
         case OP_FX:   uiToggle(544, y, fxOn, "LIGADOS", "DESLIGADOS"); break;
         case OP_TIPS: uiToggle(544, y, tipsOn, "LIGADAS", "DESLIGADAS"); break;
+        case OP_CAM:  uiToggle(544, y, camMode, "3D", "NORMAL"); break;
         case OP_VOL: {
             int q;
             for (q = 0; q < 10; q++) {
@@ -8917,7 +8920,7 @@ static void drawMenuScreen(void)
 
 /* ---------- pausa (START) ---------- */
 static int paused, pauseSel, pauseView;          /* pauseView: 0 = lista, 1 = controles e dicas */
-enum { PI_RESUME, PI_REPLAY, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_WB0, PI_GD0, PI_WB1, PI_GD1, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
+enum { PI_RESUME, PI_REPLAY, PI_SND, PI_MUS, PI_VOL, PI_FX, PI_TIPS, PI_CAM, PI_WB0, PI_GD0, PI_WB1, PI_GD1, PI_PLAYER, PI_CTRL, PI_RESTART, PI_MENU, NPI };
 
 /* linhas visiveis do menu de pausa: as cores do jogador 2 so aparecem no versus */
 static int pauseRows(int *v)
@@ -8979,6 +8982,7 @@ static void pauseInput(u32 pr)
     case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case PI_FX:      if (tog) fxOn = !fxOn; break;
     case PI_TIPS:    if (tog) tipsOn = !tipsOn; break;
+    case PI_CAM:     if (tog) camMode = !camMode; break;
     case PI_RESUME:  if (pr & PAD_CROSS) paused = 0; break;
     case PI_REPLAY:  if ((pr & PAD_CROSS) && repKeepN > 1) { paused = 0; repLaunch(state); } break;   /* rever a ultima bola que caiu */
     case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
@@ -9013,7 +9017,7 @@ static void uiFoot2(int n1, const int *k1, const char *const *l1, int n2, const 
 
 static void drawPause(void)
 {
-    static const char *LB[NPI] = { "CONTINUAR", "REPLAY", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "", "", "", "",
+    static const char *LB[NPI] = { "CONTINUAR", "REPLAY", "SOM (EFEITOS)", "MUSICA", "VOLUME DA MUSICA", "EFEITOS", "DICAS NA TELA", "CAMERA", "", "", "", "",
                                    "PLAYER DE MUSICAS", "CONTROLES E DICAS", "REINICIAR PARTIDA", "MENU PRINCIPAL" };
     char buf[32];
     int i;
@@ -9111,6 +9115,7 @@ static void drawPause(void)
             case PI_MUS:  uiToggle(510, y - 1, musOn, "LIGADA", "DESLIGADA"); break;
             case PI_FX:   uiToggle(510, y - 1, fxOn, "LIGADOS", "DESLIGADOS"); break;
             case PI_TIPS: uiToggle(510, y - 1, tipsOn, "LIGADAS", "DESLIGADAS"); break;
+            case PI_CAM:  uiToggle(510, y - 1, camMode, "3D", "NORMAL"); break;
             case PI_VOL: {
                 int q;
                 for (q = 0; q < 10; q++) {
@@ -9139,6 +9144,8 @@ static void drawPause(void)
             textC(404, 0.3f, COL(255,190,120), musicReady() ? "EFEITOS SONOROS ATIVOS" : musicStatus());
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
             textC(404, 0.3f, COL(150,220,255), musicStatus());
+        else if (row == PI_CAM)
+            textC(404, 0.3f, COL(150,220,255), "3D: MESA EM PERSPECTIVA | NORMAL: VISTA DE CIMA");
         else if (row == PI_GD0 || row == PI_GD1) {
             int w = (row == PI_GD0) ? 0 : 1;
             char hb[64];
@@ -9330,7 +9337,7 @@ static void drawScene(void)
     camOn = 0;
     drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
 #if CAM_3D
-    camOn = 1;                                                      /* daqui ate o HUD: tudo passa pela camera 3D (pj) */
+    camOn = camMode;                                                /* daqui ate o HUD: tudo passa pela camera 3D (pj), se a opcao CAMERA estiver em 3D */
 #endif
     drawTable();
     if ((state == S_ROLL || state == S_STRIKE) && abilKind == AB_COVA) drawGraveHole(1.0f);          /* COVEIRO: a cova aberta */
