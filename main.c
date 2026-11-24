@@ -325,12 +325,63 @@ static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; r
 
 #define COL(r,gg,bb) GS_SETREG_RGBAQ((r),(gg),(bb),0x80,0x00)
 
+/* ---------- CAMERA 3D (perspectiva) ----------
+   CAM_3D 1 = a mesa e tudo o que esta nela (bolas, taco, linha de mira, efeitos) sao vistos de uma camera inclinada, com
+   perspectiva: o lado de longe fica menor e o de perto maior. A fisica e os controles continuam no plano da mesa (nada muda
+   na jogabilidade): so o desenho passa por pj(). O HUD e os menus ficam planos. 0 = visao de cima de antes (mais leve).
+   Ajustes: CAM_ELEV (inclinacao: 90 = de cima, menor = mais deitada), CAM_Z0 (menor = perspectiva mais forte), CAM_SY (y da borda de perto). */
+#ifndef CAM_3D
+#define CAM_3D 1
+#endif
+#define CAM_SIN 0.9659f                  /* sen(75 graus): elevacao da camera */
+#define CAM_COS 0.2588f                  /* cos(75 graus) */
+#define CAM_Z0  350.0f                   /* distancia da camera a borda de perto da mesa (em px do mundo) */
+#define CAM_YN  394.0f                   /* y do mundo da borda de perto da moldura (TY1 + 30) */
+#define CAM_SY  374.0f                   /* y da tela onde essa borda fica */
+static int camOn = 0;                    /* 1 so enquanto desenha a cena da mesa */
+static void pj(float x, float y, float *sx, float *sy, float *sc)
+{
+    float v = CAM_YN - y, den = CAM_Z0 + v * CAM_COS, k;
+    if (den < 80.0f) den = 80.0f;
+    k = CAM_Z0 / den;
+    *sc = k;
+    *sx = TCX + (x - TCX) * k;
+    *sy = CAM_SY - v * CAM_SIN * k;
+}
+
 /* ---------- desenho ---------- */
 static void rect(float x1, float y1, float x2, float y2, u64 c)
-{ gsKit_prim_sprite(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
+{
+#if CAM_3D
+    if (camOn) {
+        float ax, ay, bx, by, cx2, cy2, dx, dy, s;
+        if (x2 - x1 < 2.5f && y2 - y1 < 2.5f) {            /* pontinho: um sprite no centro projetado */
+            pj((x1 + x2) * 0.5f, (y1 + y2) * 0.5f, &ax, &ay, &s);
+            gsKit_prim_sprite(g, ax + OX - (x2 - x1) * 0.5f * s, ay + OY - (y2 - y1) * 0.5f * s * CAM_SIN,
+                                 ax + OX + (x2 - x1) * 0.5f * s, ay + OY + (y2 - y1) * 0.5f * s * CAM_SIN, 1, c);
+            return;
+        }
+        pj(x1, y1, &ax, &ay, &s); pj(x2, y1, &bx, &by, &s); pj(x2, y2, &cx2, &cy2, &s); pj(x1, y2, &dx, &dy, &s);
+        gsKit_prim_triangle(g, ax+OX, ay+OY, bx+OX, by+OY, cx2+OX, cy2+OY, 1, c);
+        gsKit_prim_triangle(g, ax+OX, ay+OY, cx2+OX, cy2+OY, dx+OX, dy+OY, 1, c);
+        return;
+    }
+#endif
+    gsKit_prim_sprite(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c);
+}
 
 static void line(float x1, float y1, float x2, float y2, u64 c)
-{ gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c); }
+{
+#if CAM_3D
+    if (camOn) {
+        float ax, ay, bx, by, s;
+        pj(x1, y1, &ax, &ay, &s); pj(x2, y2, &bx, &by, &s);
+        gsKit_prim_line(g, ax+OX, ay+OY, bx+OX, by+OY, 1, c);
+        return;
+    }
+#endif
+    gsKit_prim_line(g, x1+OX, y1+OY, x2+OX, y2+OY, 1, c);
+}
 
 /* QUALIDADE GRAFICA: 1 = bolas e circulos mais redondos e nitidos (gasta mais do PS2); 0 = visual leve de antes.
    Se o FPS (medidor no canto da tela) cair abaixo de 60 com 1, ponha 0. */
@@ -373,9 +424,13 @@ static void discN(float cx, float cy, float r, u64 c, int n)
     int i, cap = (int)(3.0f * sqrtf(fabsf(r)) + 3.0f);
 #endif   /* 60 FPS: segmentos so ate onde o olho ve (erro < 0.4 px); discos de 1 px usavam 14 triangulos */
     const float *t;
+    float rx = r, ry = r;                               /* raio na horizontal e na vertical (a camera 3D achata o disco do plano da mesa) */
+#if CAM_3D
+    if (camOn) { float s; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * CAM_SIN; }
+#endif
 #if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
-        gsKit_prim_sprite(g, cx+OX-r, cy+OY-r, cx+OX+r, cy+OY+r, 1, c);
+        gsKit_prim_sprite(g, cx+OX-rx, cy+OY-ry, cx+OX+rx, cy+OY+ry, 1, c);
         return;
     }
     if (cap < 4) cap = 4;
@@ -390,8 +445,8 @@ static void discN(float cx, float cy, float r, u64 c, int n)
             c0 = cosf(a0); s0 = sinf(a0); c1 = cosf(a1); s1 = sinf(a1);
         }
         gsKit_prim_triangle(g, cx+OX, cy+OY,
-                            cx+OX+c0*r, cy+OY+s0*r,
-                            cx+OX+c1*r, cy+OY+s1*r, 1, c);
+                            cx+OX+c0*rx, cy+OY+s0*ry,
+                            cx+OX+c1*rx, cy+OY+s1*ry, 1, c);
     }
 }
 
@@ -400,6 +455,9 @@ static void disc(float cx, float cy, float r, u64 c) { discN(cx, cy, r, c, 14); 
 static void quad(float x1, float y1, float x2, float y2,
                  float x3, float y3, float x4, float y4, u64 c)
 {
+#if CAM_3D
+    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); pj(x4, y4, &x4, &y4, &s); }
+#endif
     gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c);
     gsKit_prim_triangle(g, x1+OX, y1+OY, x3+OX, y3+OY, x4+OX, y4+OY, 1, c);
 }
@@ -409,11 +467,26 @@ static void quad(float x1, float y1, float x2, float y2,
 #define GFX_ROUND 1
 #endif
 static void gradQ(float x1, float y1, float x2, float y2, u64 ctl, u64 ctr, u64 cbl, u64 cbr)
-{ gsKit_prim_quad_gouraud(g, x1+OX, y1+OY, x2+OX, y1+OY, x1+OX, y2+OY, x2+OX, y2+OY, 1, ctl, ctr, cbl, cbr); }
+{
+#if CAM_3D
+    if (camOn) {
+        float ax, ay, bx, by, cx2, cy2, dx, dy, s;
+        pj(x1, y1, &ax, &ay, &s); pj(x2, y1, &bx, &by, &s); pj(x1, y2, &cx2, &cy2, &s); pj(x2, y2, &dx, &dy, &s);
+        gsKit_prim_quad_gouraud(g, ax+OX, ay+OY, bx+OX, by+OY, cx2+OX, cy2+OY, dx+OX, dy+OY, 1, ctl, ctr, cbl, cbr);
+        return;
+    }
+#endif
+    gsKit_prim_quad_gouraud(g, x1+OX, y1+OY, x2+OX, y1+OY, x1+OX, y2+OY, x2+OX, y2+OY, 1, ctl, ctr, cbl, cbr);
+}
 static void gradV(float x1, float y1, float x2, float y2, u64 top, u64 bot) { gradQ(x1, y1, x2, y2, top, top, bot, bot); }
 static void gradH(float x1, float y1, float x2, float y2, u64 lf, u64 rt) { gradQ(x1, y1, x2, y2, lf, rt, lf, rt); }
 static void triG(float x1, float y1, float x2, float y2, float x3, float y3, u64 c1, u64 c2, u64 c3)
-{ gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3); }
+{
+#if CAM_3D
+    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); }
+#endif
+    gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3);
+}
 
 static void ring(float cx, float cy, float r, u64 c)
 {
@@ -1513,8 +1586,11 @@ static void drawBallMesh(int id, float x, float y, float r)
 
 static void drawBallAt(int i, float x, float y, float r)
 {
-    if (!useTex || r < R - 0.5f) { drawBallVec(i, x, y, r); return; }
-    drawBallMesh(i, x, y, r);
+    int was = camOn, vec = (!useTex || r < R - 0.5f);                  /* bolas pequenas (chiquitolina) usam o desenho vetorial */
+    if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: a bola e uma esfera, continua redonda; so a posicao e o tamanho seguem a perspectiva */
+    if (vec) drawBallVec(i, x, y, r);
+    else drawBallMesh(i, x, y, r);
+    camOn = was;
 }
 
 /* bola caindo na cacapa: desliza ate o centro, encolhe e escurece */
@@ -1526,8 +1602,11 @@ static void drawFall(int i)
     float x = fallX[i] + (gx - fallX[i]) * e;
     float y = fallY[i] + (gy - fallY[i]) * e;
     float r = R * (0.42f + 0.58f * t);
+    int was = camOn;
+    if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: esfera redonda na posicao projetada */
     if (useTex) drawBallMesh(i, x, y, r); else drawBallVec(i, x, y, r);
     discN(x, y, r * 1.02f, GS_SETREG_RGBAQ(0, 0, 0, (int)(0x78 * (1.0f - t)), 0x00), 10);
+    camOn = was;
 }
 
 /* ---------- REPLAY da ultima bola encacapada antes da vitoria ----------
@@ -4783,9 +4862,16 @@ static void drawTable(void)
 #if TABLE_3D
     /* corpo da mesa: a mesma moldura deslocada para baixo e para a direita (a luz vem de cima-esquerda), escura e em degrade */
     (void)w0; (void)w1; (void)w2; (void)ga; (void)gb;
-    gradV(TX0 - 24, TY1 + 30, TX1 + 36, TY1 + 38, shade(T->wood, 0.34f, 0), shade(T->wood, 0.12f, 0));   /* lateral da frente */
-    gradH(TX1 + 30, TY0 - 22, TX1 + 36, TY1 + 38, shade(T->wood, 0.26f, 0), shade(T->wood, 0.08f, 0));   /* lateral da direita */
-    rect(TX0 - 24, TY1 + 30, TX1 + 30, TY1 + 31.5f, CA(255, 255, 255, 0x10));     /* quina de cima do corpo (luz) */
+    if (camOn) {   /* camera 3D: so a frente do corpo aparece (de baixo da moldura), em degrade, com a sombra no chao embaixo */
+        gradV(TX0 - 30, TY1 + 30, TX1 + 30, TY1 + 52, shade(T->wood, 0.40f, 0), shade(T->wood, 0.10f, 0));
+        gradH(TX0 - 30, TY1 + 30, TX0 - 8, TY1 + 52, CA(0, 0, 0, 0x00), CA(0, 0, 0, 0x00));
+        rect(TX0 - 30, TY1 + 30, TX1 + 30, TY1 + 32.0f, CA(0, 0, 0, 0x30));          /* sombra da moldura no corpo */
+        rect(TX0 - 30, TY1 + 52, TX1 + 30, TY1 + 56.0f, CA(0, 0, 0, 0x28));
+    } else {
+        gradV(TX0 - 24, TY1 + 30, TX1 + 36, TY1 + 38, shade(T->wood, 0.34f, 0), shade(T->wood, 0.12f, 0));   /* lateral da frente */
+        gradH(TX1 + 30, TY0 - 22, TX1 + 36, TY1 + 38, shade(T->wood, 0.26f, 0), shade(T->wood, 0.08f, 0));   /* lateral da direita */
+        rect(TX0 - 24, TY1 + 30, TX1 + 30, TY1 + 31.5f, CA(255, 255, 255, 0x10));     /* quina de cima do corpo (luz) */
+    }
     /* topo da moldura: 4 chanfros (esquerda/cima claros, baixo/direita escuros) e a superficie em degrade */
     quad(TX0 - 30, TY0 - 30, TX1 + 30, TY0 - 30, TX1 + 25, TY0 - 25, TX0 - 25, TY0 - 25, shade(T->wood, 1.22f, 12));
     quad(TX0 - 30, TY0 - 30, TX0 - 25, TY0 - 25, TX0 - 25, TY1 + 25, TX0 - 30, TY1 + 30, shade(T->wood, 1.02f, 6));
@@ -5903,7 +5989,12 @@ static void drawHUD(void)
 }
 
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
-{ gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
+{
+#if CAM_3D
+    if (camOn) { float s; pj(x1, y1, &x1, &y1, &s); pj(x2, y2, &x2, &y2, &s); pj(x3, y3, &x3, &y3, &s); }
+#endif
+    gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c);
+}
 
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
 #define NCHARS 18
@@ -9126,7 +9217,9 @@ static void drawCopMarks(void)
         textC(88, 0.28f, COL(255,235,90), "CHIQUITOLINA! BOLAS DO ADVERSARIO PEQUENAS E LENTAS");
     if (state == S_AIM && !isBot() && sirenT[cur]) {                /* SIRENE sobre quem esta mirando */
         u64 sc = rb ? CA(255, 50, 60, 0x50) : CA(70, 130, 255, 0x50);
-        rect(0, 0, 640, 8, sc); rect(0, 440, 640, 448, sc); rect(0, 0, 8, 448, sc); rect(632, 0, 640, 448, sc);
+        {   int was = camOn; camOn = 0;                              /* bordas da tela: planas */
+            rect(0, 0, 640, 8, sc); rect(0, 440, 640, 448, sc); rect(0, 0, 8, 448, sc); rect(632, 0, 640, 448, sc);
+            camOn = was; }
         textC(74, 0.34f, rb ? COL(255,110,120) : COL(130,175,255), "SIRENE! SEM LINHA GUIA");
     }
 }
@@ -9234,7 +9327,11 @@ static void drawScene(void)
         }
         return;
     }
+    camOn = 0;
     drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
+#if CAM_3D
+    camOn = 1;                                                      /* daqui ate o HUD: tudo passa pela camera 3D (pj) */
+#endif
     drawTable();
     if ((state == S_ROLL || state == S_STRIKE) && abilKind == AB_COVA) drawGraveHole(1.0f);          /* COVEIRO: a cova aberta */
     else if (state == S_AIM && !isBot() && abilArm && curAb() == AB_COVEIRO && graveSel == 1) drawGraveHole(0.45f);
@@ -9369,7 +9466,13 @@ static void drawScene(void)
         }
     }
     /* o taco (290 de comprimento) nao pode vazar da moldura da mesa para a barra de forca / HUD */
-    gsKit_set_scissor(g, GS_SETREG_SCISSOR((int)(TX0 - 30.0f + OX), (int)(TX1 + 30.0f + OX), (int)(TY0 - 30.0f + OY), (int)(TY1 + 30.0f + OY)));
+    {
+        float sc0 = TY0 - 30.0f, sc1 = TY1 + 30.0f;                 /* com a camera 3D o topo da moldura sobe/desce na tela */
+#if CAM_3D
+        if (camOn) { float sx, sc; pj(TCX, TY0 - 30.0f, &sx, &sc0, &sc); pj(TCX, TY1 + 30.0f, &sx, &sc1, &sc); }
+#endif
+        gsKit_set_scissor(g, GS_SETREG_SCISSOR((int)(TX0 - 30.0f + OX), (int)(TX1 + 30.0f + OX), (int)(sc0 + OY), (int)(sc1 + OY)));
+    }
     cueChalk = isBot() ? 1.0f : chalk[cur];
     if (state == S_AIM) {
         float cd0 = R + 4 + pwr * 70;
@@ -9401,9 +9504,11 @@ static void drawScene(void)
             ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 7.0f + 2.5f * pl, 2.2f, 28, CA(255, 225, 60, 0xa0));
             ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 11.5f + 2.5f * pl, 1.4f, 24, CA(255, 225, 60, 0x50));
             discN(PX[ck], PY[ck], 7.5f, COL(255, 225, 60), 14);
-            text(PX[ck] - 3.4f, PY[ck] - 5.0f, 0.34f, COL(12, 12, 12), "8");
+            if (camOn) { float sx, sy, sc; pj(PX[ck], PY[ck], &sx, &sy, &sc); text(sx - 3.4f * sc, sy - 5.0f * sc * CAM_SIN, 0.34f * sc, COL(12, 12, 12), "8"); }
+            else text(PX[ck] - 3.4f, PY[ck] - 5.0f, 0.34f, COL(12, 12, 12), "8");
         }
     }
+    camOn = 0;                                                      /* HUD e menus: planos, sem perspectiva */
     drawHUD();
     if (state == S_REPLAY) drawReplayTag();
     if (state == S_CUES) {

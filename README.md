@@ -5,6 +5,16 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Câmera 3D com perspectiva (novo)
+O jogo todo da mesa passou a ser visto de uma **câmera inclinada (75°)**, em perspectiva: o lado de longe fica menor (80%) e o de perto maior, e a mesa aparece como um trapézio, com a **frente do corpo da mesa** embaixo da moldura.
+- Vale para **tudo que está na mesa**: moldura, feltro, tabelas, caçapas, diamantes, **bolas**, sombras, **taco**, **linha de mira**, marca do pulo e todos os efeitos das habilidades e das mesas especiais (ondas, aros, partículas, cova do Coveiro etc.). O replay e o MODO TREINO usam a mesma câmera
+- **Círculos do plano ficam elípticos** (sombras, caçapas, aros no feltro) e as **bolas continuam esferas redondas**: só a posição e o tamanho seguem a perspectiva. A bola que pula continua subindo na tela
+- **A jogabilidade não mudou**: a física, a mira, os controles e o BOT continuam no plano da mesa. Só o desenho passa pela projeção `pj()`
+- **HUD, menus, VS, pausa e catálogo de tacos ficam planos**, como antes. As prévias de mesa dos menus continuam vistas de cima (com o 3D de volume da seção abaixo)
+- Fica no começo do `main.c` (`pj()`, `rect()`, `line()`, `discN()`, `quad()`, `gradQ()`, `triG()`, `tri()`) e em `drawScene()`, que liga a câmera antes de `drawTable()` e desliga antes de `drawHUD()`. As bolas passam por `drawBallAt()` e `drawFall()`
+- Chave **`CAM_3D`** (0 = visão de cima de antes, mais leve). Ajustes: `CAM_SIN`/`CAM_COS` (inclinação: 75° por padrão; menos graus = mais deitada), `CAM_Z0` (menor = perspectiva mais forte) e `CAM_SY` (onde a borda de perto da mesa fica na tela)
+- **Não foi testado no PS2**, só conferida a sintaxe e a geometria no PC. Confira o FPS: se cair de 60, ponha `CAM_3D 0` ou `TABLE_3D 0`. Se algo do HUD ficar em cima da mesa, ajuste `CAM_SY`
+
 ## Mesas em 3D (novo)
 Todas as mesas ganharam **volume**, no jogo e nas prévias dos menus (escolha de mesa, configurar partida, torneio, VS):
 - **Moldura de madeira com bisel**: os 4 lados têm chanfro (cima e esquerda claros, baixo e direita escuros) e o topo tem **degradê de luz** vinda de cima-esquerda. Os veios da madeira ficaram translúcidos para acompanhar o degradê. Por dentro há um segundo chanfro descendo até a borracha, com um fio de brilho de verniz
