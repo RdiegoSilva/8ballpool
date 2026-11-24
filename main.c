@@ -3204,12 +3204,38 @@ static const TableDef TABLES[NTABLES] = {
 };
 static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores derivadas da mesa escolhida (tcMouth: boca escura das cacapas) */
 
+/* MESAS EM 3D: 1 = mesa com volume (moldura com bisel e luz de cima-esquerda, corpo/laterais da mesa, tabelas com topo,
+   encosto e sombra no feltro, cacapas fundas com aro e diamantes facetados); 0 = mesa chapada de antes (mais leve).
+   Vale para todas as mesas, no jogo e nas previas dos menus. Se o FPS cair de 60 no PS2, ponha 0. */
+#ifndef TABLE_3D
+#define TABLE_3D 1
+#endif
+static u64 CA(int r, int gg, int bb, int a);                          /* definida mais abaixo */
+static u64 tcDiaHi, tcDiaMid, tcDiaLo;                               /* facetas do diamante (claro / medio / escuro) */
+
+static u64 withA(u64 c, int a)                                       /* mesma cor, outra transparencia */
+{ return (c & 0x00000000FFFFFFFFULL & ~0xFF000000ULL) | ((u64)(a & 0xFF) << 24); }
+
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
     float la = xa - ra, lb = xb + rb;
     if (ra > 8.0f) quad(xa - 40, yo, xa - ra, yo, xa, yi, xa - 40, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
     if (rb > 8.0f) quad(xb + rb, yo, xb + 40, yo, xb + 40, yi, xb, yi, tcMouth);
+#if TABLE_3D
+    {   /* tabela com volume: encosta na madeira (escura), sobe ate o nariz (claro), com brilho no topo e sombra no feltro */
+        float dir = (yi > yo) ? 1.0f : -1.0f, h = fabsf(yi - yo), t = 2.6f / h;
+        float nxa = xa - ra * t, nxb = xb + rb * t, ny = yi - dir * 2.6f;
+        u64 cO = tcCushLo, cI = tcCush, hiT = withA(tcCushHi, 0x58), hi0 = withA(tcCushHi, 0x00);
+        triG(xa - ra, yo, xb + rb, yo, xb, yi, cO, cO, cI);
+        triG(xa - ra, yo, xb, yi, xa, yi, cO, cI, cI);
+        triG(nxa, ny, nxb, ny, xb, yi, hi0, hi0, hiT);                    /* brilho do topo da borracha */
+        triG(nxa, ny, xb, yi, xa, yi, hi0, hiT, hiT);
+        if (dir > 0) gradV(xa + 1, yi, xb - 1, yi + 5.0f, CA(0, 0, 0, 0x34), CA(0, 0, 0, 0x00));   /* sombra no feltro */
+        else         gradV(xa + 1, yi - 5.0f, xb - 1, yi, CA(0, 0, 0, 0x00), CA(0, 0, 0, 0x34));
+    }
+#else
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
+#endif
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
     line(xa - ra, yo, xa, yi, tcCushHi);                                 /* pontas inclinadas (meio e cantos) */
@@ -3220,7 +3246,21 @@ static void cushV(float ya, float yb, float xo, float xi)
 {
     quad(xo, ya - 40, xo, ya - 11, xi, ya, xi, ya - 40, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
     quad(xo, yb + 11, xo, yb + 40, xi, yb + 40, xi, yb, tcMouth);
+#if TABLE_3D
+    {   /* igual a cushH, na vertical (esquerda e direita) */
+        float dir = (xi > xo) ? 1.0f : -1.0f, h = fabsf(xi - xo), t = 2.6f / h;
+        float nx = xi - dir * 2.6f, nya = ya - 11.0f * t, nyb = yb + 11.0f * t;
+        u64 cO = tcCushLo, cI = tcCush, hiT = withA(tcCushHi, 0x58), hi0 = withA(tcCushHi, 0x00);
+        triG(xo, ya - 11, xo, yb + 11, xi, yb, cO, cO, cI);
+        triG(xo, ya - 11, xi, yb, xi, ya, cO, cI, cI);
+        triG(nx, nya, nx, nyb, xi, yb, hi0, hi0, hiT);                    /* brilho do topo da borracha */
+        triG(nx, nya, xi, yb, xi, ya, hi0, hiT, hiT);
+        if (dir > 0) gradH(xi, ya + 1, xi + 5.0f, yb - 1, CA(0, 0, 0, 0x34), CA(0, 0, 0, 0x00));   /* sombra no feltro */
+        else         gradH(xi - 5.0f, ya + 1, xi, yb - 1, CA(0, 0, 0, 0x00), CA(0, 0, 0, 0x34));
+    }
+#else
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
+#endif
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
     line(xo, ya - 11, xi, ya, tcCushHi);                                  /* pontas inclinadas dos cantos */
@@ -3239,7 +3279,16 @@ static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, 
 
 static void diamond(float cx, float cy)
 {
+#if TABLE_3D
+    /* diamante facetado (luz de cima-esquerda): 4 facetas, claro no canto de cima-esquerda e escuro embaixo-direita */
+    float a = 3.2f;
+    triG(cx, cy - a, cx - a, cy, cx, cy, tcDiaHi, tcDiaMid, tcDia);
+    triG(cx, cy - a, cx + a, cy, cx, cy, tcDiaMid, tcDia, tcDiaLo);
+    triG(cx + a, cy, cx, cy + a, cx, cy, tcDia, tcDiaLo, tcDiaLo);
+    triG(cx, cy + a, cx - a, cy, cx, cy, tcDiaLo, tcDia, tcDiaMid);
+#else
     quad(cx, cy - 3, cx + 3, cy, cx, cy + 3, cx - 3, cy, tcDia);
+#endif
 }
 
 
@@ -4615,12 +4664,39 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
     qx[0] = qx[3] = x0; qx[1] = qx[4] = cx; qx[2] = qx[5] = x1;
     qy[0] = qy[1] = qy[2] = y0; qy[3] = qy[4] = qy[5] = y1;
 
+#if TABLE_3D
+    {   /* previa em 3D: corpo/laterais, moldura com bisel e degrade de luz, tabelas com volume e sombra no feltro */
+        float d = 5.0f * k, bv = 3.0f * k + 1.0f, sh = 5.0f * k;
+        gradV(x0 - f + 1, y1 + f, x1 + f + d, y1 + f + d, shade(T->wood, 0.34f, 0), shade(T->wood, 0.12f, 0));   /* lateral da frente */
+        gradH(x1 + f, y0 - f + d, x1 + f + d, y1 + f + d, shade(T->wood, 0.26f, 0), shade(T->wood, 0.08f, 0));   /* lateral da direita */
+        rect(x0 - f - 2, y0 - f - 2, x1 + f + 2, y1 + f + 2, shade(T->wood, 0.36f, 0));
+        quad(x0 - f - 2, y0 - f - 2, x1 + f + 2, y0 - f - 2, x1 + f, y0 - f, x0 - f, y0 - f, shade(T->wood, 1.22f, 12));   /* chanfros */
+        quad(x0 - f - 2, y0 - f - 2, x0 - f, y0 - f, x0 - f, y1 + f, x0 - f - 2, y1 + f + 2, shade(T->wood, 1.02f, 6));
+        quad(x0 - f - 2, y1 + f + 2, x0 - f, y1 + f, x1 + f, y1 + f, x1 + f + 2, y1 + f + 2, shade(T->wood, 0.40f, 0));
+        quad(x1 + f + 2, y0 - f - 2, x1 + f + 2, y1 + f + 2, x1 + f, y1 + f, x1 + f, y0 - f, shade(T->wood, 0.52f, 0));
+        gradQ(x0 - f, y0 - f, x1 + f, y1 + f, shade(T->wood, 1.14f, 8), shade(T->wood, 1.0f, 0), shade(T->wood, 0.90f, 0), shade(T->wood, 0.74f, 0));
+        rect(x0 - c - 1, y0 - c - 1, x1 + c + 1, y1 + c + 1, shade(T->wood, 0.45f, 0));
+        gradV(x0 - c, y0 - c, x1 + c, y0, shade(T->felt, 0.40f, 0), shade(T->felt, 0.95f, 8));     /* tabelas: encosto escuro -> nariz claro */
+        gradV(x0 - c, y1, x1 + c, y1 + c, shade(T->felt, 0.95f, 8), shade(T->felt, 0.40f, 0));
+        gradH(x0 - c, y0, x0, y1, shade(T->felt, 0.40f, 0), shade(T->felt, 0.95f, 8));
+        gradH(x1, y0, x1 + c, y1, shade(T->felt, 0.95f, 8), shade(T->felt, 0.40f, 0));
+        (void)bv;
+        rect(x0, y0, x1, y1, shade(T->felt, 1.0f, 0));
+        rect(x0 + hw * 0.35f, y0 + hh * 0.35f, x1 - hw * 0.35f, y1 - hh * 0.35f, shade(T->felt, 1.0f, 10));
+        gradV(x0, y0, x1, y0 + sh, CA(0, 0, 0, 0x34), CA(0, 0, 0, 0x00));                          /* sombra das tabelas no feltro */
+        gradV(x0, y1 - sh, x1, y1, CA(0, 0, 0, 0x00), CA(0, 0, 0, 0x34));
+        gradH(x0, y0, x0 + sh, y1, CA(0, 0, 0, 0x34), CA(0, 0, 0, 0x00));
+        gradH(x1 - sh, y0, x1, y1, CA(0, 0, 0, 0x00), CA(0, 0, 0, 0x34));
+        gradQ(x0, y0, x1, y1, CA(255, 255, 255, 0x0c), CA(255, 255, 255, 0x02), CA(0, 0, 0, 0x04), CA(0, 0, 0, 0x16));   /* luz de cima-esquerda */
+    }
+#else
     rect(x0 - f - 2, y0 - f - 2, x1 + f + 2, y1 + f + 2, shade(T->wood, 0.36f, 0));
     rect(x0 - f, y0 - f, x1 + f, y1 + f, shade(T->wood, 0.95f, 0));
     rect(x0 - c - 1, y0 - c - 1, x1 + c + 1, y1 + c + 1, shade(T->wood, 0.45f, 0));
     rect(x0 - c, y0 - c, x1 + c, y1 + c, shade(T->felt, 0.5f, 0));
     rect(x0, y0, x1, y1, shade(T->felt, 1.0f, 0));
     rect(x0 + hw * 0.35f, y0 + hh * 0.35f, x1 - hw * 0.35f, y1 - hh * 0.35f, shade(T->felt, 1.0f, 10));
+#endif
 
     for (j = 1; j <= 3; j++) {                         /* diamantes de mira */
         float dxl = (cx - x0) * j / 4.0f, dxr = (x1 - cx) * j / 4.0f, dy = (y1 - y0) * j / 4.0f, o = (c + f) * 0.5f;
@@ -4632,6 +4708,10 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
         rect(x1 + o - 1, y0 + dy - 1, x1 + o + 1, y0 + dy + 1, dia);
     }
     for (i = 0; i < 6; i++) {                          /* cacapas */
+#if TABLE_3D
+        discN(qx[i] + 0.5f, qy[i] + 0.6f, pk + 2.0f, CA(0, 0, 0, 0x2c), 12);        /* aro: sombra embaixo-direita */
+        discN(qx[i] - 0.5f, qy[i] - 0.6f, pk + 1.8f, CA(255, 255, 255, 0x22), 12);  /* aro: luz em cima-esquerda */
+#endif
         discN(qx[i], qy[i], pk + 0.9f, COL(36,38,44), 12);
         discN(qx[i], qy[i], pk, COL(2,2,4), 12);
     }
@@ -4693,10 +4773,30 @@ static void drawTable(void)
     tcMouth = shade(T->wood, 0.10f, 0);                                                                              /* quase preto: continua o fundo do buraco ate a ponta da tabela */
     tcMouth = shade(T->felt, 0.55f, 0);                                              /* todas as mesas: sombra do feltro (sem o triangulo preto) */
     tcDia = COL(T->dia[0], T->dia[1], T->dia[2]);
+    tcDiaHi  = shade(T->dia, 1.25f, 24);                                          /* facetas do diamante (TABLE_3D) */
+    tcDiaMid = shade(T->dia, 0.90f, 0);
+    tcDiaLo  = shade(T->dia, 0.52f, 0);
 
     /* sombra da mesa no chao */
     rect(TX0 - 22, TY0 - 20, TX1 + 40, TY1 + 42, GS_SETREG_RGBAQ(0, 0, 0, 0x30, 0x00));
 
+#if TABLE_3D
+    /* corpo da mesa: a mesma moldura deslocada para baixo e para a direita (a luz vem de cima-esquerda), escura e em degrade */
+    (void)w0; (void)w1; (void)w2; (void)ga; (void)gb;
+    gradV(TX0 - 24, TY1 + 30, TX1 + 36, TY1 + 38, shade(T->wood, 0.34f, 0), shade(T->wood, 0.12f, 0));   /* lateral da frente */
+    gradH(TX1 + 30, TY0 - 22, TX1 + 36, TY1 + 38, shade(T->wood, 0.26f, 0), shade(T->wood, 0.08f, 0));   /* lateral da direita */
+    rect(TX0 - 24, TY1 + 30, TX1 + 30, TY1 + 31.5f, CA(255, 255, 255, 0x10));     /* quina de cima do corpo (luz) */
+    /* topo da moldura: 4 chanfros (esquerda/cima claros, baixo/direita escuros) e a superficie em degrade */
+    quad(TX0 - 30, TY0 - 30, TX1 + 30, TY0 - 30, TX1 + 25, TY0 - 25, TX0 - 25, TY0 - 25, shade(T->wood, 1.22f, 12));
+    quad(TX0 - 30, TY0 - 30, TX0 - 25, TY0 - 25, TX0 - 25, TY1 + 25, TX0 - 30, TY1 + 30, shade(T->wood, 1.02f, 6));
+    quad(TX0 - 30, TY1 + 30, TX0 - 25, TY1 + 25, TX1 + 25, TY1 + 25, TX1 + 30, TY1 + 30, shade(T->wood, 0.40f, 0));
+    quad(TX1 + 30, TY0 - 30, TX1 + 30, TY1 + 30, TX1 + 25, TY1 + 25, TX1 + 25, TY0 - 25, shade(T->wood, 0.52f, 0));
+    gradQ(TX0 - 25, TY0 - 25, TX1 + 25, TY1 + 25, shade(T->wood, 1.14f, 8), shade(T->wood, 1.00f, 0), shade(T->wood, 0.90f, 0), shade(T->wood, 0.74f, 0));
+    line(TX0 - 25, TY0 - 25, TX1 + 25, TY0 - 25, whi);
+    line(TX0 - 25, TY0 - 25, TX0 - 25, TY1 + 25, whi);
+    line(TX0 - 25, TY1 + 25, TX1 + 25, TY1 + 25, wlo);
+    line(TX1 + 25, TY0 - 25, TX1 + 25, TY1 + 25, wlo);
+#else
     /* moldura de madeira em camadas (bisel) */
     rect(TX0 - 30, TY0 - 30, TX1 + 30, TY1 + 30, w0);
     rect(TX0 - 28, TY0 - 28, TX1 + 28, TY1 + 28, w1);
@@ -4705,10 +4805,15 @@ static void drawTable(void)
     line(TX0 - 28, TY0 - 28, TX0 - 28, TY1 + 28, whi);
     line(TX0 - 28, TY1 + 28, TX1 + 28, TY1 + 28, wlo);
     line(TX1 + 28, TY0 - 28, TX1 + 28, TY1 + 28, wlo);
+#endif
 
     /* veios da madeira */
     for (k = 0; k < 4; k++) {
+#if TABLE_3D
+        u64 gc = (k & 1) ? CA(0, 0, 0, 0x16) : CA(255, 255, 255, 0x0e);        /* translucidos: acompanham o degrade da luz */
+#else
         u64 gc = (k & 1) ? ga : gb;
+#endif
         line(TX0 - 24, TY0 - 23 + k*3.4f, TX1 + 24, TY0 - 23 + k*3.4f, gc);
         line(TX0 - 24, TY1 + 13 + k*3.4f, TX1 + 24, TY1 + 13 + k*3.4f, gc);
         line(TX0 - 23 + k*3.4f, TY0 - 24, TX0 - 23 + k*3.4f, TY1 + 24, gc);
@@ -4723,6 +4828,15 @@ static void drawTable(void)
 
     /* sulco entre a madeira e a borracha */
     rect(TX0 - 12, TY0 - 12, TX1 + 12, TY1 + 12, wgr);
+#if TABLE_3D
+    /* chanfro de dentro da moldura (desce ate a borracha): cima/esquerda de costas para a luz (escuros), baixo/direita iluminados */
+    quad(TX0 - 16, TY0 - 16, TX1 + 16, TY0 - 16, TX1 + 12, TY0 - 12, TX0 - 12, TY0 - 12, shade(T->wood, 0.50f, 0));
+    quad(TX0 - 16, TY0 - 16, TX0 - 12, TY0 - 12, TX0 - 12, TY1 + 12, TX0 - 16, TY1 + 16, shade(T->wood, 0.58f, 0));
+    quad(TX0 - 16, TY1 + 16, TX0 - 12, TY1 + 12, TX1 + 12, TY1 + 12, TX1 + 16, TY1 + 16, shade(T->wood, 1.24f, 12));
+    quad(TX1 + 16, TY0 - 16, TX1 + 16, TY1 + 16, TX1 + 12, TY1 + 12, TX1 + 12, TY0 - 12, shade(T->wood, 1.10f, 6));
+    line(TX0 - 16, TY0 - 16, TX1 + 16, TY0 - 16, CA(255, 255, 255, 0x14));      /* fio de brilho no verniz */
+    line(TX0 - 16, TY0 - 16, TX0 - 16, TY1 + 16, CA(255, 255, 255, 0x10));
+#endif
     tableDeco(0, T);
 
     /* feltro com leve brilho no centro (luz de cima) */
@@ -4737,6 +4851,9 @@ static void drawTable(void)
         rect(TX0 + d, TY0 + d + 3, TX0 + d + 3, TY1 - d - 3, CA(0, 0, 0, a));
         rect(TX1 - d - 3, TY0 + d + 3, TX1 - d, TY1 - d - 3, CA(0, 0, 0, a));
     }
+#if TABLE_3D
+    gradQ(TX0, TY0, TX1, TY1, CA(255, 255, 255, 0x0c), CA(255, 255, 255, 0x02), CA(0, 0, 0, 0x04), CA(0, 0, 0, 0x16));   /* luz de cima-esquerda, sombra embaixo-direita */
+#endif
     tableDeco(1, T);
 
     /* tabelas (borrachas) com as pontas inclinadas nas cacapas */
@@ -4775,6 +4892,10 @@ static void drawTable(void)
             float a0 = ia + 0.75f, a1 = ia + 6.283f - 0.75f;
             (void)a0; (void)a1; (void)arcBand;                                         /* sem chapa prateada: buraco direto na madeira, como no 8 Ball Pool */
         }
+#if TABLE_3D
+        discN(px + 0.9f, py + 1.1f, r0 + 2.2f, CA(0, 0, 0, 0x2c), 28);               /* aro: sombra embaixo-direita */
+        discN(px - 0.8f, py - 0.9f, r0 + 2.0f, CA(255, 255, 255, 0x22), 28);         /* aro: luz em cima-esquerda */
+#endif
         discN(px, py, r0 + 1.0f, CA(0, 0, 0, 0x30), 28);                             /* contorno escuro */
         discN(px, py, r0, shade(T->wood, 0.34f, 0), 28);                             /* boca: vinho nas bordas */
         discN(px + 0.9f, py + 1.1f, r0 * 0.86f, shade(T->wood, 0.20f, 0), 28);       /* degrade para o fundo */

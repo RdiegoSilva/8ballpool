@@ -5,6 +5,17 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Mesas em 3D (novo)
+Todas as mesas ganharam **volume**, no jogo e nas prévias dos menus (escolha de mesa, configurar partida, torneio, VS):
+- **Moldura de madeira com bisel**: os 4 lados têm chanfro (cima e esquerda claros, baixo e direita escuros) e o topo tem **degradê de luz** vinda de cima-esquerda. Os veios da madeira ficaram translúcidos para acompanhar o degradê. Por dentro há um segundo chanfro descendo até a borracha, com um fio de brilho de verniz
+- **Corpo da mesa**: aparecem a **lateral da frente** e a **lateral da direita** (escuras, em degradê), então a mesa deixa de parecer um desenho chapado e fica "em pé" sobre a sombra no chão
+- **Tabelas (borrachas) com volume**: escuras junto da madeira, mais claras no "nariz", com **brilho no topo** e **sombra suave projetada no feltro**. A geometria é a mesma de antes: a física das tabelas, das pontas e das caçapas não mudou
+- **Feltro** com luz de cima-esquerda e sombra embaixo-direita
+- **Caçapas fundas**: aro com luz em cima-esquerda e sombra embaixo-direita, por cima do degradê vinho > preto que já existia
+- **Diamantes facetados** (4 facetas: claro, médios e escuro), na cor de cada mesa
+- Vale para **todas as mesas** (Pool Azul, Preta Ouro, Neon e as com efeitos). Os efeitos e detalhes de cada mesa (`tableDeco()`) continuam por cima
+- Fica em `drawTable()`, `drawTablePreview()`, `cushH()`, `cushV()` e `diamond()` no `main.c`. Chave **`TABLE_3D`** (0 = mesa chapada de antes, mais leve). Custa algumas centenas de primitivas por quadro: se o FPS cair de 60 no PS2, ponha `TABLE_3D 0`. Não foi testado no console, só conferida a sintaxe no PC
+
 ## Bolas em 3D (novo)
 As bolas já eram esferas com textura que giram; agora ganharam **iluminação e acabamento de bola de verdade**:
 - **Luz suave**: o degrade da esfera passa devagar da luz (cima-esquerda) para a sombra, sem corte duro, com a borda um pouco mais escura
