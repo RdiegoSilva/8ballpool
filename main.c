@@ -2101,7 +2101,7 @@ static void jawHit(Ball *q, int alongX, float pc, float rr)
 /* BORDAS DAS CACAPAS (fisica): a ponta de cada tabela e uma quina redonda fixa. A bola que roça a quina rebate com o angulo certo
    (para dentro da cacapa ou de volta para a mesa) em vez de passar reto; bola bem na boca entra, bola na beirada "bate na trave".
    KN_R = raio da quina (maior = quina mais gorda, cacapa mais dificil); KN_E = quique (1.0 = sem perda); KN_FT = atrito de lado */
-#define PK_TIP 30.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13; 30 = boca aberta como no 8 Ball Pool; maior = mais aberto) */
+#define PK_TIP 22.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13; 22 = boca media; maior = mais aberto (30 fica facil demais)) */
 #define KN_ON 1
 #define KN_R  1.0f
 #define KN_E  0.62f

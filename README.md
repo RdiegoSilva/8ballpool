@@ -7,8 +7,8 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 
 ## Física nas bordas das caçapas (novo)
 As **pontas das tabelas** em volta de cada caçapa agora **colidem com a bola**: quando ela bate na ponta, rebate no ângulo certo (antes atravessava) e toca o som de tabela
-- **Visual no estilo 8 Ball Pool**: a **boca dos cantos ficou bem aberta** (ponta da tabela de 13 para 30 px do canto), as pontas são **retas, cortadas na diagonal**, o buraco do canto ficou **um pouco maior** e **sem a chapa prateada** (direto na madeira). Desenho e física usam o mesmo valor, então a bola bate exatamente onde a tabela termina
-- São 12 pontas (2 por caçapa). Tacada que só roça a ponta rebate; bola bem na boca entra. O acerto de tacada bem mirada ficou praticamente igual ao de antes
+- **Visual no estilo 8 Ball Pool**: a **boca dos cantos ficou bem aberta** (ponta da tabela de 13 para 22 px do canto), as pontas são **retas, cortadas na diagonal**, o buraco do canto ficou **um pouco maior** e **sem a chapa prateada** (direto na madeira). Desenho e física usam o mesmo valor, então a bola bate exatamente onde a tabela termina
+- São 12 pontas (2 por caçapa). Tacada que só roça a ponta rebate; bola bem na boca entra. O canto fica entre o antigo e o 8 Ball Pool (com 30 px ficava fácil demais)
 - Ajustes no `main.c` (perto de `jawHit()`): `PK_TIP` (maior = canto mais aberto), `KN_R` (ponta mais gorda = mais difícil), `KN_E` (quique) e `KN_FT` (atrito de lado). `KN_ON 0` desliga a colisão. O tamanho do buraco é `PR[]`
 - Com o poder **CHAMINE** a colisão das pontas fica desligada. Funções: `knuckleHit()` e `pocketKnuckles()`
 
