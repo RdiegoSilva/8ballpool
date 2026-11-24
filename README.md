@@ -5,6 +5,14 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Habilidades e SO TACO PADRAO no BOT, 1v1 e torneio (novo)
+Na **etapa 1 (Partida)** de JOGAR e do TORNEIO aparecem duas regras, iguais nos tres modos:
+- **HABILIDADES** (LIGADAS/DESLIGADAS): agora vale **tambem contra o BOT** (antes so no versus e no torneio). Desligadas, ninguem usa poderes: nem voce nem o BOT (a dificuldade **Mestre** joga como o Profissional, sem tacos nem poderes). O **Modo Treino** continua com tudo liberado
+- **SO TACO PADRAO** (SIM/NAO): com **SIM** todos jogam com o taco **CLASSICO** e o **SELECT** (menu de tacos) fica bloqueado ("SO TACO PADRAO NESTA PARTIDA"); a barra de sangue do Vampiro e os poderes dos tacos de personagem tambem ficam desligados
+- No **torneio**, o padrao continua igual ao de antes (HABILIDADES desligadas + SO TACO PADRAO = SIM). Ligar HABILIDADES no torneio ja desliga o SO TACO PADRAO para voce poder escolher o taco; da para mudar de novo na linha de baixo. O chaveamento mostra o resumo (TACO PADRAO, COM HABILIDADES ou TACOS LIVRES)
+- Fica em `abilSel`/`clsSel` (BOT e versus), `tAbil`/`tClassic` (torneio) e `abilOn`/`onlyClassic` (valores da partida, definidos em `startMatch()`). `curCue()`, `curAb()`, `botMaster()`, `vampOn()` e `openCueMenu()` usam esses dois valores
+- **Nao foi compilado nem testado no PS2**, so conferida a logica e o espaco das linhas na tela de configuracao
+
 ## Modo PAR OU IMPAR (novo)
 Novo modo de jogo em **JOGAR > MODO > PAR OU IMPAR** (e no torneio/versus, como os outros modos). Usa as bolas **2 a 15** (a bola 1 não entra): **pares** (2, 4, 6, 8, 10, 12, 14) contra **ímpares** (3, 5, 7, 9, 11, 13, 15). Os grupos já vêm definidos: o jogador 1 joga com os pares e o jogador 2 com os ímpares. A **bola 8 é uma bola par comum** (não é a bola final) e **não existe bola preta**.
 - **Vence** quem encaçapar todas as bolas do seu grupo primeiro. Encaçapou uma bola sua sem falta, joga de novo

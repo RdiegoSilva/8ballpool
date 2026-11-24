@@ -91,7 +91,8 @@ static char tName[8][12];
 enum { AB_NONE, AB_TIRO, AB_CONGELAR, AB_SUGAR, AB_CHAMINE, AB_HACK, AB_FOGO, AB_CORTE, AB_MARE, AB_MARRETA, AB_TEMPO, AB_GRINCH, AB_BAGUNCA, AB_MAREALTA, AB_RASTREIO, AB_IMA, AB_MALDICAO, AB_VIDAS, AB_COVEIRO, AB_ENTERRO, AB_COVA, AB_RESSUS, AB_POLICIAL, AB_PRENDER, AB_SIRENE, AB_CORNETA, AB_CHIQUI, AB_BIONICA, NAB };
 static const char *AB_NAME[NAB] = { "", "TIRO", "CONGELAR", "SUGAR", "CHAMINE", "HACK", "FOGO", "CORTE", "MARE", "CHAPOLIN", "TEMPO", "GRINCH", "BAGUNCA", "MARE ALTA", "RASTREIO", "IMA", "MALDICAO", "NOVA VIDA", "COVEIRO", "ENTERRO", "COVA", "RESSUSCITAR", "POLICIAL", "ALGEMAS", "SIRENE", "CORNETA", "CHIQUITOLINA", "MARRETA BIONICA" };
 #define AB_COOL 3
-static int abilSel, abilOn = 1, tableAuto;           /* abilSel: versus 0 = com habilidades, 1 = sem */
+static int abilSel, abilOn = 1, tableAuto;           /* abilSel: BOT/versus 0 = com habilidades, 1 = sem */
+static int clsSel, tClassic = 1, onlyClassic;        /* SO TACO PADRAO: clsSel (BOT/versus), tClassic (torneio); onlyClassic = valor da partida em andamento (todos jogam com o taco CLASSICO e SELECT fica bloqueado) */
 #define FORGIVE_ON(f) ((f) == 1 || (f) == 4)          /* 1 = PRESENTE (Noel), 4 = NOVA VIDA do Gato (perdoa falta e suicidio e joga de novo) */
 static int abilArm, abilKind, abilT, abilFx, abilForgive, hackOn, abilCD[2], grinchOn, abilExtra, rastT = -1, curse[2];   /* curse[p]: MALDICAO do mago sobre o jogador p */   /* grinchOn: a habilidade desta tacada veio do sorteio do Grinch */
 #define ENTERRO_SO_ULTIMA 0                           /* 1 = ENTERRO so funciona na sua ultima bola (antes da 8); 0 = qualquer bola */
@@ -1769,7 +1770,7 @@ static void setmsg(const char *s) { strncpy(msg, s, 63); msg[63] = 0; msgTimer =
 static int isBot(void) { return mode == 0 && cur == 1; }
 static const char *pname(int pl) { return (pl == 1 && mode == 0) ? (tourney ? tName[tOpp] : "BOT") : pnames[pl]; }
 static int botCue;                                       /* MESTRE: taco que o bot escolheu para esta tacada */
-static int botMaster(void) { return mode == 0 && cur == 1 && botLevel == 4 && !(tourney && !tAbil); }   /* dificuldade MESTRE: o bot usa tacos e poderes */
+static int botMaster(void) { return mode == 0 && cur == 1 && botLevel == 4 && abilOn && !onlyClassic; }   /* dificuldade MESTRE: o bot usa tacos e poderes */
 /* MESTRE: na tacada da bola 8 e preciso escolher (cantar) a cacapa; a bola 8 cair em outra cacapa e derrota */
 static int callPk = -1, callManual = 0, callAnn = 0, callShotPk = -1, pk8 = -1;   /* cacapa escolhida, se o jogador mexeu, aviso ja dado, cacapa cantada na tacada, cacapa onde a 8 caiu */
 static const char *const PK_NAME[6] = { "CIMA ESQUERDA", "CIMA MEIO", "CIMA DIREITA", "BAIXO ESQUERDA", "BAIXO MEIO", "BAIXO DIREITA" };
@@ -1791,8 +1792,8 @@ static int eightBestPocket(void) /* cacapa mais alinhada com a linha branca -> 8
     }
     return best;
 }
-static int curCue(void) { return botMaster() ? botCue : ((isBot() || (tourney && !tAbil)) ? 0 : cueSel[cur]); }
-static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !(tourney && !tAbil))) ? CUE_AB[curCue()] : AB_NONE; }   /* torneio: todos usam o taco CLASSICO */
+static int curCue(void) { return botMaster() ? botCue : ((isBot() || onlyClassic) ? 0 : cueSel[cur]); }
+static int curAb(void) { return (botMaster() || (abilOn && !isBot() && !onlyClassic)) ? CUE_AB[curCue()] : AB_NONE; }   /* SO TACO PADRAO: todos usam o taco CLASSICO */
 /* VAMPIRO: barra de sangue. Cada tacada que encacapa uma bola sua enche 1/3; se errar, a barra seca.
    Com 3 bolas seguidas a barra enche e a 4a tacada vira SEDE DE SANGUE (mais forte e a bola alvo curva para a cacapa) */
 #define BLOOD_MAX 3
@@ -1805,7 +1806,7 @@ static float batX[NBAT], batY[NBAT], batVX[NBAT], batVY[NBAT];
 static int batOn, batWait, batFor;
 static int vampOn(int p)                                 /* a barra de sangue e do TACO VAMPIRO (o BOT usa o taco do personagem Vampiro) */
 {
-    if (tourney && !tAbil) return 0;
+    if (onlyClassic || !abilOn) return 0;
     if (mode == 0 && p == 1) return charSel[1] == 6;
     return abilOn && cueSel[p] == 14;
 }
@@ -2206,7 +2207,7 @@ static void shoot(float p)
 /* menu de tacos (SELECT) */
 static void openCueMenu(void)
 {
-    if (tourney && !tAbil) { setmsg("TORNEIO: TODOS USAM O TACO CLASSICO"); return; }
+    if (onlyClassic) { setmsg("SO TACO PADRAO NESTA PARTIDA"); return; }
     cueMenuSel = cueSel[cur]; cueRet = state; charging = 0; state = S_CUES;
 }
 
@@ -7368,7 +7369,7 @@ static void drawOverScreen(void)
 }
 
 /* ---------- configuracao da partida e nome do jogador 2 ---------- */
-enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, SR_ABIL, SR_TAUTO, SR_RPL, NSR };
+enum { SR_OPP, SR_LVL, SR_TIME, SR_MODE, SR_TABLE, SR_BALLS, SR_C0, SR_C1, SR_CH0, SR_CH1, SR_WB, SR_GD, SR_GO, SR_NEXT, SR_ABIL, SR_TAUTO, SR_RPL, SR_CLS, NSR };
 #define SOLO (tourney || training)          /* so um jogador escolhe personagem (torneio e treino) */
 #define NSTEPS 4                          /* configurar partida em etapas: 0 partida, 1 personagens, 2 mesa e bolas, 3 bola branca e guia */
 static int setStep;
@@ -7384,7 +7385,8 @@ static int setRows(int *v)                 /* linhas visiveis da etapa atual */
     case 0:
         if (!tourney && !training) v[n++] = SR_OPP;
         if (oppSel == 0 && !training) v[n++] = SR_LVL;
-        if (oppSel == 1 || tourney) { v[n++] = SR_TIME; v[n++] = SR_ABIL; }   /* tempo e habilidades: versus e torneio */
+        if (oppSel == 1 || tourney) v[n++] = SR_TIME;                          /* tempo: versus e torneio */
+        if (!training) { v[n++] = SR_ABIL; v[n++] = SR_CLS; }                  /* habilidades e so taco padrao: BOT, versus e torneio */
         v[n++] = SR_MODE;
         if (repHave) v[n++] = SR_RPL;                            /* so aparece quando ha replay da partida anterior */
         v[n++] = SR_NEXT;
@@ -7486,7 +7488,7 @@ static void tourneyBegin(void)                   /* sorteia rivais, personagens 
     for (i = 7; i > 0; i--) { j = (int)(rnd() % (unsigned)(i + 1)); t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
     for (i = 0; i < 8; i++) tSlot[0][i] = ord[i];
     tRound = 0; tRes = 0; tChamp = -1; mode = 0; tTable = -1;
-    cueSel[0] = (tAbil && CHAR_CUE[charSel[0]] >= 0) ? CHAR_CUE[charSel[0]] : 0;   /* regra: so o taco CLASSICO (ou, com habilidades, o taco do seu personagem) */
+    cueSel[0] = (!tClassic && CHAR_CUE[charSel[0]] >= 0) ? CHAR_CUE[charSel[0]] : 0;   /* regra: so o taco CLASSICO (ou, sem a regra, o taco do seu personagem) */
     cueSel[1] = 0;
     tourneyPrepare();
     state = S_BRACKET;
@@ -7495,7 +7497,7 @@ static void tourneyBegin(void)                   /* sorteia rivais, personagens 
 static void tourneyPlay(void)                    /* comeca a partida da rodada atual */
 {
     charSel[1] = tChar[tOpp];
-    if (!tAbil) cueSel[0] = 0;
+    if (onlyClassic) cueSel[0] = 0;
     cueSel[1] = 0;
     rs += 7919 + menuT;
     vsBegin(0);
@@ -7607,7 +7609,9 @@ static void startMatch(void)
     resolveRandoms();
     wbSel[1] = wbSel[0];                         /* a cor da bola branca vale para a partida toda */
     setSkins(gmode == GM_BR);
-    abilOn = (oppSel == 0) ? 1 : !abilSel;
+    if (training)     { abilOn = 1;     onlyClassic = 0; }          /* treino: tudo liberado */
+    else if (tourney) { abilOn = tAbil; onlyClassic = tClassic; }
+    else              { abilOn = !abilSel; onlyClassic = clsSel; }   /* BOT e versus */
     if (tableAuto && CHAR_TAB[charSel[0]] >= 0) tableSel = CHAR_TAB[charSel[0]];
     if (tourney) { tourneyBegin(); return; }
     vsBegin(oppSel);
@@ -7663,7 +7667,8 @@ static void setupInput(u32 pr)
     case SR_TIME:  timeSel = (timeSel + d + NTIMES) % NTIMES; break;
     case SR_MODE:  gmode = (gmode + d + NGM) % NGM; break;
     case SR_TABLE: { int v; tabOrdInit(); v = tableRandom ? NTABLES : tabInv[tableSel]; v = (v + d + NTABLES + 1) % (NTABLES + 1); tableRandom = (v == NTABLES); if (!tableRandom) tableSel = tabOrd[v]; tableAuto = 0; } break;   /* ordem alfabetica; ultima opcao: ALEATORIA */
-    case SR_ABIL:  if (tourney) tAbil = !tAbil; else abilSel = !abilSel; break;
+    case SR_ABIL:  if (tourney) { tAbil = !tAbil; if (tAbil) tClassic = 0; } else abilSel = !abilSel; break;   /* torneio: ligar habilidades libera os tacos */
+    case SR_CLS:   if (tourney) tClassic = !tClassic; else clsSel = !clsSel; break;
     case SR_TAUTO: tableAuto = !tableAuto; break;
     case SR_BALLS: ballTheme = (ballTheme + d + NTHEMES) % NTHEMES; break;
     case SR_C0:    cycleColor(0, d); break;
@@ -7894,7 +7899,7 @@ static void textCF(float cx, float y, float sc, u64 c, const char *t, float maxw
 static void drawSetupScreen(void)
 {
     static const char *LBL[NSR] = { "ADVERSARIO", "DIFICULDADE", "TEMPO POR JOGADA", "MODO", "MESA",
-                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM", "VER REPLAY ANTERIOR" };
+                                    "COR DAS BOLAS", "COR JOGADOR 1", "COR JOGADOR 2", "PERSONAGEM", "PERSONAGEM", "BOLA BRANCA", "LINHA GUIA", "INICIAR PARTIDA", "PROXIMA ETAPA", "HABILIDADES", "MESA DO PERSONAGEM", "VER REPLAY ANTERIOR", "SO TACO PADRAO" };
     static const char *STEPN[NSTEPS] = { "PARTIDA", "PERSONAGENS", "MESA E BOLAS", "BRANCA E GUIA" };
     static const u8 LC[NLEVELS][3] = { {90,230,110}, {245,215,70}, {240,80,70}, {200,110,255}, {80,220,255} };
     int v[NSR], n = setRows(v), i;
@@ -7984,6 +7989,7 @@ static void drawSetupScreen(void)
         case SR_MODE:  sprintf(buf, "< %s >", GMN[gmode]); break;
         case SR_TABLE: sprintf(buf, "< %s >", (tableRandom && !tableAuto) ? "ALEATORIA" : TABLES[effTable()].name); break;
         case SR_ABIL:  { int off = tourney ? !tAbil : abilSel; strcpy(buf, off ? "< DESLIGADAS >" : "< LIGADAS >"); vc = off ? COL(255,130,120) : COL(110,255,140); } break;
+        case SR_CLS:   { int on = tourney ? tClassic : clsSel; strcpy(buf, on ? "< SIM >" : "< NAO >"); vc = on ? COL(110,255,140) : COL(255,255,255); } break;
         case SR_TAUTO: if (tableAuto && CHAR_TAB[charSel[0]] >= 0) sprintf(buf, "< SIM: %s >", TABLES[CHAR_TAB[charSel[0]]].name);
                        else strcpy(buf, tableAuto ? "< SIM (SEM MESA) >" : "< NAO >");
                        vc = tableAuto ? COL(110,255,140) : COL(255,255,255); break;
@@ -8039,9 +8045,13 @@ static void drawSetupScreen(void)
     else if (v[setSel] == SR_TIME)
         hint = "PASSOU O TEMPO DA JOGADA: PERDE A VEZ";
     else if (v[setSel] == SR_ABIL && tourney)
-        hint = tAbil ? "LIGADAS: VOCE ESCOLHE O TACO (SELECT) E USA PODERES (O). OS RIVAIS JOGAM SEM PODERES" : "DESLIGADAS: TODOS JOGAM SO COM O TACO CLASSICO";
+        hint = tAbil ? "LIGADAS: VOCE USA PODERES (O NA MIRA). OS RIVAIS JOGAM SEM PODERES" : "DESLIGADAS: NINGUEM USA PODERES (SO OS ATRIBUTOS DO TACO)";
+    else if (v[setSel] == SR_ABIL && oppSel == 0)
+        hint = "LIGADAS: VOCE USA PODERES (O NA MIRA). DESLIGADAS: SEM PODERES PARA VOCE E PARA O BOT (MESTRE INCLUSO)";
     else if (v[setSel] == SR_ABIL)
         hint = "LIGADAS: TACOS DE PERSONAGEM TEM PODERES (O NA MIRA). DESLIGADAS: SO OS ATRIBUTOS";
+    else if (v[setSel] == SR_CLS)
+        hint = (tourney ? tClassic : clsSel) ? "SIM: TODOS JOGAM SO COM O TACO PADRAO (CLASSICO) E O SELECT FICA BLOQUEADO" : "NAO: CADA UM ESCOLHE O SEU TACO (SELECT NA MIRA)";
     else if (v[setSel] == SR_TAUTO)
         hint = "USA A MESA DO PERSONAGEM DO JOGADOR 1 (VEJA NO CATALOGO DE TACOS)";
     else if (v[setSel] == SR_LVL && botLevel == 3)
@@ -8292,8 +8302,8 @@ static void drawBracketScreen(void)
         sprintf(buf, "%s X %s   MESA: %s", CHAR_NAME[tChar[0]], CHAR_NAME[tChar[tOpp]], TABLES[tTable].name);
         textC(402, 0.3f, COL(150,220,255), buf);                                                  /* personagens da partida */
         uiFoot(2, fk, fl);
-        if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", GMN[gmode], tAbil ? "COM HABILIDADES" : "TACO CLASSICO", TIME_SEC[timeSel], LVL_NAME[botLevel]);
-        else         sprintf(rl, "REGRAS: %s | %s | SEM TEMPO | %s", GMN[gmode], tAbil ? "COM HABILIDADES" : "TACO CLASSICO", LVL_NAME[botLevel]);
+        if (timeSel) sprintf(rl, "REGRAS: %s | %s | TEMPO %dS | %s", GMN[gmode], tClassic ? "TACO PADRAO" : (tAbil ? "COM HABILIDADES" : "TACOS LIVRES"), TIME_SEC[timeSel], LVL_NAME[botLevel]);
+        else         sprintf(rl, "REGRAS: %s | %s | SEM TEMPO | %s", GMN[gmode], tClassic ? "TACO PADRAO" : (tAbil ? "COM HABILIDADES" : "TACOS LIVRES"), LVL_NAME[botLevel]);
         textC(413, 0.26f, COL(130,140,158), rl);
     } else {
         static const int fk[1] = { 0 };
@@ -9915,7 +9925,7 @@ static void useAbility(void)
 {
     int ab = curAb();
     char tb[64];
-    if (ab == AB_NONE) { setmsg(abilOn ? "ESTE TACO NAO TEM HABILIDADE" : "HABILIDADES DESLIGADAS NESTA PARTIDA"); return; }
+    if (ab == AB_NONE) { setmsg(onlyClassic ? "SO TACO PADRAO NESTA PARTIDA" : (abilOn ? "ESTE TACO NAO TEM HABILIDADE" : "HABILIDADES DESLIGADAS NESTA PARTIDA")); return; }
     if (ab == AB_HACK && hackOn) {                       /* ja ativo: O troca para a proxima melhor tacada (e depois libera a mira) */
         hCandI++;
         if (hCandI >= hCandN) { hackOn = 0; hCandI = 0; abilCD[cur] = 0; setmsg("HACK DESLIGADO: MIRA LIVRE (RECARGA DEVOLVIDA)"); }   /* nao atirou: nao gasta a habilidade */
