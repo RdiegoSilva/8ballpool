@@ -344,10 +344,30 @@ static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; r
 #define CAM_YN  394.0f                   /* y do mundo da borda de perto da moldura (TY1 + 30) */
 #define CAM_SY  374.0f                   /* y da tela onde essa borda fica */
 static int camOn = 0;                    /* 1 so enquanto desenha a cena da mesa */
-static int camMode = 1;                  /* opcao CAMERA (Opcoes e Pausa): 1 = 3D com perspectiva, 0 = normal (de cima) */
+static int camMode = 1;                  /* opcao CAMERA (Opcoes e Pausa): 0 = normal (de cima), 1 = 3D com perspectiva, 2 = 1a pessoa */
+static const char *CAM_NAME[3] = { "NORMAL", "3D", "1A PESSOA" };
+#define FP_BACK 110.0f                   /* 1a pessoa: camera atras da bola branca (distancia no plano da mesa) */
+#define FP_H    70.0f                    /* altura da camera */
+#define FP_F    240.0f                   /* distancia focal */
+#define FP_HOR  150.0f                   /* y da tela do horizonte */
+static int camFP = 0;                    /* 1 = pj() usa a camera em 1a pessoa */
+static float fpX, fpY, fpC = 1.0f, fpS;  /* posicao e direcao da camera 1a pessoa */
+static float pjVs = CAM_SIN;             /* achatamento vertical de discos/pontos no ultimo pj() */
 static void pj(float x, float y, float *sx, float *sy, float *sc)
 {
     float v = CAM_YN - y, den = CAM_Z0 + v * CAM_COS, k;
+    if (camFP) {
+        float rx = x - fpX, ry = y - fpY, fwd = rx * fpC + ry * fpS, lat = -rx * fpS + ry * fpC, d = fwd + FP_BACK, px, py;
+        if (d < 12.0f) d = 12.0f;
+        k = FP_F / d;
+        px = 320.0f + lat * k; py = FP_HOR + FP_H * k;
+        if (px < -800.0f) px = -800.0f; if (px > 1440.0f) px = 1440.0f;
+        if (py < -800.0f) py = -800.0f; if (py > 1300.0f) py = 1300.0f;
+        pjVs = FP_H / sqrtf(FP_H * FP_H + d * d); if (pjVs < 0.1f) pjVs = 0.1f;
+        *sc = k; *sx = px; *sy = py;
+        return;
+    }
+    pjVs = CAM_SIN;
     if (den < 80.0f) den = 80.0f;
     k = CAM_Z0 / den;
     *sc = k;
@@ -363,8 +383,8 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
         float ax, ay, bx, by, cx2, cy2, dx, dy, s;
         if (x2 - x1 < 2.5f && y2 - y1 < 2.5f) {            /* pontinho: um sprite no centro projetado */
             pj((x1 + x2) * 0.5f, (y1 + y2) * 0.5f, &ax, &ay, &s);
-            gsKit_prim_sprite(g, ax + OX - (x2 - x1) * 0.5f * s, ay + OY - (y2 - y1) * 0.5f * s * CAM_SIN,
-                                 ax + OX + (x2 - x1) * 0.5f * s, ay + OY + (y2 - y1) * 0.5f * s * CAM_SIN, 1, c);
+            gsKit_prim_sprite(g, ax + OX - (x2 - x1) * 0.5f * s, ay + OY - (y2 - y1) * 0.5f * s * pjVs,
+                                 ax + OX + (x2 - x1) * 0.5f * s, ay + OY + (y2 - y1) * 0.5f * s * pjVs, 1, c);
             return;
         }
         pj(x1, y1, &ax, &ay, &s); pj(x2, y1, &bx, &by, &s); pj(x2, y2, &cx2, &cy2, &s); pj(x1, y2, &dx, &dy, &s);
@@ -432,7 +452,7 @@ static void discN(float cx, float cy, float r, u64 c, int n)
     const float *t;
     float rx = r, ry = r;                               /* raio na horizontal e na vertical (a camera 3D achata o disco do plano da mesa) */
 #if CAM_3D
-    if (camOn) { float s; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * CAM_SIN; }
+    if (camOn) { float s; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * pjVs; }
 #endif
 #if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
@@ -7144,6 +7164,15 @@ static void uiToggle(float xr, float y, int on, const char *lOn, const char *lOf
     else    { discN(x + 11, y + 10, 8.0f, COL(235,215,218), 12); discN(x + 11, y + 10, 5.5f, COL(170,120,126), 10); text(x + 25, y + 5, 0.26f, COL(235,170,176), lOff); }
 }
 
+static void uiChoice(float xr, float y, const char *t)   /* pilula com o valor escolhido (varias opcoes) */
+{
+    float x = xr - 90.0f;
+    cham(x - 1, y - 1, xr + 1, y + 21, 6.0f, COL(110,170,230));
+    cham(x, y, xr, y + 20, 5.0f, COL(28,62,110));
+    rect(x + 5, y + 1, xr - 5, y + 8, CA(255, 255, 255, 0x14));
+    text((x + xr) * 0.5f - tw(0.26f, t) * 0.5f, y + 5, 0.26f, COL(210,235,255), t);
+}
+
 static void uiSection(float x1, float x2, float y, u64 c, const char *t)       /* titulo de grupo de opcoes */
 {
     text(x1, y, 0.28f, c, t);
@@ -8178,7 +8207,7 @@ static void optInput(u32 pr)
     case OP_VOL:  if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case OP_FX:   if (tog) fxOn = !fxOn; break;
     case OP_TIPS: if (tog) tipsOn = !tipsOn; break;
-    case OP_CAM:  if (tog) camMode = !camMode; break;
+    case OP_CAM:  if (tog) camMode = (camMode + (d ? d : 1) + 3) % 3; break;
     case OP_CRED: if (pr & PAD_CROSS) state = S_CREDITS; break;
     }
 }
@@ -8201,7 +8230,7 @@ static void drawOptionsScreen(void)
     static const char *LB[NOP] = { "SOM", "MUSICA", "VOLUME DA MUSICA", "EFEITOS DA MESA", "DICAS NA TELA", "CAMERA", "CREDITOS" };
     static const char *DS[NOP] = { "EFEITOS SONOROS DA MESA, DOS MENUS E DA VITORIA", "LIGA E DESLIGA AS MUSICAS DO PEN DRIVE",
                                    "VOLUME DAS MUSICAS (OS EFEITOS NAO MUDAM)", "ANIMACOES DAS MESAS E BRILHO DA MIRA",
-                                   "BARRA DE TECLAS E DICAS NA MIRA", "VISAO DA MESA: 3D (PERSPECTIVA) OU NORMAL (DE CIMA)", "CRIADOR E VERSAO DO JOGO" };
+                                   "BARRA DE TECLAS E DICAS NA MIRA", "VISAO: 3D (PERSPECTIVA), NORMAL (DE CIMA) OU 1A PESSOA", "CRIADOR E VERSAO DO JOGO" };
     static const float OY0[NOP] = { 74, 102, 130, 182, 207, 232, 278 };
     static const int fk[4] = { 6, 7, 0, 1 };
     static const char *const fl[4] = { "ESCOLHER", "MUDAR", "OK", "VOLTAR" };
@@ -8223,7 +8252,7 @@ static void drawOptionsScreen(void)
         case OP_MUS:  uiToggle(544, y, musOn, "LIGADA", "DESLIGADA"); break;
         case OP_FX:   uiToggle(544, y, fxOn, "LIGADOS", "DESLIGADOS"); break;
         case OP_TIPS: uiToggle(544, y, tipsOn, "LIGADAS", "DESLIGADAS"); break;
-        case OP_CAM:  uiToggle(544, y, camMode, "3D", "NORMAL"); break;
+        case OP_CAM:  uiChoice(544, y, CAM_NAME[camMode]); break;
         case OP_VOL: {
             int q;
             for (q = 0; q < 10; q++) {
@@ -9064,7 +9093,7 @@ static void pauseInput(u32 pr)
     case PI_VOL:     if (d) { volLvl += d; if (volLvl < 0) volLvl = 0; if (volLvl > 10) volLvl = 10; musicSetVolume(volLvl); } break;
     case PI_FX:      if (tog) fxOn = !fxOn; break;
     case PI_TIPS:    if (tog) tipsOn = !tipsOn; break;
-    case PI_CAM:     if (tog) camMode = !camMode; break;
+    case PI_CAM:     if (tog) camMode = (camMode + (d ? d : 1) + 3) % 3; break;
     case PI_RESUME:  if (pr & PAD_CROSS) paused = 0; break;
     case PI_REPLAY:  if ((pr & PAD_CROSS) && repKeepN > 1) { paused = 0; repLaunch(state); } break;   /* rever a ultima bola que caiu */
     case PI_PLAYER:  if (pr & PAD_CROSS) pauseView = 2; break;
@@ -9197,7 +9226,7 @@ static void drawPause(void)
             case PI_MUS:  uiToggle(510, y - 1, musOn, "LIGADA", "DESLIGADA"); break;
             case PI_FX:   uiToggle(510, y - 1, fxOn, "LIGADOS", "DESLIGADOS"); break;
             case PI_TIPS: uiToggle(510, y - 1, tipsOn, "LIGADAS", "DESLIGADAS"); break;
-            case PI_CAM:  uiToggle(510, y - 1, camMode, "3D", "NORMAL"); break;
+            case PI_CAM:  uiChoice(510, y - 1, CAM_NAME[camMode]); break;
             case PI_VOL: {
                 int q;
                 for (q = 0; q < 10; q++) {
@@ -9227,7 +9256,7 @@ static void drawPause(void)
         else if (row == PI_MUS || row == PI_VOL || row == PI_PLAYER)
             textC(404, 0.3f, COL(150,220,255), musicStatus());
         else if (row == PI_CAM)
-            textC(404, 0.3f, COL(150,220,255), "3D: MESA EM PERSPECTIVA | NORMAL: VISTA DE CIMA");
+            textC(404, 0.3f, COL(150,220,255), "3D: PERSPECTIVA | NORMAL: DE CIMA | 1A PESSOA: DA BOLA BRANCA");
         else if (row == PI_GD0 || row == PI_GD1) {
             int w = (row == PI_GD0) ? 0 : 1;
             char hb[64];
@@ -9419,7 +9448,9 @@ static void drawScene(void)
     camOn = 0;
     drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
 #if CAM_3D
-    camOn = camMode;                                                /* daqui ate o HUD: tudo passa pela camera 3D (pj), se a opcao CAMERA estiver em 3D */
+    camFP = (camMode == 2 && (state == S_AIM || state == S_STRIKE || state == S_ROLL));
+    if (camFP && state != S_ROLL) { fpX = b[0].x; fpY = b[0].y; fpC = cosf(ang); fpS = sinf(ang); }
+    camOn = camMode ? 1 : 0;                                                /* daqui ate o HUD: tudo passa pela camera 3D (pj), se a opcao CAMERA estiver em 3D */
 #endif
     drawTable();
     if ((state == S_ROLL || state == S_STRIKE) && abilKind == AB_COVA) drawGraveHole(1.0f);          /* COVEIRO: a cova aberta */
@@ -9560,7 +9591,7 @@ static void drawScene(void)
 #if CAM_3D
         if (camOn) { float sx, sc; pj(TCX, TY0 - 30.0f, &sx, &sc0, &sc); pj(TCX, TY1 + 30.0f, &sx, &sc1, &sc); }
 #endif
-        gsKit_set_scissor(g, GS_SETREG_SCISSOR((int)(TX0 - 30.0f + OX), (int)(TX1 + 30.0f + OX), (int)(sc0 + OY), (int)(sc1 + OY)));
+        if (!camFP) gsKit_set_scissor(g, GS_SETREG_SCISSOR((int)(TX0 - 30.0f + OX), (int)(TX1 + 30.0f + OX), (int)(sc0 + OY), (int)(sc1 + OY)));
     }
     cueChalk = isBot() ? 1.0f : chalk[cur];
     if (state == S_AIM) {
@@ -9593,7 +9624,7 @@ static void drawScene(void)
             ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 7.0f + 2.5f * pl, 2.2f, 28, CA(255, 225, 60, 0xa0));
             ringN(PX[ck], PY[ck], PR[ck] * tabPock() + 11.5f + 2.5f * pl, 1.4f, 24, CA(255, 225, 60, 0x50));
             discN(PX[ck], PY[ck], 7.5f, COL(255, 225, 60), 14);
-            if (camOn) { float sx, sy, sc; pj(PX[ck], PY[ck], &sx, &sy, &sc); text(sx - 3.4f * sc, sy - 5.0f * sc * CAM_SIN, 0.34f * sc, COL(12, 12, 12), "8"); }
+            if (camOn) { float sx, sy, sc; pj(PX[ck], PY[ck], &sx, &sy, &sc); text(sx - 3.4f * sc, sy - 5.0f * sc * pjVs, 0.34f * sc, COL(12, 12, 12), "8"); }
             else text(PX[ck] - 3.4f, PY[ck] - 5.0f, 0.34f, COL(12, 12, 12), "8");
         }
     }
