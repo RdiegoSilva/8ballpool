@@ -163,7 +163,7 @@ static int   charSel[2] = { 0, 1 }, overT;         /* personagens (caricaturas) 
 #define POM 14.2f                                   /* meio: o buraco fica na tabela, encostando no feltro sem invadir */
 static const float PX[6] = { TX0 - POC, TCX, TX1 + POC, TX0 - POC, TCX, TX1 + POC };
 static const float PY[6] = { TY0 - POC, TY0 - POM, TY0 - POC, TY1 + POC, TY1 + POM, TY1 + POC };
-static const float PR[6] = { 14.5f, 12.0f, 14.5f, 14.5f, 12.0f, 14.5f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
+static const float PR[6] = { 16.0f, 12.0f, 16.0f, 16.0f, 12.0f, 16.0f };   /* raio DESENHADO do buraco (nao passa da borda do feltro) */
 /* raio de captura (fisica): o buraco agora fica mais perto do feltro, entao o raio e menor mas a boca continua generosa */
 static const float PRC[6] = { 31.0f, 17.0f, 31.0f, 31.0f, 17.0f, 31.0f };
 #define POCK_PULL 220.0f                          /* "funil": puxao suave da bola que entra na boca da cacapa */
@@ -2101,7 +2101,7 @@ static void jawHit(Ball *q, int alongX, float pc, float rr)
 /* BORDAS DAS CACAPAS (fisica): a ponta de cada tabela e uma quina redonda fixa. A bola que roça a quina rebate com o angulo certo
    (para dentro da cacapa ou de volta para a mesa) em vez de passar reto; bola bem na boca entra, bola na beirada "bate na trave".
    KN_R = raio da quina (maior = quina mais gorda, cacapa mais dificil); KN_E = quique (1.0 = sem perda); KN_FT = atrito de lado */
-#define PK_TIP 20.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13: maior = boca do canto mais aberta) */
+#define PK_TIP 30.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13; 30 = boca aberta como no 8 Ball Pool; maior = mais aberto) */
 #define KN_ON 1
 #define KN_R  1.0f
 #define KN_E  0.62f
@@ -3173,28 +3173,24 @@ static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores deri
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
     float la = xa - ra, lb = xb + rb;
-    if (ra > 8.0f) quad(xa - 34, yo, xa - ra, yo, xa, yi, xa - 34, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    if (rb > 8.0f) quad(xb + rb, yo, xb + 34, yo, xb + 34, yi, xb, yi, tcMouth);
+    if (ra > 8.0f) quad(xa - 40, yo, xa - ra, yo, xa, yi, xa - 40, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 40, yo, xb + 40, yi, xb, yi, tcMouth);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
     line(xa - ra, yo, xa, yi, tcCushHi);                                 /* pontas inclinadas (meio e cantos) */
     line(xb + rb, yo, xb, yi, tcCushHi);
-    disc(xa, yi, KN_R + 0.6f, tcCushHi);                                  /* pontas arredondadas (e a quina da fisica) */
-    disc(xb, yi, KN_R + 0.6f, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 34, xo, ya - 11, xi, ya, xi, ya - 34, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    quad(xo, yb + 11, xo, yb + 34, xi, yb + 34, xi, yb, tcMouth);
+    quad(xo, ya - 40, xo, ya - 11, xi, ya, xi, ya - 40, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    quad(xo, yb + 11, xo, yb + 40, xi, yb + 40, xi, yb, tcMouth);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
     line(xo, ya - 11, xi, ya, tcCushHi);                                  /* pontas inclinadas dos cantos */
     line(xo, yb + 11, xi, yb, tcCushHi);
-    disc(xi, ya, KN_R + 0.6f, tcCushHi);                                  /* pontas arredondadas (e a quina da fisica) */
-    disc(xi, yb, KN_R + 0.6f, tcCushHi);
 }
 
 static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, u64 c)   /* faixa de arco (chapa metalica do canto) */
@@ -4751,9 +4747,7 @@ static void drawTable(void)
         if (mid) { float cmv = PRC[1] * tabPock() - 1.0f; if (r0 < cmv) r0 = cmv; }   /* so visual: o buraco do meio preenche o vao entre as tabelas (abertura para a bola entrar) */
         if (!mid) {                                                                  /* chapa prateada do canto (nao entra no feltro) */
             float a0 = ia + 0.75f, a1 = ia + 6.283f - 0.75f;
-            arcBand(px, py, r0 + 0.2f, r0 + 4.2f, a0, a1, COL(150,154,166));
-            arcBand(px, py, r0 + 0.2f, r0 + 1.4f, a0, a1, COL(226,228,238));         /* brilho interno */
-            arcBand(px, py, r0 + 3.4f, r0 + 4.2f, a0, a1, COL(78,80,92));            /* borda externa */
+            (void)a0; (void)a1; (void)arcBand;                                         /* sem chapa prateada: buraco direto na madeira, como no 8 Ball Pool */
         }
         discN(px, py, r0 + 1.0f, CA(0, 0, 0, 0x30), 28);                             /* contorno escuro */
         discN(px, py, r0, shade(T->wood, 0.34f, 0), 28);                             /* boca: vinho nas bordas */
