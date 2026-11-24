@@ -4998,15 +4998,47 @@ static void cuePt(float u, float s, float *ox, float *oy)
     *oy = cueBy - cueDy * d + cueDx * s;
 }
 
+/* TACO EM 3D: cada trecho e um cilindro sombreado. A largura e dividida em CUE_STR faixas com degrade (gouraud); o brilho de cada ponto vem da
+   normal do cilindro (luz de cima-esquerda, como no resto do jogo) mais um brilho especular que acompanha o angulo do taco.
+   CUE_3D 0 volta ao taco antigo (duas cores chapadas, mais leve). CUE_STR = faixas por trecho (mais = mais liso, gasta mais do PS2) */
+#ifndef CUE_3D
+#define CUE_3D 1
+#endif
+#define CUE_STR 4
 static void cueSeg(float u1, float u2, const u8 *c)
 {
     float w1 = cueW(u1), w2 = cueW(u2);
+#if CUE_3D
+    static const float LX = -0.42f, LY = -0.52f, LZ = 0.74f;              /* luz (ja normalizada: ~1.0) */
+    static const float HX = -0.20f, HY = -0.25f, HZ = 0.95f;              /* meio-vetor luz+olho, para o brilho */
+    float lx = -cueDy, ly = cueDx, fk[CUE_STR + 1], ak[CUE_STR + 1];
+    float px1[CUE_STR + 1], py1[CUE_STR + 1], px2[CUE_STR + 1], py2[CUE_STR + 1];
+    u64 col[CUE_STR + 1];
+    int j;
+    for (j = 0; j <= CUE_STR; j++) {
+        float k = -1.0f + 2.0f * j / CUE_STR, nz = sqrtf(1.0f - k * k), nx = lx * k, ny = ly * k;
+        float dif = nx * LX + ny * LY + nz * LZ, sp = nx * HX + ny * HY + nz * HZ;
+        if (dif < 0.0f) dif = 0.0f;
+        if (sp < 0.0f) sp = 0.0f;
+        sp *= sp; sp *= sp; sp *= sp; sp *= sp;                           /* sp^16: brilho estreito */
+        fk[j] = 0.42f + 0.78f * dif;                                      /* sombra suave nas bordas, luz no lado da luz */
+        ak[j] = sp * 70.0f;
+        col[j] = shadeA(c, fk[j], (int)ak[j], cueAl);
+        cuePt(u1, k * w1, &px1[j], &py1[j]);
+        cuePt(u2, k * w2, &px2[j], &py2[j]);
+    }
+    for (j = 0; j < CUE_STR; j++) {
+        triG(px1[j], py1[j], px2[j], py2[j], px2[j + 1], py2[j + 1], col[j], col[j], col[j + 1]);
+        triG(px1[j], py1[j], px2[j + 1], py2[j + 1], px1[j + 1], py1[j + 1], col[j], col[j + 1], col[j + 1]);
+    }
+#else
     float ax, ay, bx, by, cx, cy, dx, dy, ex, ey, fx, fy;
     cuePt(u1, -w1, &ax, &ay); cuePt(u2, -w2, &bx, &by);
     cuePt(u2, 0, &cx, &cy);   cuePt(u1, 0, &dx, &dy);
     cuePt(u2, w2, &ex, &ey);  cuePt(u1, w1, &fx, &fy);
     quad(ax, ay, bx, by, cx, cy, dx, dy, shadeA(c, 1.2f, 12, cueAl));   /* lado claro */
     quad(dx, dy, cx, cy, ex, ey, fx, fy, shadeA(c, 0.66f, 0, cueAl));   /* lado escuro */
+#endif
 }
 
 static void shovelTri(float u1, float s1, float u2, float s2, float u3, float s3, u64 c)
@@ -5054,8 +5086,10 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
         cuePt(280.0f, -11.0f, &ax, &ay); cuePt(290.0f, -11.0f, &bx, &by);
         cuePt(290.0f, 11.0f, &cx, &cy);  cuePt(280.0f, 11.0f, &ex, &ey);
         quad(ax, ay, bx, by, cx, cy, ex, ey, shadeA(cd->butt, 1.0f, 0, al));   /* punho em T */
+#if !CUE_3D
         cuePt(50.0f, -1.2f, &ax, &ay); cuePt(258.0f, -3.0f, &bx, &by);
         line(ax, ay, bx, by, shadeA(cd->wood, 1.3f, 40, al));
+#endif
     } else {
     cueSeg(0.0f,   3.5f,   tipc);
     cueSeg(3.5f,   13.0f,  FER);
@@ -5068,11 +5102,13 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
     cueSeg(237.0f, 284.0f, cd->butt);
     cueSeg(284.0f, 290.0f, RUB);
 
-    /* brilho ao longo do taco */
+#if !CUE_3D
+    /* brilho ao longo do taco (no taco 3D o brilho ja vem do sombreamento) */
     cuePt(14.0f, -1.2f, &ax, &ay);  cuePt(160.0f, -2.3f, &bx, &by);
     line(ax, ay, bx, by, shadeA(cd->wood, 1.3f, 40, al));
     cuePt(174.0f, -2.4f, &ax, &ay); cuePt(284.0f, -3.9f, &bx, &by);
     line(ax, ay, bx, by, shadeA(cd->butt, 1.7f, 30, al));
+#endif
     }
 
     if (cd->fx) {

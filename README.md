@@ -5,6 +5,11 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Tacos em 3D (novo)
+Todos os tacos agora são **cilindros sombreados**: em vez de dois tons chapados (lado claro e lado escuro), a largura tem um **degradê suave** com luz vinda de cima-esquerda (como nas bolas e personagens), sombra nas bordas e um **brilho especular** que acompanha o ângulo do taco enquanto você mira. Vale para ponta, virola, cabo, fita, incrustação e borracha de todos os tacos (inclusive os com efeito), e para o taco no menu de tacos
+- Fica em `cueSeg()` no `main.c`. Chaves: `CUE_3D` (0 = taco antigo, mais leve) e `CUE_STR` (faixas do degradê, 4 por padrão; mais = mais liso, gasta mais do PS2)
+- As linhas de brilho fixas do taco antigo só aparecem com `CUE_3D 0`
+
 ## Física nas bordas das caçapas (novo)
 As **pontas das tabelas** em volta de cada caçapa agora **colidem com a bola**: quando ela bate na ponta, rebate no ângulo certo (antes atravessava) e toca o som de tabela
 - **Visual no estilo 8 Ball Pool**: a **boca dos cantos abriu um pouco** (ponta da tabela de 13 para 18 px do canto), as pontas são **retas, cortadas na diagonal**, os buracos ficaram **menores** (canto 13,5; meio 14) e o do canto **sem a chapa prateada** (direto na madeira). Desenho e física usam o mesmo valor, então a bola bate exatamente onde a tabela termina
