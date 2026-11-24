@@ -2101,9 +2101,9 @@ static void jawHit(Ball *q, int alongX, float pc, float rr)
 /* BORDAS DAS CACAPAS (fisica): a ponta de cada tabela e uma quina redonda fixa. A bola que roça a quina rebate com o angulo certo
    (para dentro da cacapa ou de volta para a mesa) em vez de passar reto; bola bem na boca entra, bola na beirada "bate na trave".
    KN_R = raio da quina (maior = quina mais gorda, cacapa mais dificil); KN_E = quique (1.0 = sem perda); KN_FT = atrito de lado */
-#define PK_TIP 13.0f                                    /* onde a ponta da tabela dos cantos termina no desenho (a quina fica exatamente ai; nao mudei o visual) */
+#define PK_TIP 20.0f                                    /* onde a ponta da tabela dos cantos termina (desenho E fisica usam o mesmo valor; era 13: maior = boca do canto mais aberta) */
 #define KN_ON 1
-#define KN_R  0.0f
+#define KN_R  1.0f
 #define KN_E  0.62f
 #define KN_FT 0.97f
 static int knuckleHit(Ball *q, float kx, float ky)       /* devolve a velocidade do impacto (0 = nao bateu) */
@@ -3173,24 +3173,28 @@ static u64 tcCush, tcCushHi, tcCushLo, tcDia, tcRail, tcMouth;     /* cores deri
 static void cushH(float xa, float xb, float yo, float yi, float ra, float rb)   /* ra/rb: inclinacao da ponta (canto = 11, meio = 3 quase reto) */
 {
     float la = xa - ra, lb = xb + rb;
-    if (ra > 8.0f) quad(xa - 20, yo, xa - ra, yo, xa, yi, xa - 20, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    if (rb > 8.0f) quad(xb + rb, yo, xb + 20, yo, xb + 20, yi, xb, yi, tcMouth);
+    if (ra > 8.0f) quad(xa - 34, yo, xa - ra, yo, xa, yi, xa - 34, yi, tcMouth);   /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    if (rb > 8.0f) quad(xb + rb, yo, xb + 34, yo, xb + 34, yi, xb, yi, tcMouth);
     quad(xa - ra, yo, xb + rb, yo, xb, yi, xa, yi, tcCush);
     line(xa, yi, xb, yi, tcCushHi);
     line(la, yo, lb, yo, tcCushLo);
     line(xa - ra, yo, xa, yi, tcCushHi);                                 /* pontas inclinadas (meio e cantos) */
     line(xb + rb, yo, xb, yi, tcCushHi);
+    disc(xa, yi, KN_R + 0.6f, tcCushHi);                                  /* pontas arredondadas (e a quina da fisica) */
+    disc(xb, yi, KN_R + 0.6f, tcCushHi);
 }
 
 static void cushV(float ya, float yb, float xo, float xi)
 {
-    quad(xo, ya - 20, xo, ya - 11, xi, ya, xi, ya - 20, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
-    quad(xo, yb + 11, xo, yb + 20, xi, yb + 20, xi, yb, tcMouth);
+    quad(xo, ya - 34, xo, ya - 11, xi, ya, xi, ya - 34, tcMouth);         /* canto: boca aberta (escura) entre a ponta inclinada da tabela e o buraco */
+    quad(xo, yb + 11, xo, yb + 34, xi, yb + 34, xi, yb, tcMouth);
     quad(xo, ya - 11, xo, yb + 11, xi, yb, xi, ya, tcCush);
     line(xi, ya, xi, yb, tcCushHi);
     line(xo, ya - 11, xo, yb + 11, tcCushLo);
     line(xo, ya - 11, xi, ya, tcCushHi);                                  /* pontas inclinadas dos cantos */
     line(xo, yb + 11, xi, yb, tcCushHi);
+    disc(xi, ya, KN_R + 0.6f, tcCushHi);                                  /* pontas arredondadas (e a quina da fisica) */
+    disc(xi, yb, KN_R + 0.6f, tcCushHi);
 }
 
 static void arcBand(float cx, float cy, float r0, float r1, float a0, float a1, u64 c)   /* faixa de arco (chapa metalica do canto) */

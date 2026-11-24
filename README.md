@@ -6,11 +6,11 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Versão: 3.1.3
 
 ## Física nas bordas das caçapas (novo)
-As **pontas das tabelas** em volta de cada caçapa agora **colidem com a bola**: quando ela bate na ponta, rebate no ângulo certo (antes atravessava). Só isso mudou: o **visual da mesa continua igual** e nada mais da física foi mexido
-- São 12 pontos (2 por caçapa), exatamente onde a tabela termina no desenho. Toca o som de tabela no impacto
-- Efeito: tacada que roça a ponta da caçapa de canto agora rebate, então ficou **mais difícil** encaçapar de raspão (no meio quase não muda)
-- Ajustes no `main.c` (perto de `jawHit()`): `KN_R` (0 = ponta fina; maior = ponta mais gorda), `KN_E` (quique) e `KN_FT` (atrito de lado). `KN_ON 0` desliga tudo
-- Com o poder **CHAMINE** as pontas ficam desligadas. Funções: `knuckleHit()` e `pocketKnuckles()`
+As **pontas das tabelas** em volta de cada caçapa agora **colidem com a bola**: quando ela bate na ponta, rebate no ângulo certo (antes atravessava) e toca o som de tabela
+- As pontas ficaram **arredondadas** e a **boca das caçapas de canto abriu um pouco** (a ponta da tabela foi de 13 para 20 px do canto). Desenho e física usam o mesmo valor, então a bola bate exatamente onde a tabela termina
+- São 12 pontas (2 por caçapa). Tacada que só roça a ponta rebate; bola bem na boca entra
+- Ajustes no `main.c` (perto de `jawHit()`): `PK_TIP` (maior = canto mais aberto), `KN_R` (ponta mais gorda = mais difícil), `KN_E` (quique) e `KN_FT` (atrito de lado). `KN_ON 0` desliga a colisão
+- Com o poder **CHAMINE** a colisão das pontas fica desligada. Funções: `knuckleHit()` e `pocketKnuckles()`
 
 ## Barra de força nova: medidor em blocos (novo)
 A barra de força (lado esquerdo) foi refeita do zero: não tem mais o taco vertical. Agora é um **medidor de LEDs com 20 blocos** que acendem de baixo para cima: **verde** (tacada leve) > **amarelo** > **laranja** > **vermelho** (força máxima). O bloco do topo acende por partes, então a subida é suave. Uma **linha branca com setinhas** marca a força exata, **tracinhos** mostram 25/50/75%, e o **%** aparece num mostrador embaixo, na cor da zona. O rótulo **FORCA** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbZone()` no `main.c`.
