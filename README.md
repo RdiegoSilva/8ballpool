@@ -5,6 +5,15 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Bolas em 3D (novo)
+As bolas já eram esferas com textura que giram; agora ganharam **iluminação e acabamento de bola de verdade**:
+- **Luz suave**: o degrade da esfera passa devagar da luz (cima-esquerda) para a sombra, sem corte duro, com a borda um pouco mais escura
+- **Luz refletida do feltro** na parte de baixo, na cor da mesa, então o lado da sombra não fica chapado
+- **Brilho de verniz** em camadas (halo largo, brilho alongado na diagonal da luz e ponto de luz) e um halo fino no contorno para separar a bola do feltro
+- **Sombra de contato**: um núcleo escuro e apertado embaixo da bola, além da sombra que já existia
+- Vale para todas as mesas, todas as bolas (inclusive as da loja) e a branca. Nas bolinhas pequenas do HUD só entram as camadas básicas
+- Fica em `drawBallMesh()` e `drawShadow()` no `main.c`. Chave `BALL_3D` (0 = visual anterior, mais leve)
+
 ## Tacos em 3D (novo)
 Todos os tacos agora são **cilindros sombreados**: em vez de dois tons chapados (lado claro e lado escuro), a largura tem um **degradê suave** com luz vinda de cima-esquerda (como nas bolas e personagens), sombra nas bordas e um **brilho especular** que acompanha o ângulo do taco enquanto você mira. Vale para ponta, virola, cabo, fita, incrustação e borracha de todos os tacos (inclusive os com efeito), e para o taco no menu de tacos
 - Fica em `cueSeg()` no `main.c`. Chaves: `CUE_3D` (0 = taco antigo, mais leve) e `CUE_STR` (faixas do degradê, 4 por padrão; mais = mais liso, gasta mais do PS2)

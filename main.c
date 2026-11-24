@@ -1155,6 +1155,13 @@ static void drawNumber(int n, float cx, float cy, float r)
     }
 }
 
+/* BOLAS EM 3D: luz suave (degrade mais largo), luz refletida do feltro embaixo, brilho de verniz em camadas e sombra de contato.
+   BALL_3D 0 volta ao visual anterior (mais leve) */
+#ifndef BALL_3D
+#define BALL_3D 1
+#endif
+static u8 gFelt[3] = { 30, 120, 60 };               /* cor do feltro da mesa em uso (desenhada em drawTable): tinge a luz refletida nas bolas */
+
 static void drawShadow(int i)
 {
     float z = b[i].z > 0.0f ? b[i].z : 0.0f;      /* no pulo a sombra fica no chao, menor e mais fraca */
@@ -1163,6 +1170,10 @@ static void drawShadow(int i)
           GS_SETREG_RGBAQ(0, 18, 8, z > 0.0f ? 0x0c : 0x14, 0x00), 12);
     discN(b[i].x + 2.4f + z * 0.5f, b[i].y + 3.0f + z * 0.7f, R * (0.96f - z * 0.010f),
           GS_SETREG_RGBAQ(0, 14, 6, z > 0.0f ? 0x16 : 0x24, 0x00), 12);
+#if BALL_3D
+    if (z <= 0.0f)                                    /* sombra de contato: nucleo escuro e apertado logo embaixo da bola */
+        discN(b[i].x + 1.3f, b[i].y + 2.0f, R * 0.62f, GS_SETREG_RGBAQ(0, 8, 3, 0x30, 0x00), 10);
+#endif
 }
 
 static u64 shadeA(const u8 *c, float f, int add, int a)
@@ -1429,6 +1440,9 @@ static void drawBallMesh(int id, float x, float y, float r)
 
     #if GFX_HQ
     discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 24);  /* borda suave */
+#if BALL_3D
+    discN(x, y, r * 1.07f, GS_SETREG_RGBAQ(0, 20, 10, 0x24, 0x00), 24);   /* halo de contorno: separa a bola do feltro */
+#endif
 #else
     discN(x, y, r * 1.03f, GS_SETREG_RGBAQ(10, 40, 25, 0x50, 0x00), 16);  /* borda suave */
 #endif
@@ -1442,8 +1456,15 @@ static void drawBallMesh(int id, float x, float y, float r)
             float vz = M[6]*p[0] + M[7]*p[1] + M[8]*p[2];
             float dif = vx * -0.42f + vy * 0.52f + vz * 0.74f;
             int cv;
+#if BALL_3D
+            {   /* luz envolvente (half-lambert): o degrade passa suave da luz para a sombra, sem corte duro; borda um pouco mais escura */
+                float wr = 0.5f + 0.5f * dif, wr2 = wr * wr, vzp = vz > 0.0f ? vz : 0.0f;
+                cv = (int)((0.36f + 0.92f * wr2 * (0.45f + 0.55f * wr)) * 128.0f * (0.84f + 0.16f * vzp));
+            }
+#else
             if (dif < 0) dif = 0;
             cv = (int)((0.38f + 0.68f * dif) * 150.0f * (0.78f + 0.22f * (vz > 0.0f ? vz : 0.0f)));   /* borda da bola mais escura = volume (sem desenhar nada a mais) */
+#endif
             if (cv > 255) cv = 255;
             sxp[a][c] = x + OX + vx * r;
             syp[a][c] = y + OY - vy * r;
@@ -1471,10 +1492,23 @@ static void drawBallMesh(int id, float x, float y, float r)
                     1, colr[a][c], colr[a+1][c+1], colr[a+1][c]);
         }
 
+#if BALL_3D
+    /* luz refletida do feltro na parte de baixo (a bola nunca fica preta do lado da sombra) */
+    if (r >= 7.0f) discN(x + r*0.36f, y + r*0.44f, r*0.34f, GS_SETREG_RGBAQ(gFelt[0] / 2 + 30, gFelt[1] / 2 + 60, gFelt[2] / 2 + 30, 0x1a, 0x00), 8);
+    /* brilho de verniz da luz (fixo na tela): halo largo, brilho alongado na diagonal da luz e ponto de luz */
+    discN(x - r*0.28f, y - r*0.30f, r*0.55f, GS_SETREG_RGBAQ(255, 255, 255, 0x0e, 0x00), 10);
+    discN(x - r*0.34f, y - r*0.37f, r*0.32f, GS_SETREG_RGBAQ(255, 255, 255, 0x26, 0x00), 8);
+    if (r >= 7.0f) {
+        discN(x - r*0.31f, y - r*0.34f, r*0.17f, GS_SETREG_RGBAQ(255, 255, 255, 0x40, 0x00), 6);
+        discN(x - r*0.40f, y - r*0.44f, r*0.15f, GS_SETREG_RGBAQ(255, 255, 255, 0x50, 0x00), 6);
+    }
+    discN(x - r*0.42f, y - r*0.46f, r*0.09f, GS_SETREG_RGBAQ(255, 255, 255, 0x80, 0x00), 4);
+#else
     /* brilho da luz (fixo na tela), em 3 camadas: halo suave, brilho e ponto de luz */
     discN(x - r*0.30f, y - r*0.32f, r*0.46f, GS_SETREG_RGBAQ(255, 255, 255, 0x16, 0x00), 8);
     discN(x - r*0.37f, y - r*0.39f, r*0.24f, GS_SETREG_RGBAQ(255, 255, 255, 0x40, 0x00), 6);
     discN(x - r*0.41f, y - r*0.44f, r*0.11f, GS_SETREG_RGBAQ(255, 255, 255, 0x80, 0x00), 4);
+#endif
 }
 
 static void drawBallAt(int i, float x, float y, float r)
@@ -4649,6 +4683,7 @@ static void drawTable(void)
     const TableDef *T = &TABLES[(tourney && tTable >= 0) ? tTable : tableSel];
     u64 w0 = shade(T->wood, 0.36f, 0), w1 = shade(T->wood, 0.80f, 0), w2 = shade(T->wood, 1.0f, 0);
     u64 whi = shade(T->wood, 1.28f, 14), wlo = shade(T->wood, 0.48f, 0), wgr = shade(T->wood, 0.42f, 0);
+    gFelt[0] = T->felt[0]; gFelt[1] = T->felt[1]; gFelt[2] = T->felt[2];   /* luz refletida das bolas */
     u64 ga = shade(T->wood, 0.90f, 0), gb = shade(T->wood, 1.10f, 5);
     int p, k;
     float x, y;
