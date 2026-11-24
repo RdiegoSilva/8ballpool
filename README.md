@@ -8,6 +8,7 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 ## Física nas bordas das caçapas (novo)
 As **pontas das tabelas** em volta de cada caçapa agora **colidem com a bola**: quando ela bate na ponta, rebate no ângulo certo (antes atravessava) e toca o som de tabela
 - **Visual no estilo 8 Ball Pool**: a **boca dos cantos abriu um pouco** (ponta da tabela de 13 para 18 px do canto), as pontas são **retas, cortadas na diagonal**, os buracos ficaram **menores** (canto 13,5; meio 14) e o do canto **sem a chapa prateada** (direto na madeira). Desenho e física usam o mesmo valor, então a bola bate exatamente onde a tabela termina
+- Vale para **todas as mesas, com e sem efeitos** (o desenho das caçapas e tabelas é comum a todas). A Pool Azul perdeu as chapas de metal e o aro prateado dos buracos, e a prévia do menu também ficou sem o aro prateado
 - São 12 pontas (2 por caçapa). Tacada que só roça a ponta rebate; bola bem na boca entra. Com 22 e 30 px o canto ficava aberto demais
 - Ajustes no `main.c` (perto de `jawHit()`): `PK_TIP` (maior = canto mais aberto), `KN_R` (ponta mais gorda = mais difícil), `KN_E` (quique) e `KN_FT` (atrito de lado). `KN_ON 0` desliga a colisão. O tamanho do buraco é `PR[]`
 - Com o poder **CHAMINE** a colisão das pontas fica desligada. Funções: `knuckleHit()` e `pocketKnuckles()`

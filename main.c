@@ -4340,12 +4340,7 @@ static void tableDecoPool(int stage)
             disc(TX0 - 18.5f, y + 6.5f, 0.9f, CA(255, 120, 130, 0x40));
             disc(TX1 + 18.5f, y + 6.5f, 0.9f, CA(255, 120, 130, 0x40));
         }
-        for (k = 0; k < 4; k++) {                                                                      /* placas metalicas escuras nos cantos */
-            float cx = (k & 1) ? TX1 + 15.0f : TX0 - 15.0f, cy = (k & 2) ? TY1 + 15.0f : TY0 - 15.0f;
-            discN(cx, cy, 15.0f, COL(34, 36, 42), 16);
-            discN(cx, cy, 13.2f, COL(78, 82, 92), 16);
-            discN(cx - 1.0f, cy - 1.2f, 10.5f, COL(48, 50, 58), 16);
-        }
+        /* sem placas metalicas nos cantos: o buraco e igual ao das outras mesas (direto na madeira) */
     } else if (stage == 1) {
         for (k = 0; k < 7; k++)                                                                        /* luz de cima: centro mais claro */
             rect(TX0 + 70.0f + k * 24.0f, TY0 + 30.0f + k * 14.0f, TX1 - 70.0f - k * 24.0f, TY1 - 30.0f - k * 14.0f, CA(150, 225, 255, 0x07));
@@ -4360,10 +4355,7 @@ static void tableDecoPool(int stage)
         line(TCX + cm, TY1 - 0.5f, TX1 - ce, TY1 - 0.5f, hi);
         line(TX0 + 0.5f, TY0 + ce, TX0 + 0.5f, TY1 - ce, hi);
         line(TX1 - 0.5f, TY0 + ce, TX1 - 0.5f, TY1 - ce, hi);
-        for (k = 0; k < 6; k++) {                                                                      /* aro prateado nas cacapas */
-            ring(PX[k], PY[k], PR[k] + 2.4f, COL(168, 174, 188));
-            ring(PX[k], PY[k], PR[k] + 3.4f, COL(70, 74, 84));
-        }
+        /* sem aro prateado nas cacapas (igual as outras mesas) */
         line(HEADX, TY0, HEADX, TY1, CA(200, 240, 255, 0x46));                                         /* linha da cabeceira bem visivel */
     }
 }
@@ -4606,7 +4598,6 @@ static void drawTablePreview(float cx, float cy, float w, const TableDef *T)
         rect(x1 + o - 1, y0 + dy - 1, x1 + o + 1, y0 + dy + 1, dia);
     }
     for (i = 0; i < 6; i++) {                          /* cacapas */
-        discN(qx[i], qy[i], pk + 1.8f, COL(110,114,122), 12);
         discN(qx[i], qy[i], pk + 0.9f, COL(36,38,44), 12);
         discN(qx[i], qy[i], pk, COL(2,2,4), 12);
     }
