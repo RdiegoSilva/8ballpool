@@ -5,6 +5,16 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
+## Modo PAR OU IMPAR (novo)
+Novo modo de jogo em **JOGAR > MODO > PAR OU IMPAR** (e no torneio/versus, como os outros modos). Usa as bolas **2 a 15** (a bola 1 não entra): **pares** (2, 4, 6, 8, 10, 12, 14) contra **ímpares** (3, 5, 7, 9, 11, 13, 15). Os grupos já vêm definidos: o jogador 1 joga com os pares e o jogador 2 com os ímpares. A **bola 8 é uma bola par comum** (não é a bola final) e **não existe bola preta**.
+- **Vence** quem encaçapar todas as bolas do seu grupo primeiro. Encaçapou uma bola sua sem falta, joga de novo
+- **Falta** (tocar primeiro numa bola do adversário ou não tocar em nenhuma): perde a vez e o adversário **tira uma das próprias bolas da mesa** antes de jogar (mesma tela de escolha do modo brasileiro). Na **quebra** vale qualquer bola, então não há falta por bola errada
+- **Suicídio** (branca na caçapa): também passa a vez e o adversário tira uma bola sua. A branca **volta da saída** (cabeceira, sem bola na mão): não dá para colocá-la onde quiser
+- Encaçapar a **última bola do seu grupo com falta** é derrota
+- Fica em `rackPI()` (triângulo de 14 bolas), `resolvePI()` (regras) e `ballGroup()` no `main.c`. A macro `IS8(k)` desliga os tratamentos especiais da bola 8 neste modo (BOT incluído); `APEX` é a bola da ponta do triângulo na quebra
+- O HUD mostra PARES/IMPARES com as 7 bolas de cada lado, e o cartão do modo ganhou um ícone com duas bolas. Os cartões de modo ficaram um pouco mais estreitos (68 px) para caberem 7
+- **Não foi compilado nem testado no PS2**, só conferida a sintaxe e a lógica no PC. As prévias de mesa dos menus ainda mostram o triângulo de 15 bolas
+
 ## Câmera 3D com perspectiva (novo)
 O jogo todo da mesa passou a ser visto de uma **câmera inclinada (75°)**, em perspectiva: o lado de longe fica menor (80%) e o de perto maior, e a mesa aparece como um trapézio, com a **frente do corpo da mesa** embaixo da moldura.
 - Vale para **tudo que está na mesa**: moldura, feltro, tabelas, caçapas, diamantes, **bolas**, sombras, **taco**, **linha de mira**, marca do pulo e todos os efeitos das habilidades e das mesas especiais (ondas, aros, partículas, cova do Coveiro etc.). O replay e o MODO TREINO usam a mesma câmera

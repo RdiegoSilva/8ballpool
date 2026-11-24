@@ -46,8 +46,12 @@
 #define OLD_FRIC_C 24.0f
 
 enum { S_MENU, S_AIM, S_ROLL, S_PLACE, S_OVER, S_STRIKE, S_CUES, S_CREDITS, S_SETUP, S_NAME, S_TAKE, S_PLAYER, S_OPTS, S_BRACKET, S_REWIND, S_SHOP, S_REPLAY, S_VS };
-enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
-static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA", "BOLA 8 MINI", "MORTE SUBITA", "CORRIDA DE 3", "BOLA 8 DUELO" };
+enum { GM_8BALL, GM_BR, GM_MINI, GM_SUDDEN, GM_RACE, GM_DUEL, GM_PARIMPAR, NGM };            /* modos de sinuca (MINI e MORTE SUBITA usam as regras da bola 8) */
+/* PAR OU IMPAR: bolas 2 a 15 (sem a 1). Pares (2,4,...,14) x Impares (3,5,...,15); a 8 e uma bola par comum (nao e a bola final).
+   IS8(k): "k e a bola 8 especial (a final)?" - sempre 0 neste modo */
+#define IS8(k) ((k) == 8 && gmode != GM_PARIMPAR)
+#define APEX   (gmode == GM_PARIMPAR ? 2 : 1)           /* bola da ponta do triangulo (a quebra mira nela) */
+static const char *GMN[NGM] = { "BOLA 8", "SINUCA BRASILEIRA", "BOLA 8 MINI", "MORTE SUBITA", "CORRIDA DE 3", "BOLA 8 DUELO", "PAR OU IMPAR" };
 
 typedef struct { float x, y, vx, vy; int in; float z, vz; } Ball;   /* z/vz: altura no pulo */
 
@@ -1738,7 +1742,11 @@ static void repUpdate(int pressed)                    /* 1 passo do replay (esta
 }
 
 /* ---------- logica ---------- */
-static int ballGroup(int i) { return i == 0 ? -1 : (i == 8 ? 2 : (i < 8 ? 0 : 1)); }
+static int ballGroup(int i)
+{
+    if (gmode == GM_PARIMPAR) return i == 0 ? -1 : (i == 1 ? 2 : (i & 1));   /* pares = grupo 0, impares = grupo 1 */
+    return i == 0 ? -1 : (i == 8 ? 2 : (i < 8 ? 0 : 1));
+}
 
 static int countGroup(int gr)
 {
@@ -1767,7 +1775,7 @@ static int callPk = -1, callManual = 0, callAnn = 0, callShotPk = -1, pk8 = -1; 
 static const char *const PK_NAME[6] = { "CIMA ESQUERDA", "CIMA MEIO", "CIMA DIREITA", "BAIXO ESQUERDA", "BAIXO MEIO", "BAIXO DIREITA" };
 static int eightCall(void)       /* esta e a tacada da bola 8 numa partida contra o BOT MESTRE? */
 {
-    return mode == 0 && botLevel == 4 && gmode != GM_BR && grp[cur] >= 0 && b[8].in && countGroup(grp[cur]) == 0;
+    return mode == 0 && botLevel == 4 && gmode != GM_BR && gmode != GM_PARIMPAR && grp[cur] >= 0 && b[8].in && countGroup(grp[cur]) == 0;
 }
 static int eightBestPocket(void) /* cacapa mais alinhada com a linha branca -> 8 (padrao, ate o jogador escolher outra) */
 {
@@ -1854,6 +1862,23 @@ static void rackBR(void)
     }
 }
 
+/* PAR OU IMPAR: 14 bolas (2 a 15) no triangulo; so falta um lugar no canto de tras (a bola 1 nao existe) */
+static void rackPI(void)
+{
+    static const int order[14] = { 2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+    int i, r, c, k = 0;
+    memset(fallT, 0, sizeof(fallT));
+    for (i = 0; i < 16; i++) { b[i].vx = b[i].vy = 0; b[i].z = b[i].vz = 0; b[i].in = 0; resetOrient(i); }
+    b[0].in = 1; b[0].x = HEADX; b[0].y = TCY;
+    for (r = 0; r < 5 && k < 14; r++)
+        for (c = 0; c <= r && k < 14; c++) {
+            int id = order[k++];
+            b[id].in = 1;
+            b[id].x = FOOTX + r * (R * 1.76f);
+            b[id].y = TCY + (c - r * 0.5f) * (2 * R + 0.4f);
+        }
+}
+
 /* BOLA 8 MINI: 3 lisas, 3 listradas e a 8 (no meio) num triangulo pequeno */
 static void rackMini(void)
 {
@@ -1870,12 +1895,15 @@ static void rackMini(void)
     }
 }
 
+static int piFirst;                                  /* PAR OU IMPAR: a tacada de quebra ainda nao foi dada (nela nao ha falta por bola errada) */
 static void autoAim(void);
 static void newGame(int m)
 {
     char buf[40];
     mode = m;
+    piFirst = (gmode == GM_PARIMPAR);
     if (gmode == GM_BR) { rackBR(); grp[0] = 0; grp[1] = 1; }
+    else if (gmode == GM_PARIMPAR) { rackPI(); grp[0] = 0; grp[1] = 1; }
     else                { if (gmode == GM_MINI || gmode == GM_DUEL) rackMini(); else rack();   grp[0] = grp[1] = -1; }
     cur = 0; ang = 0; pwr = 0;
     charging = 0; breakShot = (gmode != GM_BR); botTimer = 0; botPlanned = 0; state = S_AIM;
@@ -1990,7 +2018,7 @@ static int graveFindRevive(void)                      /* bola do adversario enca
     if (og < 0 || og > 1) return -1;
     for (n = 1; n <= 32 && n <= potN; n++) {
         int id = potLog[(potN - n) & 31];
-        if (id > 0 && id != 8 && !b[id].in && ballGroup(id) == og) return id;
+        if (id > 0 && !IS8(id) && !b[id].in && ballGroup(id) == og) return id;
     }
     return -1;
 }
@@ -2266,7 +2294,7 @@ static void abilOnFirstHit(int j)
             if (bcs < ENTERRO_COS) ok = 0;
         }
         if (LOCKED(j)) { ok = 0; setmsg("BOLA PRESA: O ENTERRO NAO FUNCIONA"); }
-        else if (j == 8 && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
+        else if (IS8(j) && !(grp[cur] >= 0 && grp[cur] < 2 && countGroup(grp[cur]) == 0)) { ok = 0; setmsg("ENTERRO NAO FUNCIONA NA BOLA 8 AINDA"); }   /* nao enterra a 8 antes da hora (seria derrota) */
         else if (bd > ENTERRO_ALCANCE * ENTERRO_ALCANCE) { ok = 0; setmsg("ENTERRO: A BOLA ESTA LONGE DA CACAPA"); }
         else if (!ok) setmsg("ENTERRO: SEM CACAPA NA FRENTE DA BOLA");
         if (ok) {
@@ -2910,6 +2938,46 @@ static void resolveBR(void)
     endTurn(0, own);
 }
 
+/* regras do PAR OU IMPAR (pares 2,4,...,14 x impares 3,5,...,15):
+   - vence quem encacapar todas as bolas do seu grupo primeiro; encacapou uma sua sem falta, joga de novo
+   - a primeira bola tocada tem que ser do SEU grupo (na quebra vale qualquer uma); tocar na do adversario ou em nenhuma = FALTA
+   - FALTA: perde a vez e o adversario tira UMA DAS PROPRIAS bolas da mesa antes de jogar
+   - SUICIDIO (branca na cacapa): tambem passa a vez e o adversario tira uma bola sua; a branca volta da SAIDA (cabeceira), nao e bola na mao
+   - meteu a ultima bola do seu grupo COM falta: perde */
+static void resolvePI(void)
+{
+    int i, foul, own = 0, mine, theirs, saved = 0, brk = piFirst, suicide;
+    char buf[64];
+    overNote[0] = 0; piFirst = 0;
+    suicide = pocketed[0];
+    if (suicide && FORGIVE_ON(abilForgive)) {            /* PRESENTE / NOVA VIDA: salva do suicidio e devolve a branca a saida */
+        respot(0, HEADX, TCY); pocketed[0] = 0; saved = 1; suicide = 0;
+    }
+    foul = suicide || firstHit < 0 || (!brk && ballGroup(firstHit) != grp[cur]);
+    if (saved || (foul && FORGIVE_ON(abilForgive))) { foul = 0; abilForgive = 2; }       /* PRESENTE: perdoa a falta */
+    for (i = 1; i < 16; i++)
+        if (pocketed[i] && ballGroup(i) == grp[cur]) own = 1;
+    mine = countGroup(grp[cur]); theirs = countGroup(grp[1 - cur]);
+    if (foul && mine == 0) {                             /* meteu a ultima bola do grupo, mas com falta: perde mesmo assim */
+        strcpy(overNote, suicide ? "SUICIDIO - BRANCA NA CACAPA" : (firstHit < 0 ? "FALTA: NAO TOCOU EM NENHUMA BOLA" : "FALTA: BATEU NA BOLA DO ADVERSARIO"));
+        endGame(1 - cur);
+        return;
+    }
+    if (mine == 0 || theirs == 0) { endGame(theirs == 0 ? 1 - cur : cur); return; }
+    if (foul) {
+        if (suicide) respot(0, HEADX, TCY);              /* a branca volta da saida: nao pode ser colocada onde quiser */
+        cur = 1 - cur;
+        botTimer = 0; botPlanned = 0;
+        b[0].vx = b[0].vy = 0;
+        takeInit();
+        state = S_TAKE;
+        sprintf(buf, suicide ? "SUICIDIO! %s TIRA UMA BOLA" : "FALTA! %s TIRA UMA BOLA", pname(cur));
+        setmsg(buf);
+        return;
+    }
+    endTurn(0, own);
+}
+
 /* RESSUSCITAR: terminou a rodada fantasma; afasta as bolas que ficaram em cima da ressuscitada */
 static void ghostSettle(int g)
 {
@@ -2977,6 +3045,7 @@ static void resolve(void)
     ghostSettle(ghostBall); ghostBall = 0;            /* COVEIRO: a ressuscitada volta ao normal (so na proxima rodada ela tem fisica) */
     if (training) { resolveTrain(); return; }
     if (gmode == GM_BR) { resolveBR(); return; }
+    if (gmode == GM_PARIMPAR) { resolvePI(); return; }
 
     if (pocketed[8]) {
         int ok = gAtStart >= 0 && countGroup(gAtStart) == 0 && !pocketed[0];
@@ -3139,7 +3208,7 @@ static void botPlan(void)
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
         if (LOCKED(t)) continue;                  /* bola presa pelo policial: nao da para encacapar */
-        if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
+        if (IS8(t)) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
             float tx = b[t].x, ty = b[t].y, dx = PX[p]-tx, dy = PY[p]-ty;
@@ -3168,8 +3237,8 @@ static void botPlan(void)
         for (t = 1; t < 16; t++) {
             float dx, dy, d;
             if (!b[t].in) continue;
-            if (t == 8 && !(gr >= 0 && countGroup(gr) == 0)) continue;
-            if (gr >= 0 && t != 8 && ballGroup(t) != gr) continue;
+            if (IS8(t) && !(gr >= 0 && countGroup(gr) == 0)) continue;
+            if (gr >= 0 && !IS8(t) && ballGroup(t) != gr) continue;
             dx = b[t].x - cx; dy = b[t].y - cy; d = dx*dx + dy*dy;
             if (d < bd) { bd = d; botAng = atan2f(dy, dx); }
         }
@@ -5711,9 +5780,10 @@ static void drawPlayerPanel(int pl)
     float x1 = pl == 0 ? 70.0f : 354.0f, x2 = x1 + 216.0f, y1 = 4.0f, y2 = 48.0f;
     float ax1 = pl == 0 ? x1 + 4.0f : x2 - 44.0f, ax2 = ax1 + 40.0f, ay1 = y1 + 2.0f, ay2 = y2 - 2.0f, acx = (ax1 + ax2) * 0.5f;
     float c0 = pl == 0 ? ax2 + 8.0f : x1 + 8.0f, c1 = pl == 0 ? x2 - 8.0f : ax1 - 8.0f;
-    int act = (pl == cur), k, slots = gmode == GM_BR ? 4 : 8;
+    int act = (pl == cur), k, slots = gmode == GM_BR ? 4 : (gmode == GM_PARIMPAR ? 7 : 8);
     const char *nm = pname(pl);
     const char *gn = gmode == GM_BR ? BRC_NAME[colSel[pl]] :
+                     gmode == GM_PARIMPAR ? (grp[pl] == 0 ? "PARES" : "IMPARES") :
                      (grp[pl] < 0 ? (gmode == GM_RACE ? raceTxt(pl) : "MESA ABERTA") : (grp[pl] == 0 ? "LISAS" : "LISTRADAS"));
     u64 side = pl == 0 ? COL(80,140,225) : COL(225,90,92);
     float sp = (c1 - c0 - 14.0f) / (float)(slots - 1), bx0 = c0 + 7.0f, tx = c0;
@@ -5787,8 +5857,8 @@ static void drawPlayerPanel(int pl)
         }
         return;
     }
-    for (k = 0; k < slots - (gmode == GM_BR ? 0 : 1); k++) {
-        int id = grp[pl] == 0 ? k + 1 : k + 9;
+    for (k = 0; k < slots - (gmode == GM_BR || gmode == GM_PARIMPAR ? 0 : 1); k++) {
+        int id = gmode == GM_PARIMPAR ? (grp[pl] == 0 ? 2 + 2 * k : 3 + 2 * k) : (grp[pl] == 0 ? k + 1 : k + 9);
         float bx = bx0 + k * sp, by = y1 + 34.0f;
         if ((gmode == GM_MINI || gmode == GM_DUEL) && (id < 8 ? id : id - 8) > (gmode == GM_DUEL ? 2 : 3)) continue;
         discN(bx, by, 6.8f, COL(10,13,22), 12);
@@ -5796,7 +5866,7 @@ static void drawPlayerPanel(int pl)
         if (b[id].in) drawBallAt(id, bx, by, 5.4f);
         else discN(bx, by, 1.8f, CA(90, 100, 124, 0x50), 8);
     }
-    if (gmode != GM_BR && countGroup(grp[pl]) == 0) {   /* so falta a bola 8 */
+    if (gmode != GM_BR && gmode != GM_PARIMPAR && countGroup(grp[pl]) == 0) {   /* so falta a bola 8 */
         float bx = bx0 + 7 * sp, by = y1 + 34.0f;
         discN(bx, by, 6.8f, COL(10,13,22), 12);
         ring(bx, by, 6.8f, act ? COL(255,215,60) : COL(44,52,70));
@@ -7789,15 +7859,16 @@ static void mcIcon(int m, float cx, float cy)
         for (i = 0; i < 4; i++) for (j = 0; j < 3; j++)
             rect(cx - 8 + i * 4.5f, cy - 11 + j * 4.5f, cx - 8 + (i + 1) * 4.5f, cy - 11 + (j + 1) * 4.5f, ((i + j) & 1) ? COL(24, 24, 30) : COL(245, 245, 245));
         break;
+    case GM_PARIMPAR: mcBall(cx - 7.0f, cy, 6.0f, YEL, 0); mcBall(cx + 7.0f, cy, 6.0f, BLU, 1); break;   /* par x impar */
     default:        mcBall(cx - 7.0f, cy, 6.0f, BLU, 0); mcBall(cx + 7.0f, cy, 6.0f, ORA, 1); break;   /* duelo */
     }
 }
 
 static void drawModeCards(float y, int foc)
 {
-    static const char *const L1[NGM] = { "BOLA 8", "SINUCA", "BOLA 8", "MORTE", "CORRIDA", "BOLA 8" };
-    static const char *const L2[NGM] = { "CLASSICA", "BRASILEIRA", "MINI", "SUBITA", "DE 3", "DUELO" };
-    const float x0 = 68.0f, cw = 76.0f, gap = (504.0f - NGM * 76.0f) / (NGM - 1);
+    static const char *const L1[NGM] = { "BOLA 8", "SINUCA", "BOLA 8", "MORTE", "CORRIDA", "BOLA 8", "PAR OU" };
+    static const char *const L2[NGM] = { "CLASSICA", "BRASILEIRA", "MINI", "SUBITA", "DE 3", "DUELO", "IMPAR" };
+    const float x0 = 68.0f, cw = 68.0f, gap = (504.0f - NGM * 68.0f) / (NGM - 1);
     int m;
     char nb[40];
     if (foc) selBar(68, 572, y, 24);                                       /* titulo da linha, igual as outras: MODO ........ < NOME > */
@@ -7958,7 +8029,8 @@ static void drawSetupScreen(void)
     }
 
     if (v[setSel] == SR_MODE)
-        hint = gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA DAS SUAS. BRANCA NA CACAPA: PERDE"
+        hint = gmode == GM_PARIMPAR ? "PARES X IMPARES. ERROU OU BRANCA NA CACAPA: O OUTRO TIRA UMA DAS SUAS (A BRANCA VOLTA DA SAIDA)"
+             : gmode == GM_BR ? "4 BOLAS CADA. ERROU A SUA: O OUTRO TIRA UMA DAS SUAS. BRANCA NA CACAPA: PERDE"
              : (gmode == GM_MINI ? "BOLA 8 MINI: SO 3 LISAS, 3 LISTRADAS E A 8 - PARTIDA RAPIDA"
              : (gmode == GM_SUDDEN ? "MORTE SUBITA: QUEM ENCACAPAR A PRIMEIRA BOLA (SEM FALTA) GANHA. A 8 DERROTA"
              : (gmode == GM_RACE ? "CORRIDA DE 3: O PRIMEIRO A ENCACAPAR 3 BOLAS (SEM FALTA) GANHA. A 8 DERROTA"
@@ -9648,10 +9720,10 @@ static int hackSim(float a, float p, int safeOnly)
         st++;
     } while (mv && st < 420);
     sfxMute--;
-    legal = firstHit > 0 && (gr < 0 ? firstHit != 8 : (ballGroup(firstHit) == gr || (firstHit == 8 && gdone)));
+    legal = firstHit > 0 && (gr < 0 ? firstHit != 8 : (ballGroup(firstHit) == gr || (IS8(firstHit) && gdone)));
     for (i = 1; i < 16; i++)
-        if (pocketed[i] && (gr < 0 ? i != 8 : (ballGroup(i) == gr || (i == 8 && gdone)))) ownp = 1;
-    ok = legal && !pocketed[0] && (safeOnly || ownp) && !(pocketed[8] && !(gr >= 0 && gdone));
+        if (pocketed[i] && (gr < 0 ? i != 8 : (ballGroup(i) == gr || (IS8(i) && gdone)))) ownp = 1;
+    ok = legal && !pocketed[0] && (safeOnly || ownp) && !(pocketed[8] && gmode != GM_PARIMPAR && !(gr >= 0 && gdone));
     memcpy(b, sb, sizeof b); memcpy(pocketed, spk, sizeof pocketed); memcpy(fallT, sfT, sizeof fallT);
     memcpy(fallP, sfP, sizeof fallP); memcpy(fallX, sfX, sizeof fallX); memcpy(fallY, sfY, sizeof fallY);
     firstHit = sfh; spinCur = ssc; spinVCur = ssv; spinK = ssk; spinVK = ssvk; abilKind = sak; abilT = sat; fricMul = sfm;
@@ -9692,13 +9764,13 @@ static void hackSolve(void)
     hCandN = 0; hCandI = 0;
 
     if (breakShot) {                                         /* quebra: reto na bola da ponta do triangulo, forca total */
-        hCandAng[0] = atan2f(b[1].y - cy, b[1].x - cx); hCandPow[0] = 1.0f; hCandSc[0] = 0.0f; hCandN = 1;
+        hCandAng[0] = atan2f(b[APEX].y - cy, b[APEX].x - cx); hCandPow[0] = 1.0f; hCandSc[0] = 0.0f; hCandN = 1;
         return;
     }
     for (t = 1; t < 16; t++) {
         if (!b[t].in) continue;
         if (LOCKED(t)) continue;                  /* bola presa pelo policial: nao da para encacapar */
-        if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
+        if (IS8(t)) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
         else if (gr >= 0 && ballGroup(t) != gr) continue;
         for (p = 0; p < 6; p++) {
             float tx = b[t].x, ty = b[t].y, dx = PX[p] - tx, dy = PY[p] - ty;
@@ -9739,7 +9811,7 @@ static void hackSolve(void)
     if (hCandN < 6) {                                                       /* poucas tacadas diretas: tenta tacadas de TABELA (1 rebote) */
         for (t = 1; t < 16; t++) {
             if (!b[t].in || LOCKED(t)) continue;
-            if (t == 8) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
+            if (IS8(t)) { if (!(gr >= 0 && countGroup(gr) == 0)) continue; }
             else if (gr >= 0 && ballGroup(t) != gr) continue;
             for (p = 0; p < 6; p++) {
                 int w;
@@ -9806,8 +9878,8 @@ static void hackSolve(void)
         for (t = 1; t < 16; t++) {
             float dx, dy, d;
             if (!b[t].in) continue;
-            if (t == 8 && !(gr >= 0 && countGroup(gr) == 0)) continue;
-            if (gr >= 0 && t != 8 && ballGroup(t) != gr) continue;
+            if (IS8(t) && !(gr >= 0 && countGroup(gr) == 0)) continue;
+            if (gr >= 0 && !IS8(t) && ballGroup(t) != gr) continue;
             if (gr < 0 && t == 8) continue;
             dx = b[t].x - cx; dy = b[t].y - cy; d = sqrtf(dx * dx + dy * dy);
             bd[n] = d + (pathClear(cx, cy, b[t].x, b[t].y, t) ? 0.0f : 400.0f);   /* prefere bola com caminho livre */
