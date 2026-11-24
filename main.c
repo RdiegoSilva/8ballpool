@@ -404,6 +404,17 @@ static void quad(float x1, float y1, float x2, float y2,
     gsKit_prim_triangle(g, x1+OX, y1+OY, x3+OX, y3+OY, x4+OX, y4+OY, 1, c);
 }
 
+/* ---- upgrade grafico: degrades (gouraud) e cantos arredondados. GFX_ROUND 0 volta ao visual antigo (mais leve) ---- */
+#ifndef GFX_ROUND
+#define GFX_ROUND 1
+#endif
+static void gradQ(float x1, float y1, float x2, float y2, u64 ctl, u64 ctr, u64 cbl, u64 cbr)
+{ gsKit_prim_quad_gouraud(g, x1+OX, y1+OY, x2+OX, y1+OY, x1+OX, y2+OY, x2+OX, y2+OY, 1, ctl, ctr, cbl, cbr); }
+static void gradV(float x1, float y1, float x2, float y2, u64 top, u64 bot) { gradQ(x1, y1, x2, y2, top, top, bot, bot); }
+static void gradH(float x1, float y1, float x2, float y2, u64 lf, u64 rt) { gradQ(x1, y1, x2, y2, lf, rt, lf, rt); }
+static void triG(float x1, float y1, float x2, float y2, float x3, float y3, u64 c1, u64 c2, u64 c3)
+{ gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3); }
+
 static void ring(float cx, float cy, float r, u64 c)
 {
     int i, n = 16;
@@ -5229,6 +5240,21 @@ static void cham(float x1, float y1, float x2, float y2, float c, u64 col)
     rect(x1 + c, y1, x2 - c, y1 + c, col);
     rect(x1, y1 + c, x2, y2 - c, col);
     rect(x1 + c, y2 - c, x2 - c, y2, col);
+#if GFX_ROUND
+    {   /* cantos arredondados: 2 triangulos por canto (arco de 90 graus em 2 passos) */
+        const float k = 0.7071f;
+        float cx[4] = { x1 + c, x2 - c, x1 + c, x2 - c }, cy[4] = { y1 + c, y1 + c, y2 - c, y2 - c };
+        float sx[4] = { -1, 1, -1, 1 }, sy[4] = { -1, -1, 1, 1 };
+        int i;
+        for (i = 0; i < 4; i++) {
+            float ax = cx[i] + sx[i] * c, ay = cy[i];
+            float bx = cx[i] + sx[i] * c * k, by = cy[i] + sy[i] * c * k;
+            float ex = cx[i], ey = cy[i] + sy[i] * c;
+            tri(cx[i], cy[i], ax, ay, bx, by, col);
+            tri(cx[i], cy[i], bx, by, ex, ey, col);
+        }
+    }
+#endif
 }
 
 /* caixa do HUD: sombra, borda, vidro escuro em degrade, brilho no topo e cantos chanfrados */
@@ -5239,10 +5265,14 @@ static void hbox(float x1, float y1, float x2, float y2, u64 border, u64 fill)
     cham(x1 - 1.0f, y1 - 1.0f, x2 + 3.0f, y2 + 3.0f, c + 1.0f, GS_SETREG_RGBAQ(0, 0, 0, 0x14, 0x00));
     cham(x1 - 1.5f, y1 - 1.5f, x2 + 1.5f, y2 + 1.5f, c + 1.5f, border);
     cham(x1, y1, x2, y2, c, fill);
+#if GFX_ROUND
+    (void)k; gradV(x1, y1 + c, x2, y2 - c, CA(255, 255, 255, 0x0c), CA(0, 0, 0, 0x1c));   /* degrade suave */
+#else
     for (k = 0; k < 4; k++) {                            /* degrade: mais claro em cima, escuro embaixo */
         float ya = y1 + c + (h - 2 * c) * k / 4.0f, yb = y1 + c + (h - 2 * c) * (k + 1) / 4.0f;
         rect(x1, ya, x2, yb, k < 2 ? CA(255, 255, 255, 0x08 - k * 3) : CA(0, 0, 0, 0x06 + (k - 2) * 8));
     }
+#endif
     cham(x1, y1, x2, y2, c, CA(84, 40, 160, 0x1c));       /* verniz roxo (combina com os menus) */
     rect(x1 + c, y1, x2 - c, y1 + 1.0f, CA(255, 255, 255, 0x2c));
     rect(x1 + c, y2 - 1.0f, x2 - c, y2, CA(0, 0, 0, 0x30));
@@ -5656,10 +5686,6 @@ static void drawHUD(void)
 static void tri(float x1, float y1, float x2, float y2, float x3, float y3, u64 c)
 { gsKit_prim_triangle(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c); }
 
-/* triangulo com degrade (cada vertice com a sua cor): da volume aos personagens sem gastar mais primitivas */
-static void triG(float x1, float y1, u64 c1, float x2, float y2, u64 c2, float x3, float y3, u64 c3)
-{ gsKit_prim_triangle_gouraud(g, x1+OX, y1+OY, x2+OX, y2+OY, x3+OX, y3+OY, 1, c1, c2, c3); }
-
 /* ---------- caricaturas (10 personagens, desenhadas com formas) ---------- */
 #define NCHARS 18
 #define CPI 3.14159265f
@@ -5728,50 +5754,22 @@ static int cMood, cT, cFull, cBlink;
 #define LZ(v) ((v) * cS)
 static void setHead(int on) { cX = cX0 + (on ? cHX * cS : 0.0f); cY = cY0 + (on ? cHY * cS : 0.0f); }
 
-/* QUALIDADE DOS PERSONAGENS: CHAR_SHADE 1 = formas com degrade (luz de cima/esquerda: centro claro, borda escura);
-   CHAR_AA 1 = contorno suave (linhas antisserrilhadas) nas bordas das formas. 0 volta ao visual chapado de antes. */
-#ifndef CHAR_SHADE
-#define CHAR_SHADE 1
-#endif
-#ifndef CHAR_AA
-#define CHAR_AA 1
-#endif
-#define SH_LIT  0.16f      /* quanto o centro clareia */
-#define SH_DARK 0.80f      /* quanto a borda escurece (multiplicador) */
-static void aaOn(void)  { g->PrimAAEnable = GS_SETTING_ON; }
-/* durante a partida (retratos pequenos do HUD) o contorno suave fica desligado para segurar os 60 FPS; nos menus, VS e selecao fica ligado */
-#define AA_NOW (state != S_AIM && state != S_ROLL && state != S_PLACE && state != S_STRIKE && state != S_TAKE && state != S_REWIND)
-static void aaOff(void) { g->PrimAAEnable = GS_SETTING_OFF; }
-
 static void lE(float x, float y, float rx, float ry, PRgb c)
 {
-    int i, n = (rx * cS > 7.0f || ry * cS > 7.0f) ? 20 : ((rx * cS > 3.5f || ry * cS > 3.5f) ? 12 : 8);   /* mais lados nas formas grandes: a silhueta deixa de parecer poligono */
+    int i, n = (rx * cS > 7.0f || ry * cS > 7.0f) ? 14 : 8;
     const float *t = circ(n);
     u64 col = RCOL(c);
-#if CHAR_SHADE
-    if (rx * cS > 3.2f && ry * cS > 3.2f && c.a >= 0x70) {         /* formas grandes e opacas: degrade */
-        PRgb hi = rmix(c, PRGB(255, 250, 240), SH_LIT), lo = rdk(c, SH_DARK);
-        u64 cH = RCOL(hi), cL = RCOL(lo);
-        float hx = x - rx * 0.22f, hy = y - ry * 0.28f;               /* ponto de luz um pouco acima e a esquerda */
+#if GFX_ROUND
+    if (rx * cS > 2.5f || ry * cS > 2.5f) {      /* esfera: luz vindo de cima-esquerda, centro claro e borda escura */
+        u64 cc = RCOL(rdk(c, 1.10f)), cv[17];
+        for (i = 0; i <= n; i++) cv[i] = RCOL(rdk(c, 0.94f + 0.12f * (-0.55f * t[2*i] - 0.85f * t[2*i+1])));
         for (i = 0; i < n; i++)
-            triG(LX(hx), LY(hy), cH,
-                 LX(x + t[2*i] * rx),       LY(y + t[2*i+1] * ry),       cL,
-                 LX(x + t[2*i+2] * rx),     LY(y + t[2*i+3] * ry),       cL);
-    } else
-#endif
-    {
-        for (i = 0; i < n; i++)
-            tri(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), col);
-    }
-#if CHAR_AA
-    if (AA_NOW && c.a >= 0x70 && rx * cS > 3.0f) {                 /* contorno suave com a cor da forma (um pouco mais escura) */
-        u64 ec = RCOL(rdk(c, 0.88f));
-        aaOn();
-        for (i = 0; i < n; i++)
-            line(LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), ec);
-        aaOff();
+            triG(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), cc, cv[i], cv[i+1]);
+        return;
     }
 #endif
+    for (i = 0; i < n; i++)
+        tri(LX(x), LY(y), LX(x + t[2*i] * rx), LY(y + t[2*i+1] * ry), LX(x + t[2*i+2] * rx), LY(y + t[2*i+3] * ry), col);
 }
 static void lD(float x, float y, float r, PRgb c) { lE(x, y, r, r, c); }
 static void lB(float x1, float y1, float x2, float y2, float w, PRgb c) { beam(LX(x1), LY(y1), LX(x2), LY(y2), LZ(w), RCOL(c)); }
@@ -5786,39 +5784,28 @@ static void lP(const float *p, int n, PRgb c, int mir)
     float mx = 0.0f, my = 0.0f;
     int i, m;
     u64 col = RCOL(c);
-#if CHAR_SHADE
-    int useGrad = (c.a >= 0x70);                                        /* so formas opacas ganham degrade (sombras/brilhos translucidos ficam como estao) */
-    u64 cH = RCOL(rmix(c, PRGB(255, 250, 240), SH_LIT * 0.8f)), cL = RCOL(rdk(c, 0.86f));
-#endif
-    for (i = 0; i < n; i++) { mx += p[2*i]; my += p[2*i+1]; }
+    float y0 = 1e9f, y1 = -1e9f;
+    for (i = 0; i < n; i++) { mx += p[2*i]; my += p[2*i+1]; if (p[2*i+1] < y0) y0 = p[2*i+1]; if (p[2*i+1] > y1) y1 = p[2*i+1]; }
     mx /= n; my /= n;
     for (m = 0; m <= mir; m++) {
         float sg = m ? -1.0f : 1.0f;
         for (i = 0; i < n; i++) {
             int j = (i + 1) % n;
             float yi = p[2*i+1] > cYMax ? cYMax : p[2*i+1], yj = p[2*j+1] > cYMax ? cYMax : p[2*j+1];      /* busto: barbas e mantos cortam em cYMax */
-            float cy0 = my > cYMax ? cYMax : my;
-#if CHAR_SHADE
-            if (useGrad) {
-                triG(LX(sg * mx), LY(cy0), cH, LX(sg * p[2*i]), LY(yi), cL, LX(sg * p[2*j]), LY(yj), cL);
-                continue;
+#if GFX_ROUND
+            {   /* volume: claro em cima, escuro embaixo, centro um pouco mais claro */
+                float hh = (y1 - y0) > 0.01f ? (y1 - y0) : 1.0f;
+                u64 cm = RCOL(rdk(c, 1.06f));
+                u64 ci = RCOL(rdk(c, 1.08f - 0.24f * (p[2*i+1] - y0) / hh));
+                u64 cj = RCOL(rdk(c, 1.08f - 0.24f * (p[2*j+1] - y0) / hh));
+                triG(LX(sg * mx), LY(my > cYMax ? cYMax : my), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), cm, ci, cj);
             }
+#else
+            tri(LX(sg * mx), LY(my > cYMax ? cYMax : my), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), col);
 #endif
-            tri(LX(sg * mx), LY(cy0), LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), col);
         }
-#if CHAR_AA
-        if (AA_NOW && c.a >= 0x70) {                                  /* contorno suave so no limite da forma */
-            u64 ec = RCOL(rdk(c, 0.90f));
-            aaOn();
-            for (i = 0; i < n; i++) {
-                int j = (i + 1) % n;
-                float yi = p[2*i+1] > cYMax ? cYMax : p[2*i+1], yj = p[2*j+1] > cYMax ? cYMax : p[2*j+1];
-                line(LX(sg * p[2*i]), LY(yi), LX(sg * p[2*j]), LY(yj), ec);
-            }
-            aaOff();
-        }
-#endif
     }
+    (void)col;
 }
 #define POLY(c, mir, ...) do { const float _p[] = { __VA_ARGS__ }; lP(_p, (int)(sizeof(_p) / sizeof(_p[0]) / 2), c, mir); } while (0)
 
@@ -5831,10 +5818,20 @@ static void headR(PRgb sk, float jaw)
         float j = jaw;
         float p[] = { 0.0f, -11.2f, 6.0f, -10.2f, 9.0f, -5.5f, 9.4f, 0.0f, 8.2f * 1, 5.5f, 5.2f * j, 9.8f, 0.0f, 11.4f,
                       -5.2f * j, 9.8f, -8.2f, 5.5f, -9.4f, 0.0f, -9.0f, -5.5f, -6.0f, -10.2f };
+#if GFX_ROUND
+        {   /* contorno escuro suave (cabeca ligeiramente maior atras) */
+            float q[24]; int i;
+            for (i = 0; i < 12; i++) { q[2*i] = p[2*i] * 1.07f; q[2*i+1] = p[2*i+1] * 1.06f; }
+            lP(q, 12, ral(rdk(sk, 0.32f), 0x70), 0);
+        }
+#endif
         lP(p, 12, sk, 0);
     }
     POLY(ral(d, 0x58), 0, 3.0f, -10.4f, 9.0f, -5.5f, 9.4f, 0.0f, 8.2f, 5.5f, 5.0f, 9.8f, 1.8f, 11.2f, 3.4f, 4.0f, 2.4f, -3.0f);   /* lado da sombra */
     lE(-3.5f, -6.5f, 3.4f, 1.8f, ral(l, 0x40));                                          /* brilho da testa */
+#if GFX_ROUND
+    lE(-5.6f, 4.2f, 2.5f, 1.6f, PRGBA(235, 105, 105, 0x1c)); lE(5.6f, 4.2f, 2.5f, 1.6f, PRGBA(235, 105, 105, 0x1c));   /* bochechas */
+#endif
 }
 
 static void eyesR(float ey, float dx, float w, PRgb iris, PRgb lid)
@@ -5847,6 +5844,9 @@ static void eyesR(float ey, float dx, float w, PRgb iris, PRgb lid)
         lE(ex, ey, w, w * 0.46f * sq, PRGB(238, 236, 232));
         lD(ex + k * -0.2f, ey + lk * 0.3f, w * 0.48f * sq + 0.2f, iris);
         lD(ex + k * -0.2f, ey + lk * 0.3f, w * 0.22f, PRGB(10, 8, 8));
+#if GFX_ROUND
+        lD(ex + k * -0.2f + w * 0.16f, ey + lk * 0.3f - w * 0.14f, w * 0.12f, PRGBA(255, 255, 255, 0x78));   /* brilho no olho */
+#endif
         lB(ex - w * 1.05f, ey - w * 0.42f * sq, ex + w * 1.05f, ey - w * 0.5f * sq, 1.0f, lid);       /* palpebra superior */
         lB(ex - w * 0.8f, ey + w * 0.5f * sq, ex + w * 0.8f, ey + w * 0.5f * sq, 0.5f, ral(rdk(lid, 0.9f), 0x50));
     }
@@ -5901,11 +5901,19 @@ static void bodyR(PRgb top, PRgb topD, PRgb pants, PRgb shoe, PRgb skin, float b
     if (!cFull) {                                                                 /* busto: ombros inclinados, sem bracos */
         float p[] = { -9.0f, shy - 2.0f, -15.0f * bb, shy - 0.5f, -19.5f * bb, shy + 4.0f, -20.0f * bb, hy + 2.0f, 20.0f * bb, hy + 2.0f, 19.5f * bb, shy + 4.0f, 15.0f * bb, shy - 0.5f, 9.0f, shy - 2.0f };
         float q[] = { 4.0f, shy - 1.5f, 15.0f * bb, shy - 0.5f, 19.5f * bb, shy + 4.0f, 20.0f * bb, hy + 2.0f, 5.0f, hy + 2.0f };
+#if GFX_ROUND
+        {   float o[16]; int i; for (i = 0; i < 8; i++) { o[2*i] = p[2*i] * 1.06f; o[2*i+1] = p[2*i+1] - 1.0f; }
+            lP(o, 8, ral(rdk(top, 0.3f), 0x70), 0); }
+#endif
         lP(p, 8, top, 0); lP(q, 5, ral(topD, 0x60), 0);
         return;
     }
     {
         float p[] = { -17.5f * bb, shy + 1.0f, -9.0f, shy - 2.0f, 9.0f, shy - 2.0f, 17.5f * bb, shy + 1.0f, 13.0f * bb, hy, -13.0f * bb, hy };
+#if GFX_ROUND
+        {   float o[12]; int i; for (i = 0; i < 6; i++) { o[2*i] = p[2*i] * 1.07f; o[2*i+1] = p[2*i+1] + (i < 2 || i > 3 ? -1.0f : 1.2f); }
+            lP(o, 6, ral(rdk(top, 0.3f), 0x70), 0); }
+#endif
         lP(p, 6, top, 0);
         {   float q[] = { 4.0f, shy - 1.5f, 17.5f * bb, shy + 1.0f, 13.0f * bb, hy, 5.0f, hy };
             lP(q, 4, ral(topD, 0x60), 0); }
@@ -5936,6 +5944,9 @@ static void personBegin(int full, float cx, float cy, float s, int mood, int t)
     cHY = (mood == 2 ? 2.6f : (mood == 1 ? -0.8f : 0.0f)) + br * 0.25f;
     cBlink = (t % 230) > 223;
     setHead(0);
+#if GFX_ROUND
+    if (full) { lE(0.0f, 115.0f, 17.0f, 4.0f, PRGBA(0, 0, 0, 0x16)); lE(0.0f, 115.0f, 11.0f, 2.6f, PRGBA(0, 0, 0, 0x16)); }   /* sombra no chao */
+#endif
 }
 
 /* rosto padrao: cranio, olhos, sobrancelhas, nariz e boca */
@@ -5953,13 +5964,6 @@ static void drawChar(int id, float cx, float cy, float s, int mood, int t, int f
     int k, q;
     PRgb K = PRGB(18, 18, 22), WH = PRGB(236, 234, 228), GOLD = PRGB(206, 168, 66), LEA = PRGB(78, 52, 34);
     personBegin(full, cx, cy, s, mood, t);
-#if CHAR_SHADE
-    if (full) {                                                      /* sombra suave embaixo dos pes */
-        int sk2;
-        for (sk2 = 0; sk2 < 3; sk2++)
-            lE(0.0f, 116.0f, 24.0f - sk2 * 6.0f, 5.0f - sk2 * 1.2f, PRGBA(0, 0, 0, 0x16 + sk2 * 0x0c));
-    }
-#endif
     switch (((id % NCHARS) + NCHARS) % NCHARS) {
     case 2: {   /* PIRATA */
         PRgb sk = PRGB(204, 152, 112), coat = PRGB(112, 40, 42), coatD = PRGB(70, 24, 28), hat = PRGB(30, 27, 32), hr = PRGB(52, 36, 28);
@@ -6538,11 +6542,25 @@ static void palmTree(float x, float h, float lean)         /* silhueta de palmei
         tri(tx, ty, tx + FX[k] * 0.55f + sw, ty + FY[k] * 0.55f - 9.0f, tx + FX[k] + sw, ty + FY[k] + 9.0f, c);
 }
 
+#if GFX_ROUND
+static u64 skyCol(float f)
+{
+    int r, gg, bl;
+    if (f < 0.55f) { float u = f / 0.55f; r = 54 + (int)(150 * u); gg = 20 + (int)(30 * u); bl = 100 + (int)(10 * u); }
+    else           { float u = (f - 0.55f) / 0.45f; r = 204 + (int)(51 * u); gg = 50 + (int)(100 * u); bl = 110 - (int)(40 * u); }
+    return COL(r, gg, bl);
+}
+#endif
 static void drawBackdropEx(int withBalls)
 {
     int k, i, layer;
     /* ceu do por do sol: roxo -> rosa -> laranja */
+#if GFX_ROUND
+    for (k = 0; k < 17; k++) gradV(0, k * 16.0f, 640, k * 16.0f + 16.5f, skyCol(k / 16.0f), skyCol((k + 1) / 16.0f));
+    for (k = 17; k < 0; k++) {
+#else
     for (k = 0; k < 17; k++) {
+#endif
         float f = k / 16.0f;
         int r, gg, bl;
         if (f < 0.55f) { float u = f / 0.55f; r = 54 + (int)(150 * u); gg = 20 + (int)(30 * u); bl = 100 + (int)(10 * u); }
@@ -6576,7 +6594,12 @@ static void drawBackdropEx(int withBalls)
     for (i = 0; i < 8; i++) { float cx = 40.0f + i * 80.0f; quad(cx, 271, cx + 4, 274, cx, 277, cx - 4, 274, COL(235, 200, 110)); }
     for (k = 0; k < 11; k++) {
         float u = k / 10.0f, y = 281.0f + k * 16.0f;
+#if GFX_ROUND
+        float u2 = (k + 1) / 10.0f;
+        gradV(0, y, 640, y + 16.5f, COL(24 - (int)(18 * u), 160 - (int)(90 * u), 178 - (int)(86 * u)), COL(24 - (int)(18 * u2), 160 - (int)(90 * u2), 178 - (int)(86 * u2)));
+#else
         rect(0, y, 640, y + 17.0f, COL(24 - (int)(18 * u), 160 - (int)(90 * u), 178 - (int)(86 * u)));
+#endif
     }
     for (k = 0; k < 2; k++) discN(320.0f, 370.0f, 300.0f - k * 90.0f, CA(120, 235, 240, 0x08), 30);   /* luz sobre o feltro */
     for (k = 0; withBalls && k < NMB; k++) {                         /* bolas rolando na mesa */
@@ -6605,9 +6628,13 @@ static void panel(float x1, float y1, float x2, float y2)
     cham(x1 - 2.5f, y1 - 2.5f, x2 + 2.5f, y2 + 2.5f, 6.5f, CA(255, 205, 60, 0x88));            /* borda dourada */
     cham(x1 - 1.0f, y1 - 1.0f, x2 + 1.0f, y2 + 1.0f, 5.5f, COL(22, 12, 46));                   /* aro escuro */
     rect(x1 + c, y1, x2 - c, y1 + c, CA(52, 28, 100, 0x6c));                                   /* topo (arredondado) */
+#if GFX_ROUND
+    (void)k; (void)n; gradV(x1, y1 + c, x2, y2 - c, CA(52, 28, 104, 0x6c), CA(14, 12, 40, 0x6c));    /* miolo em degrade suave */
+#else
     for (k = 0; k < n; k++)                                                                    /* miolo em degrade roxo -> azul-noite */
         rect(x1, y1 + c + mid * k / n, x2, y1 + c + mid * (k + 1) / n,
              CA(48 - k * 4, 26 - k, 96 - k * 6, 0x6c));
+#endif
     rect(x1 + c, y2 - c, x2 - c, y2, CA(18, 14, 46, 0x6c));                                    /* base (arredondada) */
     rect(x1 + c, y1 + 1, x2 - c, y1 + 2, CA(255, 255, 255, 0x28));                             /* brilho */
     rect(x1 + 2, y1 + c, x2 - 2, y1 + c + mid * 0.18f, CA(200, 150, 255, 0x0e));
@@ -6623,8 +6650,12 @@ static void uiTitle(const char *t)                    /* faixa do topo (roxo + d
     float sc = 0.62f, w = tw(sc, t) * 1.08f, x0 = 320.0f - w * 0.5f, sh = fmodf(menuT * 3.0f, 560.0f);
     u64 gd = COL(255, 205 + (int)(40 * sinf(menuT * 0.05f)), 60);
     int e;
+#if GFX_ROUND
+    gradV(0, 0, 640, 34, CA(84, 40, 148, 0x84), CA(30, 12, 64, 0x84));
+#else
     rect(0, 0, 640, 17, CA(74, 34, 130, 0x84));
     rect(0, 17, 640, 34, CA(34, 14, 70, 0x84));
+#endif
     rect(0, 0, 640, 2, CA(255, 255, 255, 0x18));
     rect(0, 34, 640, 36, CA(255, 205, 60, 0x70));
     rect(40.0f + sh, 34, 90.0f + sh, 36, CA(255, 255, 220, 0x70));        /* brilho que corre */

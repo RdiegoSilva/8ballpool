@@ -5,13 +5,6 @@ Jogo de sinuca 8 ball para PS2 (PS2SDK + gsKit + libpad).
 - Criador: Diego Reis
 - Versão: 3.1.3
 
-## Personagens com visual profissional (novo)
-- Os personagens (retratos do menu/VS, selecao e corpo inteiro) agora tem **degrade de luz** (centro claro, borda escura, luz vindo de cima/esquerda): cabeca, chapeus, roupas e maos parecem redondos em vez de chapados. Usa triangulos Gouraud, o mesmo numero de primitivas de antes
-- **Contorno suave** (linhas antisserrilhadas) nas bordas das formas: acabou o serrilhado de "escada". Fica desligado durante a partida (retratos pequenos do HUD) para segurar os 60 FPS
-- **Mais lados** nas formas grandes (cabecas e mantos): silhueta redonda, nao poligonal
-- **Sombra suave** no chao dos personagens de corpo inteiro
-- Chaves no `main.c` (antes de `lE()`): `CHAR_SHADE` (degrade, 0 = visual de antes) e `CHAR_AA` (contorno suave, 0 = desliga). Ajuste fino da luz em `SH_LIT` e `SH_DARK`
-
 ## Barra de força nova: medidor em blocos (novo)
 A barra de força (lado esquerdo) foi refeita do zero: não tem mais o taco vertical. Agora é um **medidor de LEDs com 20 blocos** que acendem de baixo para cima: **verde** (tacada leve) > **amarelo** > **laranja** > **vermelho** (força máxima). O bloco do topo acende por partes, então a subida é suave. Uma **linha branca com setinhas** marca a força exata, **tracinhos** mostram 25/50/75%, e o **%** aparece num mostrador embaixo, na cor da zona. O rótulo **FORCA** e a marca **IDEAL** do taco Hack continuam. Fica em `drawPowerBar()` e `pbZone()` no `main.c`.
 
@@ -409,3 +402,11 @@ O puxão ficou mais suave: em vez de um ímã que arrastava a bola para a caçap
 ## Rodape com icones (novo)
 - O medidor de **FPS / MUSICA / PICO** foi desligado (`DEBUG_FPS 0` no `main.c`), entao nao aparece mais por cima do rodape. Para voltar a ver, ponha `DEBUG_FPS 1`
 - Os botoes do rodape agora sao icones desenhados (funcao `uiKey()`): **X** (cruz), **O** (anel), **triangulo** e **quadrado** vazados, **START** com simbolo de play, **SELECT** com tracinhos, **direcional** em cruz (destaca cima/baixo ou esquerda/direita) e **L1/R1** como dois gatilhos
+
+## Upgrade gráfico (visual profissional)
+
+- Personagens com volume: cabeças, olhos, mãos e sapatos agora são esferas sombreadas (degradê Gouraud, luz vinda de cima-esquerda) em vez de formas chapadas; corpo e mantos com degradê claro→escuro.
+- Contorno escuro suave na cabeça e no corpo, bochechas, brilho nos olhos e sombra no chão sob os personagens de corpo inteiro.
+- Caixas e painéis do HUD com cantos arredondados e degradê contínuo (sem faixas).
+- Céu, feltro da mesa de fundo e faixa do título com degradê suave.
+- Chave `GFX_ROUND` (em main.c, padrão `1`). Se o FPS cair abaixo de 60 no PS2/PCSX2, compile com `GFX_ROUND=0` (ou mude o `#define`) para voltar ao visual antigo, mais leve.
