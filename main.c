@@ -346,27 +346,67 @@ static unsigned int rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; r
 static int camOn = 0;                    /* 1 so enquanto desenha a cena da mesa */
 static int camMode = 1;                  /* opcao CAMERA (Opcoes e Pausa): 0 = normal (de cima), 1 = 3D com perspectiva, 2 = 1a pessoa */
 static const char *CAM_NAME[3] = { "NORMAL", "3D", "1A PESSOA" };
-#define FP_BACK 110.0f                   /* 1a pessoa: camera atras da bola branca (distancia no plano da mesa) */
-#define FP_H    70.0f                    /* altura da camera */
-#define FP_F    240.0f                   /* distancia focal */
-#define FP_HOR  150.0f                   /* y da tela do horizonte */
+
+/* ---------- CAMERA 1a PESSOA ----------
+   A camera fica atras e acima da bola branca, inclinada para baixo, olhando na direcao da mira (ang). E uma perspectiva de verdade:
+   um ponto (x, y, z) do mundo vira profundidade d e posicao na tela. A mesa e tudo que esta no feltro passam por pj() (z = 0);
+   as bolas (esferas, centro a altura do raio) e o taco (inclinado, cabo subindo) usam a altura z. Os poligonos sao recortados no
+   plano proximo e nas bordas da tela (antes os pontos eram "esticados" para dentro de uma caixa e a mesa entortava / piscava).
+   A camera desliza suave entre as poses: MIRA (perto e baixa) e ROLANDO (sobe e recua para ver a mesa toda). */
+#define FP_F      330.0f    /* distancia focal (zoom): maior = campo de visao mais fechado */
+#define FP_CX     320.0f    /* centro da projecao na tela */
+#define FP_CY     236.0f
+#define FP_NEAR   18.0f     /* plano proximo (profundidade minima que ainda desenha) */
+#define FP_SM     40.0f     /* margem fora da tela onde os poligonos sao recortados (o GS nao aceita coordenadas enormes) */
+#define FP_BACK0  150.0f    /* pose da MIRA: distancia atras da branca (no plano da mesa) */
+#define FP_H0     96.0f     /*   altura da camera */
+#define FP_PIT0   0.30f     /*   inclinacao para baixo, em radianos (0.30 = 17 graus) */
+#define FP_BACK1  250.0f    /* pose ROLANDO: camera sobe e recua */
+#define FP_H1     200.0f
+#define FP_PIT1   0.60f
+#define FP_CUE_UP 0.12f     /* quanto o cabo do taco sobe por unidade de comprimento (so na 1a pessoa) */
 static int camFP = 0;                    /* 1 = pj() usa a camera em 1a pessoa */
-static float fpX, fpY, fpC = 1.0f, fpS;  /* posicao e direcao da camera 1a pessoa */
+static float fpC = 1.0f, fpS = 0.0f;     /* direcao horizontal da camera (cos, sen) */
+static float fpPX, fpPY;                 /* posicao da camera no plano da mesa */
+static float fpH = FP_H0;                /* altura da camera */
+static float fpCp = 0.95534f, fpSp = 0.29552f;   /* cos e sen da inclinacao */
+static float fpBallZ = 0.0f;             /* altura extra da bola que esta sendo desenhada (pulo) */
+static float cueDx, cueDy, cueD0, cueBx, cueBy;  /* taco que esta sendo desenhado (drawCue) */
+static int fpCueOn = 0;                  /* 1 = pontos do taco sobem (inclinado) em vez de ficar no feltro */
 static float pjVs = CAM_SIN;             /* achatamento vertical de discos/pontos no ultimo pj() */
+
+static float fpZ(float x, float y)       /* altura do ponto: 0 no feltro; o taco gira em volta do centro da bola (ponta na altura do centro, cabo subindo) */
+{
+    float u;
+    if (!fpCueOn) return 0.0f;
+    u = (cueBx - x) * cueDx + (cueBy - y) * cueDy - R;
+    return R + (u > 0.0f ? u * FP_CUE_UP : 0.0f);
+}
+static float fpProj(float x, float y, float z, float *sx, float *sy, float *dep)   /* devolve a escala (pixels por unidade) */
+{
+    float rx = x - fpPX, ry = y - fpPY, f = rx * fpC + ry * fpS, lat = -rx * fpS + ry * fpC, hz = fpH - z;
+    float d = f * fpCp + hz * fpSp, k;
+    if (d < FP_NEAR * 0.5f) d = FP_NEAR * 0.5f;
+    k = FP_F / d;
+    *sx = FP_CX + lat * k;
+    *sy = FP_CY + (hz * fpCp - f * fpSp) * k;
+    *dep = d;
+    return k;
+}
+static float fpDepth(float x, float y)   /* profundidade do ponto (<= FP_NEAR: atras do plano proximo, nao desenha) */
+{
+    float rx = x - fpPX, ry = y - fpPY;
+    return (rx * fpC + ry * fpS) * fpCp + (fpH - fpZ(x, y)) * fpSp;
+}
 static void pj(float x, float y, float *sx, float *sy, float *sc)
 {
     float v = CAM_YN - y, den = CAM_Z0 + v * CAM_COS, k;
     if (camFP) {
-        float rx = x - fpX, ry = y - fpY, fwd = rx * fpC + ry * fpS, lat = -rx * fpS + ry * fpC, d = fwd + FP_BACK, px, py;
-        if (d < 12.0f) d = 12.0f;
-        k = FP_F / d;
-        px = 320.0f + lat * k; py = FP_HOR + FP_H * k;
-        if (px < -800.0f) { px = -800.0f; }
-        if (px > 1440.0f) { px = 1440.0f; }
-        if (py < -800.0f) { py = -800.0f; }
-        if (py > 1300.0f) { py = 1300.0f; }
-        pjVs = FP_H / sqrtf(FP_H * FP_H + d * d); if (pjVs < 0.1f) pjVs = 0.1f;
-        *sc = k; *sx = px; *sy = py;
+        float z = fpZ(x, y), hz = fpH - z, rx = x - fpPX, ry = y - fpPY, f = rx * fpC + ry * fpS, lat = -rx * fpS + ry * fpC, hd, d;
+        k = fpProj(x, y, z, sx, sy, &d);
+        hd = sqrtf(f * f + lat * lat);
+        pjVs = hz / sqrtf(hz * hz + hd * hd); if (pjVs < 0.08f) pjVs = 0.08f;   /* disco deitado no feltro: quanto mais longe, mais achatado */
+        *sc = k;
         return;
     }
     pjVs = CAM_SIN;
@@ -377,17 +417,15 @@ static void pj(float x, float y, float *sx, float *sy, float *sc)
     *sy = CAM_SY - v * CAM_SIN * k;
 }
 
-/* ---- 1a pessoa: recorte no plano proximo (pontos atras da camera nao podem ser projetados) ---- */
-#define FP_NEAR 40.0f
+/* ---- 1a pessoa: recortes (poligono convexo: plano proximo e bordas da tela; linha: bordas da tela) ---- */
 typedef struct { float x, y; u64 c; } FPV;
-static float fpDepth(float x, float y) { return (x - fpX) * fpC + (y - fpY) * fpS + FP_BACK; }
 static u64 fpLerpC(u64 a, u64 b, float t)
 {
     u64 r = a & ~0xFFFFFFFFull; int i;
     for (i = 0; i < 4; i++) { int sh = i * 8, ca = (int)((a >> sh) & 255), cb = (int)((b >> sh) & 255); r |= (u64)(ca + (int)((cb - ca) * t)) << sh; }
     return r;
 }
-static int fpClip(const FPV *in, int n, FPV *out)         /* poligono convexo contra d >= FP_NEAR (saida com ate n+1 vertices) */
+static int fpClip(const FPV *in, int n, FPV *out)         /* contra o plano proximo (saida com ate n+1 vertices) */
 {
     int i, m = 0;
     for (i = 0; i < n; i++) {
@@ -401,15 +439,52 @@ static int fpClip(const FPV *in, int n, FPV *out)         /* poligono convexo co
     }
     return m;
 }
-static void fpPoly(const FPV *v, int n, int gour)         /* recorta, projeta e desenha em leque */
+static int fpScr(const FPV *in, int n, FPV *out, int ay, float lim, float sg)   /* ja em coordenadas de tela: mantem o lado onde sg*(v - lim) >= 0 (v = x, ou y se ay) */
 {
-    FPV o[8]; float px[8], py[8], s; int m, i;
-    m = fpClip(v, n, o);
+    int i, m = 0;
+    for (i = 0; i < n; i++) {
+        const FPV *a = &in[i], *b = &in[(i + 1) % n];
+        float va = sg * ((ay ? a->y : a->x) - lim), vb = sg * ((ay ? b->y : b->x) - lim);
+        if (va >= 0.0f) out[m++] = *a;
+        if ((va >= 0.0f) != (vb >= 0.0f)) {
+            float t = va / (va - vb);
+            out[m].x = a->x + (b->x - a->x) * t; out[m].y = a->y + (b->y - a->y) * t; out[m].c = fpLerpC(a->c, b->c, t); m++;
+        }
+    }
+    return m;
+}
+static int fpLineScr(float *x1, float *y1, float *x2, float *y2)   /* Liang-Barsky no retangulo da tela (com margem); 0 = fora */
+{
+    float t0 = 0.0f, t1 = 1.0f, dx = *x2 - *x1, dy = *y2 - *y1, p[4], q[4];
+    int i;
+    p[0] = -dx; q[0] = *x1 + FP_SM;
+    p[1] =  dx; q[1] = 640.0f + FP_SM - *x1;
+    p[2] = -dy; q[2] = *y1 + FP_SM;
+    p[3] =  dy; q[3] = 448.0f + FP_SM - *y1;
+    for (i = 0; i < 4; i++) {
+        if (p[i] == 0.0f) { if (q[i] < 0.0f) return 0; }
+        else {
+            float t = q[i] / p[i];
+            if (p[i] < 0.0f) { if (t > t1) return 0; if (t > t0) t0 = t; }
+            else             { if (t < t0) return 0; if (t < t1) t1 = t; }
+        }
+    }
+    { float nx1 = *x1 + dx * t0, ny1 = *y1 + dy * t0, nx2 = *x1 + dx * t1, ny2 = *y1 + dy * t1; *x1 = nx1; *y1 = ny1; *x2 = nx2; *y2 = ny2; }
+    return 1;
+}
+static void fpPoly(const FPV *v, int n, int gour)         /* recorta, projeta, recorta na tela e desenha em leque */
+{
+    FPV a[16], c2[16]; float s; int m, i;
+    m = fpClip(v, n, a);
     if (m < 3) return;
-    for (i = 0; i < m; i++) pj(o[i].x, o[i].y, &px[i], &py[i], &s);
+    for (i = 0; i < m; i++) { float sx, sy; pj(a[i].x, a[i].y, &sx, &sy, &s); a[i].x = sx; a[i].y = sy; }
+    m = fpScr(a,  m, c2, 0, -FP_SM,           1.0f); if (m < 3) return;
+    m = fpScr(c2, m, a,  0, 640.0f + FP_SM,  -1.0f); if (m < 3) return;
+    m = fpScr(a,  m, c2, 1, -FP_SM,           1.0f); if (m < 3) return;
+    m = fpScr(c2, m, a,  1, 448.0f + FP_SM,  -1.0f); if (m < 3) return;
     for (i = 1; i + 1 < m; i++) {
-        if (gour) { gsKit_prim_triangle_gouraud(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c, o[i].c, o[i+1].c); }
-        else { gsKit_prim_triangle(g, px[0]+OX, py[0]+OY, px[i]+OX, py[i]+OY, px[i+1]+OX, py[i+1]+OY, 1, o[0].c); }
+        if (gour) { gsKit_prim_triangle_gouraud(g, a[0].x+OX, a[0].y+OY, a[i].x+OX, a[i].y+OY, a[i+1].x+OX, a[i+1].y+OY, 1, a[0].c, a[i].c, a[i+1].c); }
+        else { gsKit_prim_triangle(g, a[0].x+OX, a[0].y+OY, a[i].x+OX, a[i].y+OY, a[i+1].x+OX, a[i+1].y+OY, 1, a[0].c); }
     }
 }
 
@@ -428,6 +503,7 @@ static void rect(float x1, float y1, float x2, float y2, u64 c)
         }
         if (x2 - x1 < 2.5f && y2 - y1 < 2.5f) {            /* pontinho: um sprite no centro projetado */
             pj((x1 + x2) * 0.5f, (y1 + y2) * 0.5f, &ax, &ay, &s);
+            if (camFP && (ax < -FP_SM || ax > 640.0f + FP_SM || ay < -FP_SM || ay > 448.0f + FP_SM)) return;
             gsKit_prim_sprite(g, ax + OX - (x2 - x1) * 0.5f * s, ay + OY - (y2 - y1) * 0.5f * s * pjVs,
                                  ax + OX + (x2 - x1) * 0.5f * s, ay + OY + (y2 - y1) * 0.5f * s * pjVs, 1, c);
             return;
@@ -453,6 +529,7 @@ static void line(float x1, float y1, float x2, float y2, u64 c)
             else if (db < 0.0f) { float t = db / (db - da); x2 += (x1 - x2) * t; y2 += (y1 - y2) * t; }
         }
         pj(x1, y1, &ax, &ay, &s); pj(x2, y2, &bx, &by, &s);
+        if (camFP && !fpLineScr(&ax, &ay, &bx, &by)) return;
         gsKit_prim_line(g, ax+OX, ay+OY, bx+OX, by+OY, 1, c);
         return;
     }
@@ -503,7 +580,12 @@ static void discN(float cx, float cy, float r, u64 c, int n)
     const float *t;
     float rx = r, ry = r;                               /* raio na horizontal e na vertical (a camera 3D achata o disco do plano da mesa) */
 #if CAM_3D
-    if (camOn) { float s; if (camFP && fpDepth(cx, cy) < FP_NEAR) return; pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * pjVs; }
+    if (camOn) {
+        float s;
+        if (camFP && fpDepth(cx, cy) < FP_NEAR) return;
+        pj(cx, cy, &cx, &cy, &s); rx = r * s; ry = r * s * pjVs;
+        if (camFP && (cx + rx < -FP_SM || cx - rx > 640.0f + FP_SM || cy + ry < -FP_SM || cy - ry > 448.0f + FP_SM)) return;
+    }
 #endif
 #if FAST_DISC
     if (fabsf(r) < 1.3f) {                              /* disco de 1-2 px (botoes, neve, estrelas): um quadradinho basta */
@@ -1673,7 +1755,13 @@ static void drawBallMesh(int id, float x, float y, float r)
 static void drawBallAt(int i, float x, float y, float r)
 {
     int was = camOn, vec = (!useTex || r < R - 0.5f);                  /* bolas pequenas (chiquitolina) usam o desenho vetorial */
-    if (was && camFP && fpDepth(x, y) < FP_NEAR) return;
+    if (was && camFP) {                                                 /* 1a pessoa: esfera apoiada no feltro (centro a altura do raio) */
+        float sx, sy, dep, k = fpProj(x, y, r + fpBallZ, &sx, &sy, &dep);
+        if (dep < FP_NEAR) return;
+        r *= k;
+        if (sx + r < -FP_SM || sx - r > 640.0f + FP_SM || sy + r < -FP_SM || sy - r > 448.0f + FP_SM) return;
+        x = sx; y = sy; camOn = 0;
+    } else
     if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: a bola e uma esfera, continua redonda; so a posicao e o tamanho seguem a perspectiva */
     if (vec) drawBallVec(i, x, y, r);
     else drawBallMesh(i, x, y, r);
@@ -1690,7 +1778,13 @@ static void drawFall(int i)
     float y = fallY[i] + (gy - fallY[i]) * e;
     float r = R * (0.42f + 0.58f * t);
     int was = camOn;
-    if (was && camFP && fpDepth(x, y) < FP_NEAR) return;
+    if (was && camFP) {                                                 /* 1a pessoa: a bola afunda na cacapa */
+        float sx, sy, dep, k = fpProj(x, y, r * t, &sx, &sy, &dep);
+        if (dep < FP_NEAR) return;
+        r *= k;
+        if (sx + r < -FP_SM || sx - r > 640.0f + FP_SM || sy + r < -FP_SM || sy - r > 448.0f + FP_SM) return;
+        x = sx; y = sy; camOn = 0;
+    } else
     if (was) { float sx, sy, sc; pj(x, y, &sx, &sy, &sc); x = sx; y = sy; r *= sc; camOn = 0; }   /* camera 3D: esfera redonda na posicao projetada */
     if (useTex) drawBallMesh(i, x, y, r); else drawBallVec(i, x, y, r);
     discN(x, y, r * 1.02f, GS_SETREG_RGBAQ(0, 0, 0, (int)(0x78 * (1.0f - t)), 0x00), 10);
@@ -5375,8 +5469,7 @@ static void drawGuide(void)
 
 /* taco realista: afunila da ponta (azul) ate o cabo, com virola,
    emenda, faixa, incrustacao, borracha, sombra e brilho */
-static float cueDx, cueDy, cueD0, cueBx, cueBy;
-static int cueAl;
+static int cueAl;                                   /* (cueDx, cueDy, cueD0, cueBx, cueBy: declarados junto da camera, no comeco do arquivo) */
 
 static float cueW(float u)
 {
@@ -5443,7 +5536,7 @@ static void shovelTri(float u1, float s1, float u2, float s2, float u3, float s3
     tri(ax, ay, bx, by, cx, cy, c);
 }
 
-static void drawCue(float px, float py, float d0, int al, float a, int ci)
+static void drawCueRaw(float px, float py, float d0, int al, float a, int ci)
 {
     static const u8 FER[3]   = { 238, 238, 228 };
     static const u8 JOINT[3] = { 188, 188, 196 };
@@ -5463,6 +5556,7 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
     cuePt(290, 6.2f, &cx, &cy);  cuePt(0, 2.2f, &ex, &ey);
     quad(ax + 4, ay + 5, bx + 6, by + 7, cx + 6, cy + 7, ex + 4, ey + 5,
          GS_SETREG_RGBAQ(0, 12, 5, (al * 30) / 128, 0x00));
+    fpCueOn = (camOn && camFP);                              /* 1a pessoa: dai em diante o taco fica inclinado (cabo mais alto que a ponta) */
 
     if (cd->fx == 17) {                                       /* COVEIRO: o taco e uma pa (lamina na ponta, cabo de madeira e punho em T) */
         static const u8 STL[3] = { 176, 184, 192 };
@@ -5679,6 +5773,12 @@ static void drawCue(float px, float py, float d0, int al, float a, int ci)
             }
         }
     }
+}
+
+static void drawCue(float px, float py, float d0, int al, float a, int ci)
+{
+    drawCueRaw(px, py, d0, al, a, ci);
+    fpCueOn = 0;
 }
 
 /* largura aproximada do texto da fonte (medida no emulador): ~24.5 px por letra em escala 1 */
@@ -9496,6 +9596,97 @@ static void drawReplayTag(void)                       /* etiqueta REPLAY e dica 
     textFit(TCX - 70, TY1 - 24, 0.30f, COL(255,215,70), "X: PULAR O REPLAY", 140.0f);
 }
 
+/* ---------- 1a PESSOA: pose da camera (suave), cenario e bolas ---------- */
+static float fpAng, fpSX, fpSY, fpBk = FP_BACK0, fpHh = FP_H0, fpPit = FP_PIT0;   /* pose suavizada */
+static float fpGX, fpGY, fpGAng;                          /* ultimo alvo da mira (fica guardado enquanto as bolas rolam) */
+static int fpInit = 0;
+static float fpEase(float k) { return frameK > 1.01f ? 1.0f - powf(1.0f - k, frameK) : k; }   /* suavizacao independente do FPS */
+static void fpUpdate(void)
+{
+    int roll = (state == S_ROLL);
+    float tb = roll ? FP_BACK1 : FP_BACK0, th = roll ? FP_H1 : FP_H0, tp = roll ? FP_PIT1 : FP_PIT0, e, kp, kq, ka;
+    if (!roll && b[0].in) { fpGX = b[0].x; fpGY = b[0].y; fpGAng = ang; }
+    if (!fpInit) { fpInit = 1; fpSX = fpGX; fpSY = fpGY; fpAng = fpGAng; fpBk = tb; fpHh = th; fpPit = tp; }
+    kp = fpEase(0.10f);                                   /* posicao */
+    kq = fpEase(roll ? 0.035f : 0.08f);                   /* distancia / altura / inclinacao: sobe devagar, volta um pouco mais rapido */
+    ka = fpEase(0.35f);                                   /* direcao: acompanha a mira sem tremer */
+    fpSX += (fpGX - fpSX) * kp; fpSY += (fpGY - fpSY) * kp;
+    e = normAng(fpGAng - fpAng);
+    if (fabsf(e) < 0.0004f) fpAng = fpGAng; else fpAng += e * ka;
+    fpBk += (tb - fpBk) * kq; fpHh += (th - fpHh) * kq; fpPit += (tp - fpPit) * kq;
+    fpC = cosf(fpAng); fpS = sinf(fpAng);
+    fpCp = cosf(fpPit); fpSp = sinf(fpPit);
+    fpH = fpHh;
+    fpPX = fpSX - fpC * fpBk; fpPY = fpSY - fpS * fpBk;
+}
+static void fpBackdrop(void)                               /* ceu e chao acompanhando o horizonte da camera (antes ficava um cenario parado que nao combinava) */
+{
+    float hy = FP_CY - FP_F * (fpSp / fpCp), y0;
+    int k, n;
+    if (hy > 440.0f) hy = 440.0f;
+    if (hy > 2.0f) {
+        for (k = 0; k < 12; k++) {
+            float f0 = k / 12.0f, f1 = (k + 1) / 12.0f;
+            u64 c0 = COL(54 + (int)(150 * (f0 < 0.55f ? f0 / 0.55f : 1.0f)), 20 + (int)(30 * (f0 < 0.55f ? f0 / 0.55f : 1.0f)), 100),
+                c1 = COL(54 + (int)(150 * (f1 < 0.55f ? f1 / 0.55f : 1.0f)), 20 + (int)(30 * (f1 < 0.55f ? f1 / 0.55f : 1.0f)), 100);
+            if (f0 >= 0.55f) { float u = (f0 - 0.55f) / 0.45f; c0 = COL(204 + (int)(51 * u), 50 + (int)(100 * u), 110 - (int)(40 * u)); }
+            if (f1 >= 0.55f) { float u = (f1 - 0.55f) / 0.45f; c1 = COL(204 + (int)(51 * u), 50 + (int)(100 * u), 110 - (int)(40 * u)); }
+            gradV(0, hy * f0, 640, hy * f1 + 1.0f, c0, c1);
+        }
+        for (k = 0; k < 2; k++) {                          /* predios no horizonte (a mesma silhueta do cenario normal) */
+            float x = k ? -10.0f : -30.0f, sc = hy / 270.0f;
+            if (sc > 1.0f) sc = 1.0f;
+            n = 0;
+            while (x < 650.0f) {
+                float w = 20.0f + ((n * 13 + k * 7) % 5) * 7.0f, h = ((k ? 46.0f : 76.0f) + ((n * 37 + k * 19) % 11) * (k ? 7.0f : 9.0f)) * sc;
+                rect(x, hy - h, x + w, hy + 1.0f, k ? COL(40, 18, 72) : COL(108, 48, 124));
+                x += w + (k ? 2.0f : 1.0f); n++;
+            }
+        }
+        rect(0, hy - 14.0f * (hy > 40.0f ? 1.0f : 0.0f), 640, hy, CA(255, 150, 90, 0x14));
+    }
+    y0 = hy < 0.0f ? 0.0f : hy;
+    gradV(0, y0, 640, 448, COL(34, 18, 26), COL(10, 6, 10));            /* chao do salao, escuro */
+    rect(0, 0, 640, 448, CA(0, 0, 20, 0x30));
+}
+static void drawSceneBall(int i)
+{
+    if (!b[i].in) return;
+    if (i > 0) {
+        if (b[i].z > 0.0f) {
+            if (camFP) { fpBallZ = b[i].z * 0.55f; drawBallAt(i, b[i].x, b[i].y, R); fpBallZ = 0.0f; }
+            else drawBallAt(i, b[i].x, b[i].y - b[i].z * 0.55f, R * (1.0f + b[i].z * 0.022f));   /* CHAPULIN: a bola sobe na tela */
+        } else drawBallAt(i, b[i].x, b[i].y, ballRad(i));   /* CHIQUITOLINA: bolas do adversario menores */
+        return;
+    }
+    if (state == S_PLACE) {
+        if (validPlace(b[0].x, b[0].y)) drawBallAt(0, b[0].x, b[0].y, R);
+        else disc(b[0].x, b[0].y, R, COL(230,60,60));
+    } else if (b[0].z > 0.0f) {                             /* pulo: a bola cresce e sobe na tela */
+        float z = b[0].z;
+        if (camFP) {
+            fpBallZ = z * 0.55f; drawBallAt(0, b[0].x, b[0].y, R); fpBallZ = 0.0f;
+            ringN(b[0].x, b[0].y, R + 1.2f, 1.2f, 18, CA(255, 255, 255, 0x2c));
+        } else {
+            float r = R * (1.0f + z * 0.022f), yy = b[0].y - z * 0.55f;
+            drawBallAt(0, b[0].x, yy, r);
+            ringN(b[0].x, yy, r + 1.2f, 1.2f, 18, CA(255, 255, 255, 0x2c));
+        }
+    } else drawBallAt(0, b[0].x, b[0].y, R);
+}
+static void drawSceneBalls(void)
+{
+    int i, j, n = 0, ord[16];
+    float dp[16];
+    if (!camFP) { for (i = 1; i < 16; i++) drawSceneBall(i); drawSceneBall(0); return; }
+    for (i = 0; i < 16; i++) if (b[i].in) {                 /* 1a pessoa: de longe para perto, senao uma bola de tras tampa a da frente */
+        float d = fpDepth(b[i].x, b[i].y);
+        for (j = n; j > 0 && dp[j - 1] < d; j--) { dp[j] = dp[j - 1]; ord[j] = ord[j - 1]; }
+        dp[j] = d; ord[j] = i; n++;
+    }
+    for (j = 0; j < n; j++) drawSceneBall(ord[j]);
+}
+
 static void drawScene(void)
 {
     int i;
@@ -9512,10 +9703,14 @@ static void drawScene(void)
         return;
     }
     camOn = 0;
-    drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
 #if CAM_3D
     camFP = (camMode == 2 && (state == S_AIM || state == S_STRIKE || state == S_ROLL));
-    if (camFP && state != S_ROLL) { fpX = b[0].x; fpY = b[0].y; fpC = cosf(ang); fpS = sinf(ang); }
+    if (camMode != 2) fpInit = 0;
+    if (camFP) { fpUpdate(); fpBackdrop(); }
+    else
+#endif
+    drawBackdropEx(0);                                              /* cenario (por do sol + chao) atras da mesa */
+#if CAM_3D
     camOn = camMode ? 1 : 0;                                                /* daqui ate o HUD: tudo passa pela camera 3D (pj), se a opcao CAMERA estiver em 3D */
 #endif
     drawTable();
@@ -9524,20 +9719,7 @@ static void drawScene(void)
     if (state != S_PLACE) for (i = 0; i < 16; i++) drawShadow(i);
     else for (i = 1; i < 16; i++) drawShadow(i);
     if (state == S_ROLL && shEq[SC_RASTRO]) for (i = 0; i < 16; i++) if (b[i].in && b[i].z <= 0.0f) trailDraw(shEq[SC_RASTRO], b[i].x, b[i].y, b[i].vx, b[i].vy);   /* LOJA: rastro */
-    for (i = 1; i < 16; i++) if (b[i].in) {
-        if (b[i].z > 0.0f) drawBallAt(i, b[i].x, b[i].y - b[i].z * 0.55f, R * (1.0f + b[i].z * 0.022f));   /* CHAPULIN: a bola sobe na tela */
-        else drawBallAt(i, b[i].x, b[i].y, ballRad(i));   /* CHIQUITOLINA: bolas do adversario menores */
-    }
-    if (b[0].in) {
-        if (state == S_PLACE) {
-            if (validPlace(b[0].x, b[0].y)) drawBallAt(0, b[0].x, b[0].y, R);
-            else disc(b[0].x, b[0].y, R, COL(230,60,60));
-        } else if (b[0].z > 0.0f) {                         /* pulo: a bola cresce e sobe na tela */
-            float z = b[0].z, r = R * (1.0f + z * 0.022f), yy = b[0].y - z * 0.55f;
-            drawBallAt(0, b[0].x, yy, r);
-            ringN(b[0].x, yy, r + 1.2f, 1.2f, 18, CA(255, 255, 255, 0x2c));
-        } else drawBallAt(0, b[0].x, b[0].y, R);
-    }
+    drawSceneBalls();                                               /* bolas (1a pessoa: ordenadas de longe para perto) */
     for (i = 0; i < 16; i++) if (fallT[i] > 0) drawFall(i);
     drawBats();
     pfxDraw();
